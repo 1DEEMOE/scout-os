@@ -27,7 +27,18 @@ export const TIER_STYLE: Record<number, string> = {
 };
 /** The coloured rail on approval cards. */
 export const TIER_RAIL: Record<number, string> = { 0: "bg-line", 1: "bg-line", 2: "bg-warn", 3: "bg-caution", 4: "bg-danger" };
-const TIER_NAME = ["read-only", "internal", "external", "financial", "destructive"];
+/**
+ * Approval levels 0–4 in plain words, shown everywhere a level applies. The
+ * rules live in platform code (engine/policy, engine/approvals); this is only
+ * how they're explained.
+ */
+export const LEVELS = [
+  { n: 0, name: "Look only", rule: "Reads information. Runs on its own." },
+  { n: 1, name: "Internal notes", rule: "Drafts, notes and tags inside Scout OS. Runs on its own and is logged." },
+  { n: 2, name: "Talks to customers", rule: "Emails, texts, quotes and invites. Waits for an OK." },
+  { n: 3, name: "Money & contracts", rule: "Payments, refunds, prices and bank details. Always waits for an OK." },
+  { n: 4, name: "Delete or change access", rule: "Deletions, access and secrets. Needs an OK and a second owner to confirm." },
+] as const;
 
 /** Plain-language risk label for list titles. Full tier stays in details. */
 export function NeedOkBadge({ tier }: { tier: number }) {
@@ -40,11 +51,32 @@ export function NeedOkBadge({ tier }: { tier: number }) {
   );
 }
 
+/** "Level 2 · Talks to customers", with the rule as its description. */
 export function TierBadge({ tier }: { tier: number }) {
+  const l = LEVELS[Math.max(0, Math.min(4, tier))]!;
   return (
-    <span className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-sm whitespace-nowrap ${TIER_STYLE[tier] ?? ""}`}>
-      Risk level {tier} · {TIER_NAME[tier]}
+    <span title={l.rule} className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-sm whitespace-nowrap ${TIER_STYLE[tier] ?? ""}`}>
+      Level {l.n} · {l.name}
     </span>
+  );
+}
+
+/** Marks holds only an owner can decide. */
+export function OwnerOnlyBadge() {
+  return <span className="inline-flex items-center rounded-full border border-caution/40 bg-caution/5 px-2.5 py-0.5 text-sm whitespace-nowrap text-caution">Owner only</span>;
+}
+
+/** What the five levels mean, for Approvals, Help and anywhere levels need explaining. */
+export function LevelsLegend({ highlight }: { highlight?: number[] }) {
+  return (
+    <ol aria-label="Approval levels" className="flex flex-col gap-3">
+      {LEVELS.map((l) => (
+        <li key={l.n} className={`flex flex-col gap-1.5 rounded-2xl border px-4 py-3 sm:flex-row sm:items-center sm:gap-4 ${highlight?.includes(l.n) ? "border-accent bg-accent-soft" : "border-line bg-surface"}`}>
+          <TierBadge tier={l.n} />
+          <span className="text-small text-muted">{l.rule}</span>
+        </li>
+      ))}
+    </ol>
   );
 }
 

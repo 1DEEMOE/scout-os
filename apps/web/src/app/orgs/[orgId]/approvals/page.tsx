@@ -2,7 +2,7 @@ import { approvalsForReview, getEngine, type ApprovalForReview } from "@wos/core
 import { orgContext } from "@/server/org-context";
 import { ActionButton } from "../../../actions";
 import { fieldList } from "../../../field-labels";
-import { Badge, Card, Empty, MockBadge, NeedOkBadge, PageTitle, TierBadge, When } from "../../../ui";
+import { Badge, Card, Empty, LevelsLegend, MockBadge, NeedOkBadge, OwnerOnlyBadge, PageTitle, TierBadge, When } from "../../../ui";
 
 export const dynamic = "force-dynamic";
 
@@ -24,7 +24,9 @@ function OpenCard({ item, orgId, mockTool }: { item: ApprovalForReview; orgId: s
     <Card>
       <div className="flex flex-col gap-5">
         <div className="flex flex-wrap items-center gap-2">
+          <TierBadge tier={a.tier} />
           <NeedOkBadge tier={a.tier} />
+          {item.ownerOnly && <OwnerOnlyBadge />}
           {mockTool && <MockBadge />}
         </div>
         <h2 className="text-xl font-semibold leading-snug tracking-tight">{item.headline}</h2>
@@ -125,6 +127,18 @@ export default async function ApprovalsPage({ params }: { params: Promise<{ orgI
       <PageTitle sub="Every send, payment, or risky change waits here. What you OK is exactly what runs.">
         Needs your OK {open.length > 0 && <Badge tone="warn">{open.length} waiting</Badge>}
       </PageTitle>
+      <details className="group rounded-[var(--radius-card)] border border-line bg-surface px-6 py-2">
+        <summary className="flex min-h-12 cursor-pointer list-none items-center justify-between font-medium [&::-webkit-details-marker]:hidden">
+          What the approval levels mean
+          <span aria-hidden className="text-muted transition-transform duration-200 group-open:rotate-180">⌄</span>
+        </summary>
+        <div className="pt-2 pb-5">
+          <LevelsLegend highlight={[...new Set(open.map((o) => o.approval.tier))]} />
+          <p className="mt-4 text-small text-muted">
+            Anything that came from an email or chat message always waits for an OK. Routines run at levels 0–1 only. Bank-detail changes, invoices held as possibly forged and Scout&apos;s first message to a prospect are owner only. Nothing is ever paid automatically.
+          </p>
+        </div>
+      </details>
       {open.length === 0 && (
         <Empty action={<a className="inline-flex min-h-11 items-center font-medium text-accent underline" href={`/orgs/${orgId}`}>Back to Today</a>}>
           Nothing is waiting. You&apos;re clear.

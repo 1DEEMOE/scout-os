@@ -1,14 +1,15 @@
-import { listInvoices, partitionInvoices } from "@wos/core";
+import { formatRiskFlags, listFlaggedDocuments, listInvoices, partitionInvoices } from "@wos/core";
 import { orgContext } from "@/server/org-context";
 import { ActionButton } from "../../../actions";
-import { Badge, Card, Empty, money, PageTitle, When } from "../../../ui";
+import { Badge, Card, Empty, money, OwnerOnlyBadge, PageTitle, TierBadge, When } from "../../../ui";
+import { InvoiceCheck } from "./invoice-check";
 
 export const dynamic = "force-dynamic";
 
 export default async function FinancePage({ params }: { params: Promise<{ orgId: string }> }) {
   const { orgId } = await params;
   const { userId, org } = await orgContext(orgId);
-  const invoices = await listInvoices({ actorUserId: userId, orgId });
+  const [invoices, held] = await Promise.all([listInvoices({ actorUserId: userId, orgId }), listFlaggedDocuments({ actorUserId: userId, orgId })]);
   const today = new Date().toISOString().slice(0, 10);
   const { overdue, other } = partitionInvoices(invoices, today);
   const staff = org.role !== "viewer";
@@ -23,6 +24,25 @@ export default async function FinancePage({ params }: { params: Promise<{ orgId:
           ) : null}
           <ActionButton path="finance.sync" input={{ orgId }} label="Refresh invoices" busyLabel="Refreshing…" />
         </div>
+      )}
+      {staff && (
+        <Card title="Check an incoming invoice">
+          <p className="mb-5 text-muted">Before anyone pays a bill, check it here. Anything that looks forged, or asks to pay a new bank account, is held for an owner.</p>
+          <InvoiceCheck orgId={orgId} />
+        </Card>
+      )}
+      {held.length > 0 && (
+        <Card title={`Held for an owner · ${held.length}`}>
+          <ul aria-label="Held invoices" className="flex flex-col gap-4">
+            {held.map((d) => (
+              <li key={d.id} className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <span><span className="font-medium">{d.vendorName}</span> <span className="text-muted">({d.kind}) · {formatRiskFlags((d.riskFlags as string[]) ?? []) || "review"}</span></span>
+                <span className="flex flex-wrap items-center gap-2"><TierBadge tier={3} /><OwnerOnlyBadge /></span>
+              </li>
+            ))}
+          </ul>
+          <a href={`/orgs/${orgId}/approvals`} className="mt-5 inline-flex min-h-11 items-center font-medium text-accent underline underline-offset-4">Decide on the Approvals page</a>
+        </Card>
       )}
       <Card title={`Overdue · ${overdue.length} · ${money(overdueTotal)}`}>
         {overdue.length === 0 && invoices.length === 0 ? (

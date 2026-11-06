@@ -1,7 +1,7 @@
 import { getPauseState, listRoutines } from "@wos/core";
 import { orgContext } from "@/server/org-context";
 import { ActionButton } from "../../../actions";
-import { Badge, Card, Empty, PageTitle } from "../../../ui";
+import { Badge, Card, Empty, PageTitle, TierBadge } from "../../../ui";
 import { NewRoutineForm, RunNowButton } from "./forms";
 import { fmtIn, RunStatus } from "./parts";
 
@@ -14,6 +14,9 @@ export default async function RoutinesPage({ params }: { params: Promise<{ orgId
   return (
     <div className="flex flex-col gap-8">
       <PageTitle sub="Scheduled work your Coordinator does on its own. Routines only read and summarize. Anything that sends, pays, or changes records still waits for your OK.">Routines</PageTitle>
+      <p className="flex flex-wrap items-center gap-2 text-small text-muted">
+        Routines run at <TierBadge tier={0} /> and <TierBadge tier={1} /> only. They can never send, pay or delete.
+      </p>
       {pause.paused && (
         <Card>
           <p className="text-base text-danger">Agents are paused for this organization. Scheduled runs are recorded as skipped until an owner resumes them in Settings.</p>

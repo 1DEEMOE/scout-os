@@ -1,4 +1,5 @@
 import { BRAND } from "@/brand";
+import { LevelsLegend } from "../ui";
 
 export const metadata = { title: "Help & install" };
 
@@ -43,6 +44,13 @@ export default function HelpPage() {
           <li><strong>Safari on Mac:</strong> <strong>File</strong>, then <strong>Add to Dock</strong>.</li>
         </ul>
         <p className="text-small text-muted">Menu names change between browser versions, so yours may differ slightly.</p>
+      </section>
+
+      <section aria-labelledby="levels" className={card}>
+        <h2 id="levels" className={h2}>Approval levels</h2>
+        <p className="text-muted">Every action Scout&apos;s teammates take has a level. The level decides whether it runs on its own or waits for you.</p>
+        <LevelsLegend />
+        <p className="text-small text-muted">Owner only: bank-detail changes, invoices held as possibly forged, and Scout&apos;s first message to a new prospect. Nothing is ever paid automatically.</p>
       </section>
 
       <section aria-labelledby="keys" className={card}>

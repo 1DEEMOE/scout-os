@@ -1,7 +1,7 @@
 import type { ApprovalForReview } from "@wos/core";
 import { ActionButton } from "../../actions";
 import { fieldList } from "../../field-labels";
-import { MockBadge, NeedOkBadge, TIER_RAIL, When } from "../../ui";
+import { MockBadge, NeedOkBadge, OwnerOnlyBadge, TIER_RAIL, TierBadge, When } from "../../ui";
 
 const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
@@ -74,7 +74,9 @@ export function ApprovalCard({ item, orgId }: { item: ApprovalForReview; orgId: 
       <span aria-hidden className={`absolute inset-y-0 left-0 w-1.5 ${TIER_RAIL[a.tier] ?? "bg-line"}`} />
       <div className="flex flex-col gap-4 py-5 pr-5 pl-6 sm:pr-6 sm:pl-7">
         <div className="flex flex-wrap items-center gap-2">
+          <TierBadge tier={a.tier} />
           <NeedOkBadge tier={a.tier} />
+          {item.ownerOnly && <OwnerOnlyBadge />}
           <span className="text-sm text-muted">asked by {item.requestedByName}</span>
         </div>
         <p className="text-lg leading-snug font-medium">{item.headline}</p>
