@@ -1,6 +1,7 @@
 import { z } from "zod";
 import {
   addFrontDeskSlots,
+  addJobNote,
   analyzeIncomingDocument,
   enableFrontDesk,
   listFlaggedDocuments,
@@ -95,6 +96,11 @@ export const gaps2Router = router({
         gpsLat: input.gpsLat,
         gpsLng: input.gpsLng,
       }),
+    ),
+  jobNoteAdd: protectedProcedure
+    .input(z.object({ orgId, jobId: id, text: z.string().max(6000), observedAt: z.string().datetime().optional() }))
+    .mutation(({ ctx, input }) =>
+      addJobNote({ actorUserId: ctx.userId, orgId: input.orgId, jobId: input.jobId, text: input.text, ...(input.observedAt ? { observedAt: new Date(input.observedAt) } : {}) }),
     ),
   jobPhotoVerify: protectedProcedure
     .input(z.object({ orgId, jobId: id }))

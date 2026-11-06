@@ -2,13 +2,15 @@ import { notFound } from "next/navigation";
 import { AppError, finishedWithoutActions, getEngine, getTask, taskLabel, TERMINAL, verifyJobPhotoChain, type Plan } from "@wos/core";
 import { ActionButton } from "../../../../actions";
 import { orgContext } from "@/server/org-context";
+import { PacketAdd } from "./packet-add";
 import { Badge, Card, Empty, MockBadge, PageTitle, StateBadge, TaskStatus, TierBadge, When } from "../../../../ui";
 
 export const dynamic = "force-dynamic";
 
 export default async function TaskPage({ params }: { params: Promise<{ orgId: string; taskId: string }> }) {
   const { orgId, taskId } = await params;
-  const { userId, isManager } = await orgContext(orgId);
+  const { userId, isManager, org } = await orgContext(orgId);
+  const staff = org.role !== "viewer";
   let data;
   try {
     data = await getTask({ actorUserId: userId, orgId, taskId });
@@ -100,50 +102,38 @@ export default async function TaskPage({ params }: { params: Promise<{ orgId: st
         </Card>
       )}
       <Card
-        title="Job photos"
+        title="Claim packet"
         actions={
-          <a className="text-sm underline" href={`/api/orgs/${orgId}/jobs/${taskId}/claim-packet`}>
-            Download claim packet
-          </a>
+          <span className="flex flex-wrap items-center gap-3">
+            <a className="inline-flex min-h-11 items-center rounded-full bg-accent px-5 font-medium text-on-accent" href={`/api/orgs/${orgId}/jobs/${taskId}/claim-packet?format=pdf`}>Download PDF</a>
+            <a className="inline-flex min-h-11 items-center text-small text-muted underline underline-offset-4" href={`/api/orgs/${orgId}/jobs/${taskId}/claim-packet`}>Web version</a>
+          </span>
         }
       >
-        <p className="mb-3 text-base text-muted">
+        <p className="mb-5 text-muted">
+          For insurance jobs: every photo and note is hashed, time-stamped and linked to the one before it, so any change, removal or reordering shows up. The PDF lists every hash and a fingerprint of the whole packet.
+        </p>
+        <p role="status" className={`mb-5 font-medium ${photoVerify.chainIntact ? "" : "text-danger"}`}>
           {photoVerify.photos.length === 0
-            ? "No photos yet. Uploads are hashed and chained for this job."
+            ? "Nothing added yet."
             : photoVerify.chainIntact
-              ? `Chain intact · ${photoVerify.photos.length} photo${photoVerify.photos.length === 1 ? "" : "s"}`
-              : "Integrity problem — chain or bytes do not verify"}
+              ? `Chain intact · ${photoVerify.photos.filter((p) => p.kind === "photo").length} photos, ${photoVerify.photos.filter((p) => p.kind === "note").length} notes`
+              : "Integrity problem: the chain or a stored file doesn't verify"}
         </p>
         {photoVerify.flagged.length > 0 && (
-          <p className="mb-3 text-base text-danger">
-            Flagged: {photoVerify.flagged.map((f) => `${f.status}${f.note ? ` (${f.note})` : ""}`).join("; ")}
-          </p>
+          <p className="mb-5 text-danger">Flagged: {photoVerify.flagged.map((f) => `${f.status}${f.note ? ` (${f.note})` : ""}`).join("; ")}</p>
         )}
         {photoVerify.photos.length > 0 && (
-          <ul className="divide-y divide-line text-sm">
+          <ol aria-label="Packet items" className="mb-6 flex flex-col gap-3">
             {photoVerify.photos.map((ph) => (
-              <li key={ph.id} className="flex flex-col gap-1 py-3">
-                <span className="font-medium">#{ph.chainIndex} · {ph.integrityStatus}</span>
-                <code className="break-all text-xs text-muted">{ph.sha256}</code>
+              <li key={ph.id} className="flex flex-col gap-1 rounded-2xl border border-line px-4 py-3">
+                <span className="font-medium">#{ph.chainIndex} · {ph.kind === "note" ? "Note" : "Photo"} · {ph.integrityStatus}</span>
+                <code className="text-xs break-all text-muted">{ph.sha256}</code>
               </li>
             ))}
-          </ul>
+          </ol>
         )}
-        <div className="mt-4">
-          <ActionButton
-            path="gaps2.jobPhotoUpload"
-            input={{
-              orgId,
-              jobId: taskId,
-              filename: "field.jpg",
-              contentType: "image/jpeg",
-              bytesBase64: Buffer.from("scout-os-demo-photo").toString("base64"),
-              captureAt: new Date().toISOString(),
-            }}
-            label="Add demo photo"
-            variant="quiet"
-          />
-        </div>
+        {staff && <PacketAdd orgId={orgId} jobId={taskId} />}
       </Card>
     </div>
   );
