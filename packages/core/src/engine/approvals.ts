@@ -3,6 +3,7 @@ import { approvalRequests, isUuid, organizationMembers, tasks, type ApprovalStat
 import { recordAudit } from "../audit";
 import { AppError } from "../errors";
 import { ANY_ROLE, auditDenied, inOrg, MANAGERS, requireRole } from "../org/access";
+import { isOwnerOnly, ownerOnlyReason } from "./owner-only";
 import { enqueueTaskRun } from "./queue";
 import { assertPaymentCallbackVerified, markPaymentChangeRejected } from "../finance/payment-guard";
 import { FRONT_DESK_TOOL, rejectFrontDeskBooking } from "../front-desk/service";
@@ -54,6 +55,16 @@ export async function decideApproval(input: { actorUserId: string; orgId: string
     const row = await loadForDecision(tx, input.orgId, input.approvalId);
     if (row.status !== "pending") throw new AppError("CONFLICT", `This request is already ${row.status.replace("_", " ")}`);
 
+    // Some holds are owner-only (bank-detail changes, possibly forged invoices, first outreach).
+    const ownerOnly = isOwnerOnly(row.toolName);
+    if (ownerOnly) {
+      const [me] = await tx.select({ role: organizationMembers.role }).from(organizationMembers).where(eq(organizationMembers.userId, input.actorUserId));
+      if (me?.role !== "owner") {
+        await auditDenied(input.orgId, input.actorUserId, input.decision === "reject" ? "approval.reject" : "approval.approve", { approvalId: row.id, reason: "owner_only", tool: row.toolName });
+        throw new AppError("FORBIDDEN", ownerOnlyReason(row.toolName));
+      }
+    }
+
     // No self-approval: the person who asked for the work can't be the human
     // check on it, unless they are the only manager (solo org), which is audited.
     let selfApprovalWaiver = false;
@@ -63,10 +74,10 @@ export async function decideApproval(input: { actorUserId: string; orgId: string
         const managers = await tx
           .select({ userId: organizationMembers.userId })
           .from(organizationMembers)
-          .where(sql`${organizationMembers.role} IN ('owner', 'admin')`);
+          .where(ownerOnly ? sql`${organizationMembers.role} = 'owner'` : sql`${organizationMembers.role} IN ('owner', 'admin')`);
         if (managers.some((m) => m.userId !== input.actorUserId)) {
           await auditDenied(input.orgId, input.actorUserId, "approval.approve", { approvalId: row.id, reason: "self_approval" });
-          throw new AppError("FORBIDDEN", "You asked for this action, so another owner or admin has to approve it");
+          throw new AppError("FORBIDDEN", ownerOnly ? "You asked for this action, so another owner has to approve it" : "You asked for this action, so another owner or admin has to approve it");
         }
         selfApprovalWaiver = true;
       }

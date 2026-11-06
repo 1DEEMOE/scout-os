@@ -16,6 +16,7 @@ import {
 } from "@wos/db";
 import { ANY_ROLE, inOrg, requireRole } from "../org/access";
 import { expireDue, type ApprovalRow } from "./approvals";
+import { isOwnerOnly, ownerOnlyReason } from "./owner-only";
 import { delegationOf } from "./executor";
 import { taskLabel } from "./tasks";
 
@@ -46,6 +47,8 @@ export interface ApprovalForReview {
   context: ContextLine[];
   /** True when the task has other approvals still open, so approving this one alone won't run it. */
   otherOpenInTask: number;
+  /** Only an owner may decide this one (bank-detail change, possibly forged invoice, first outreach). */
+  ownerOnly: boolean;
   reviewer: ReviewerState;
 }
 
@@ -149,7 +152,14 @@ function reviewerState(
     }
     return { kind: "can_confirm" };
   }
-  if (!isManager) return { kind: "read_only", reason: "Only owners and admins can approve." };
+  if (!isManager) return { kind: "read_only", reason: isOwnerOnly(a.toolName) ? ownerOnlyReason(a.toolName) : "Only owners and admins can approve." };
+  if (isOwnerOnly(a.toolName)) {
+    if (me.role !== "owner") return { kind: "read_only", reason: ownerOnlyReason(a.toolName) };
+    if (requestedBy === me.userId) {
+      if (otherOwners.length) return { kind: "read_only", reason: "You asked for this work, so another owner has to approve it." };
+      return { kind: "can_approve", note: "You asked for this and you're the only owner, so your approval is recorded as a sole-owner exception." };
+    }
+  }
   if (requestedBy === me.userId) {
     if (otherManagers.length) return { kind: "read_only", reason: "You asked for this work, so another owner or admin has to approve it." };
     return { kind: "can_approve", note: "You asked for this and you're the only manager, so your approval is recorded as a sole-manager exception." };
@@ -228,6 +238,7 @@ export async function approvalsForReview(input: { actorUserId: string; orgId: st
         fromChat: thread ? { threadId: thread.id, title: thread.title } : null,
         context: context.lines.get(a.id) ?? [],
         otherOpenInTask: isOpen ? (openByTask.get(a.taskId) ?? 1) - 1 : 0,
+        ownerOnly: isOwnerOnly(a.toolName),
         reviewer: isOpen ? reviewerState(a, { userId: input.actorUserId, role }, task?.requestedBy ?? "", managers) : { kind: "read_only", reason: "" },
       };
     };

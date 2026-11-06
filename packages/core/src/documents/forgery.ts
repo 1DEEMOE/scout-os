@@ -20,7 +20,8 @@ import { AppError } from "../errors";
 import { ANY_ROLE, STAFF, inOrg, requireRole } from "../org/access";
 
 export const FORGERY_REVIEW_TOOL = "finance.review_flagged_document";
-export const FORGERY_MIN_TIER = 2 as const;
+/** Releasing a held invoice is a money decision: level 3, always an OK (and owner only). */
+export const FORGERY_MIN_TIER = 3 as const;
 
 export type PdfMeta = {
   producer?: string;

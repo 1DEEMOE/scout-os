@@ -123,9 +123,14 @@ describe("bank / payment-detail change guard", () => {
     // Never expose full account in the flag list
     expect(JSON.stringify(flagged)).not.toContain(ACCOUNT);
 
-    // Approve without call-back is refused (wrong state → CONFLICT)
+    // Bank-detail changes are owner-only: an admin can't decide them at all.
     await expectCode(
       decideApproval({ actorUserId: "admin", orgId, approvalId: aps[0]!.id, decision: "approve" }),
+      "FORBIDDEN",
+    );
+    // Approve without call-back is refused (wrong state → CONFLICT), even for an owner.
+    await expectCode(
+      decideApproval({ actorUserId: "owner", orgId, approvalId: aps[0]!.id, decision: "approve" }),
       "CONFLICT",
     );
 
@@ -152,7 +157,7 @@ describe("bank / payment-detail change guard", () => {
       notes: "Spoke with Pat",
     });
 
-    await decideApproval({ actorUserId: "admin", orgId, approvalId: aps[0]!.id, decision: "approve" });
+    await decideApproval({ actorUserId: "owner", orgId, approvalId: aps[0]!.id, decision: "approve" });
     expect(await runTask(orgId, taskId)).toBe("COMPLETED");
 
     const after = await listFlaggedPaymentChanges({ actorUserId: "owner", orgId });
@@ -188,7 +193,8 @@ describe("bank / payment-detail change guard", () => {
     const flagged = await listFlaggedPaymentChanges({ actorUserId: "owner", orgId });
     expect(flagged[0]!.source).toBe("chat");
 
-    await decideApproval({ actorUserId: "admin", orgId, approvalId: ap!.id, decision: "reject" });
+    await expectCode(decideApproval({ actorUserId: "admin", orgId, approvalId: ap!.id, decision: "reject" }), "FORBIDDEN");
+    await decideApproval({ actorUserId: "owner", orgId, approvalId: ap!.id, decision: "reject" });
     expect(await listFlaggedPaymentChanges({ actorUserId: "owner", orgId })).toHaveLength(0);
   });
 });
