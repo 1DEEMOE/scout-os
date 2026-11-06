@@ -49,3 +49,14 @@ Before public launch: Google OAuth verification and the restricted-scope securit
 5. Locally, the Stripe CLI works too: `stripe listen --forward-to localhost:3000/api/webhooks/stripe`.
 
 Record the results of each section in `docs/plans/acceptance.md` with dates and what you saw.
+
+## 6. Render database roles (before the first deploy)
+
+The app must connect as `app_user` (no BYPASSRLS, owns nothing), never as Render's default database user, which owns the database and could disable row-level security. Steps:
+
+1. Create the database from `render.yaml` (no services yet).
+2. Edit and run `scripts/render-db-roles.sql` once as the default user. **UNVERIFIED on Render**: it needs `CREATEROLE`; if refused, create the two users in the Render dashboard and run only the GRANTs.
+3. After the SQL review of 0013–0019: `DATABASE_URL_OWNER=postgres://wos_owner:…@HOST/scout_os pnpm db:migrate` from a trusted machine.
+4. Set `DATABASE_URL` on both services to the `app_user` connection string. The web service has no `DATABASE_URL_ADMIN` at all (booking links use the narrow RLS policy from migration 0019).
+5. Optional, worker only: `DATABASE_URL_ADMIN` for the lost-routine-run reconciler needs a BYPASSRLS role. If Render can't grant one, leave it unset; the worker logs that the reconciler is idle and everything else works.
+6. Check: `GET /api/healthz` returns `{"ok":true}`; signing in works; a booking link from Settings → Front desk loads.

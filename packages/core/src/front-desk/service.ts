@@ -13,6 +13,7 @@ import {
   frontDeskSlots,
   tasks,
   type Tx,
+  withFrontDeskToken,
   withTenant,
 } from "@wos/db";
 import { recordAudit } from "../audit";
@@ -119,20 +120,18 @@ export async function addFrontDeskSlots(input: {
 }
 
 export async function getChannelByToken(publicToken: string) {
-  // Token is unique globally; FORCE RLS hides rows without a tenant, so look up
-  // via the admin connection (same pattern as the routine reconciler).
-  const { adminQuery } = await import("@wos/db");
-  const rows = await adminQuery<{
-    id: string;
-    tenant_id: string;
-    display_name: string;
-    timezone: string;
-    disclosure: string;
-    status: string;
-  }>(
-    `SELECT id, tenant_id, display_name, timezone, disclosure, status
-     FROM front_desk_channels WHERE token_hash = $1 LIMIT 1`,
-    [sha256(publicToken)],
+  // The link carries no tenant, so look the channel up through the narrow
+  // 0019 policy: this transaction can read only the row whose token hash
+  // matches. No admin/BYPASSRLS connection in the web process (Law 5).
+  if (typeof publicToken !== "string" || publicToken.length < 16 || publicToken.length > 128) return null;
+  const rows = await withFrontDeskToken(sha256(publicToken), async (tx) =>
+    (
+      await tx.raw.query(
+        `SELECT id, tenant_id, display_name, timezone, disclosure, status
+         FROM front_desk_channels WHERE token_hash = $1 LIMIT 1`,
+        [sha256(publicToken)],
+      )
+    ).rows as { id: string; tenant_id: string; display_name: string; timezone: string; disclosure: string; status: string }[],
   );
   const row = rows[0];
   if (!row) return null;

@@ -1,6 +1,7 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
-import { approvalRequests, closePool, frontDeskBookings, tasks, withTenant } from "@wos/db";
+import { approvalRequests, closePool, frontDeskBookings, tasks, withFrontDeskToken, withTenant } from "@wos/db";
+import { createHash } from "node:crypto";
 import {
   actionDigest,
   addFrontDeskSlots,
@@ -165,6 +166,45 @@ describe("AI front desk", () => {
       (await tx.raw.query(`SELECT count(*)::int AS n FROM audit_events WHERE action = 'front_desk.rate_limited'`)).rows[0] as { n: number },
     );
     expect(denied.n).toBe(1); // only the first denial in a window is audited
+  });
+
+  it("booking links work without the admin connection (no god credential in the web process)", async () => {
+    const saved = { a: process.env.DATABASE_URL_ADMIN, t: process.env.TEST_DATABASE_URL_ADMIN };
+    delete process.env.DATABASE_URL_ADMIN;
+    delete process.env.TEST_DATABASE_URL_ADMIN;
+    try {
+      const avail = await listAvailability(token, new Date(), new Date(Date.now() + 7 * 86_400_000));
+      expect(avail.slots).toHaveLength(1);
+      const booked = await requestBooking({
+        publicToken: token, slotId: avail.slots[0]!.id, requesterKind: "person", disclosureAck: true,
+        customerName: "No Admin", customerEmail: "noadmin@example.test", sourceIp: "198.51.100.1",
+      });
+      expect(booked.bookingId).toBeTruthy();
+    } finally {
+      if (saved.a) process.env.DATABASE_URL_ADMIN = saved.a;
+      if (saved.t) process.env.TEST_DATABASE_URL_ADMIN = saved.t;
+    }
+  });
+
+  it("the token-lookup policy reveals only the matching channel, and nothing else", async () => {
+    await seedUser("other-owner", "other@example.test");
+    const other = (await createOrg({ actorUserId: "other-owner", name: "Other Co" })).orgId;
+    const otherCh = await enableFrontDesk({ actorUserId: "other-owner", orgId: other, displayName: "Other desk" });
+    const hash = (t: string) => createHash("sha256").update(t).digest("hex");
+    const seen = await withFrontDeskToken(hash(token), async (tx) => ({
+      channels: (await tx.raw.query("SELECT id, tenant_id FROM front_desk_channels")).rows,
+      slots: (await tx.raw.query("SELECT count(*)::int AS n FROM front_desk_slots")).rows[0],
+      bookings: (await tx.raw.query("SELECT count(*)::int AS n FROM front_desk_bookings")).rows[0],
+      orgs: (await tx.raw.query("SELECT count(*)::int AS n FROM organizations")).rows[0],
+    }));
+    expect(seen.channels).toEqual([{ id: channelId, tenant_id: orgId }]); // not the other org's channel
+    expect(seen).toMatchObject({ slots: { n: 0 }, bookings: { n: 0 } });
+    const none = await withFrontDeskToken(hash("a-token-nobody-has-0000"), async (tx) => (await tx.raw.query("SELECT id FROM front_desk_channels")).rows);
+    expect(none).toEqual([]);
+    // The policy is read-only: it can't be used to change a channel.
+    const upd = await withFrontDeskToken(hash(token), async (tx) => (await tx.raw.query("UPDATE front_desk_channels SET display_name = 'pwned' RETURNING id")).rowCount);
+    expect(upd).toBe(0);
+    expect(otherCh.channelId).not.toBe(channelId);
   });
 
   it("stores the executor digest so approving a booking confirms it", async () => {

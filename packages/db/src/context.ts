@@ -66,6 +66,16 @@ export function withUser<T>(userId: string, fn: (tx: Tx) => Promise<T>): Promise
   return inTransaction({ "app.user_id": userId }, fn);
 }
 
+/**
+ * Public booking-link lookup: no tenant, no user. The 0019 policy lets this
+ * transaction read only the one front_desk_channels row whose token_hash
+ * matches. Never use it for anything else.
+ */
+export function withFrontDeskToken<T>(tokenHash: string, fn: (tx: Tx) => Promise<T>): Promise<T> {
+  if (!/^[0-9a-f]{64}$/.test(tokenHash)) return Promise.reject(new Error("token hash must be 64 hex characters"));
+  return inTransaction({ "app.front_desk_token_hash": tokenHash }, fn);
+}
+
 /** Global tables only (users). Tenant tables return no rows here. */
 export function withGlobal<T>(fn: (tx: Tx) => Promise<T>): Promise<T> {
   return inTransaction({}, fn);
