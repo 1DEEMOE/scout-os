@@ -1,6 +1,6 @@
 # Industry packs
 
-Status: built on `feat/speed-to-lead`. Schema change is proposed only (`packages/db/proposed/0021_industry_packs_and_speed.sql`) and is not applied.
+Status: pack data is in the app. Schema change is proposed only (`packages/db/proposed/0021_industry_packs_and_speed.sql`) and is not applied.
 
 ## Why
 
@@ -18,7 +18,7 @@ Packs are versioned data (`PACK_VERSION` in `packages/core/src/industries/packs.
 - Morning lines for that trade.
 - Signal sources: weather (NOAA, free, only roofing, HVAC, auto glass, tree service), seasonal calendar, past-customer interval, and mock new-mover or permit feeds. Scores are points with a reason. They do not claim damage.
 
-`organizations.industry` can still only be `roofing` or `general` until 0021 is reviewed. The pack id lives in `memory_records` (`speed:pack`).
+`organizations.industry` can still only be `roofing` or `general` until 0021 is reviewed. The proposal widens that check to every pack id and adds the menu, chair, appointment, and template tables with row-level security forced on, tenant policies, grants, and foreign keys. The pack id lives in `memory_records` (`speed:pack`) until then. The isolation test for 0021 rolls back, so the applied database stays on 0001–0019.
 
 ## Speed, texts, and trust
 
