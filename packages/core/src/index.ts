@@ -56,7 +56,8 @@ export { checkEmailAllowed, normalizeAddress } from "./scout/consent";
 export { scoutTools, registerScoutTools } from "./scout/tools";
 export * from "./scout/analytics";
 export { loadScoutDemo } from "./scout/demo";
-export { getMailSender, setMailSenderForTests, ConsoleMailSender, type MailSender, type OutboundMail } from "./mail/sender";
+export { getMailSender, setMailSenderForTests, platformEmailConfigured, ConsoleMailSender, type MailSender, type OutboundMail } from "./mail/sender";
+export { SmtpMailSender } from "./mail/smtp";
 
 export * from "./routines/schedule";
 export * from "./routines/briefing";

@@ -13,6 +13,7 @@ import {
   frontDeskSlots,
   tasks,
   type Tx,
+  withFrontDeskToken,
   withTenant,
 } from "@wos/db";
 import { recordAudit } from "../audit";
@@ -102,37 +103,54 @@ export async function addFrontDeskSlots(input: {
     await requireRole(tx, input.orgId, input.actorUserId, STAFF, "front_desk.slots.add");
     const [ch] = await tx.select().from(frontDeskChannels).where(eq(frontDeskChannels.id, input.channelId));
     if (!ch) throw new AppError("NOT_FOUND", "Front desk channel not found");
+    if (input.slots.length === 0) throw new AppError("VALIDATION", "Add at least one time slot");
+    if (input.slots.length > 50) throw new AppError("VALIDATION", "Add at most 50 slots at a time");
+    const now = Date.now();
     let added = 0;
     for (const s of input.slots) {
+      if (Number.isNaN(s.startsAt.getTime()) || Number.isNaN(s.endsAt.getTime())) throw new AppError("VALIDATION", "Each slot needs a valid start and end");
       if (s.endsAt <= s.startsAt) throw new AppError("VALIDATION", "Slot end must be after start");
+      if (s.startsAt.getTime() < now) throw new AppError("VALIDATION", "Slots must start in the future");
+      if (s.startsAt.getTime() > now + 366 * 86_400_000) throw new AppError("VALIDATION", "Slots can be at most a year ahead");
+      if (s.endsAt.getTime() - s.startsAt.getTime() > 12 * 3_600_000) throw new AppError("VALIDATION", "A slot can be at most 12 hours long");
+      const cap = s.capacity ?? 1;
+      if (!Number.isInteger(cap) || cap < 1 || cap > 50) throw new AppError("VALIDATION", "Capacity must be between 1 and 50");
       await tx.insert(frontDeskSlots).values({
         tenantId: input.orgId,
         channelId: ch.id,
         startsAt: s.startsAt,
         endsAt: s.endsAt,
-        capacity: s.capacity ?? 1,
+        capacity: cap,
       });
       added++;
     }
+    await recordAudit(tx, {
+      tenantId: input.orgId,
+      actorType: "user",
+      actorId: input.actorUserId,
+      action: "front_desk.slots.add",
+      target: `front_desk_channel:${ch.id}`,
+      tier: 1,
+      outcome: "success",
+      metadata: { added },
+    });
     return { added };
   });
 }
 
 export async function getChannelByToken(publicToken: string) {
-  // Token is unique globally; FORCE RLS hides rows without a tenant, so look up
-  // via the admin connection (same pattern as the routine reconciler).
-  const { adminQuery } = await import("@wos/db");
-  const rows = await adminQuery<{
-    id: string;
-    tenant_id: string;
-    display_name: string;
-    timezone: string;
-    disclosure: string;
-    status: string;
-  }>(
-    `SELECT id, tenant_id, display_name, timezone, disclosure, status
-     FROM front_desk_channels WHERE token_hash = $1 LIMIT 1`,
-    [sha256(publicToken)],
+  // The link carries no tenant, so look the channel up through the narrow
+  // 0019 policy: this transaction can read only the row whose token hash
+  // matches. No admin/BYPASSRLS connection in the web process (Law 5).
+  if (typeof publicToken !== "string" || publicToken.length < 16 || publicToken.length > 128) return null;
+  const rows = await withFrontDeskToken(sha256(publicToken), async (tx) =>
+    (
+      await tx.raw.query(
+        `SELECT id, tenant_id, display_name, timezone, disclosure, status
+         FROM front_desk_channels WHERE token_hash = $1 LIMIT 1`,
+        [sha256(publicToken)],
+      )
+    ).rows as { id: string; tenant_id: string; display_name: string; timezone: string; disclosure: string; status: string }[],
   );
   const row = rows[0];
   if (!row) return null;
@@ -234,9 +252,16 @@ export async function requestBooking(input: BookingRequest): Promise<{ bookingId
   const windowStart = new Date(Math.floor(Date.now() / WINDOW_MS) * WINDOW_MS);
   const dayStart = new Date(`${daySalt()}T00:00:00.000Z`);
 
-  return withTenant(ch.tenantId, async (tx) => {
+  // Count the attempt in its own committed transaction BEFORE trying to book.
+  // Counting inside the booking transaction meant every failed attempt (bad
+  // slot, full slot, validation) rolled its own increment back, so failures
+  // were never limited, and the denial audit row was rolled back with them.
+  const limited = await withTenant(ch.tenantId, async (tx) => {
     const perIp = await bumpRate(tx, ch.tenantId, ch.id, `ip:${ipHash}`, windowStart);
-    if (perIp > PER_WINDOW) {
+    const perDay = await bumpRate(tx, ch.tenantId, ch.id, `day:${ipHash}`, dayStart);
+    const reason = perIp > PER_WINDOW ? "per_ip_window" : perDay > ABUSE_PER_DAY ? "per_ip_day" : null;
+    // Audit only the first denial in a window, so a flood can't flood the audit log.
+    if (reason && (reason === "per_ip_window" ? perIp === PER_WINDOW + 1 : perDay === ABUSE_PER_DAY + 1)) {
       await recordAudit(tx, {
         tenantId: ch.tenantId,
         actorType: "system",
@@ -245,14 +270,15 @@ export async function requestBooking(input: BookingRequest): Promise<{ bookingId
         target: `front_desk_channel:${ch.id}`,
         tier: 0,
         outcome: "denied",
-        metadata: { reason: "per_ip_window" },
+        metadata: { reason },
       });
-      throw new AppError("RATE_LIMITED", "Too many booking attempts. Try again shortly.");
     }
-    const perDay = await bumpRate(tx, ch.tenantId, ch.id, `day:${ipHash}`, dayStart);
-    if (perDay > ABUSE_PER_DAY) {
-      throw new AppError("RATE_LIMITED", "Daily booking limit reached for this network.");
-    }
+    return reason;
+  });
+  if (limited === "per_ip_window") throw new AppError("RATE_LIMITED", "Too many booking attempts. Try again shortly.");
+  if (limited === "per_ip_day") throw new AppError("RATE_LIMITED", "Daily booking limit reached for this network.");
+
+  return withTenant(ch.tenantId, async (tx) => {
 
     const [slot] = await tx.select().from(frontDeskSlots).where(eq(frontDeskSlots.id, input.slotId));
     if (!slot || slot.channelId !== ch.id) throw new AppError("NOT_FOUND", "Slot not found");
@@ -489,6 +515,75 @@ export async function listPendingFrontDeskBookings(input: { actorUserId: string;
 export async function listFrontDeskChannels(input: { actorUserId: string; orgId: string }) {
   return inOrg(input.orgId, async (tx) => {
     await requireRole(tx, input.orgId, input.actorUserId, ANY_ROLE, "front_desk.channels");
-    return tx.select().from(frontDeskChannels).limit(10);
+    // Never the token hash: since migration 0019 it works as a read key for the
+    // channel row, so it stays on the server.
+    return tx
+      .select({
+        id: frontDeskChannels.id,
+        displayName: frontDeskChannels.displayName,
+        timezone: frontDeskChannels.timezone,
+        disclosure: frontDeskChannels.disclosure,
+        status: frontDeskChannels.status,
+        createdAt: frontDeskChannels.createdAt,
+        updatedAt: frontDeskChannels.updatedAt,
+      })
+      .from(frontDeskChannels)
+      .orderBy(asc(frontDeskChannels.createdAt))
+      .limit(10);
+  });
+}
+
+/** Pause or resume public booking on a channel. Paused links answer 404. */
+export async function setFrontDeskStatus(input: { actorUserId: string; orgId: string; channelId: string; status: "active" | "paused" }) {
+  if (input.status !== "active" && input.status !== "paused") throw new AppError("VALIDATION", "Status must be active or paused");
+  return inOrg(input.orgId, async (tx) => {
+    await requireRole(tx, input.orgId, input.actorUserId, MANAGERS, "front_desk.status");
+    const rows = await tx
+      .update(frontDeskChannels)
+      .set({ status: input.status, updatedAt: new Date() })
+      .where(eq(frontDeskChannels.id, input.channelId))
+      .returning({ id: frontDeskChannels.id });
+    if (!rows.length) throw new AppError("NOT_FOUND", "Front desk channel not found");
+    await recordAudit(tx, {
+      tenantId: input.orgId, actorType: "user", actorId: input.actorUserId, action: "front_desk.status",
+      target: `front_desk_channel:${input.channelId}`, tier: 1, outcome: "success", metadata: { status: input.status },
+    });
+    return { status: input.status };
+  });
+}
+
+/**
+ * Replaces the booking link. The old link stops working at once; the new
+ * token is returned exactly once (only its hash is stored). A credential
+ * change, so it's audited at tier 4.
+ */
+export async function rotateFrontDeskLink(input: { actorUserId: string; orgId: string; channelId: string }): Promise<{ publicToken: string }> {
+  return inOrg(input.orgId, async (tx) => {
+    await requireRole(tx, input.orgId, input.actorUserId, MANAGERS, "front_desk.rotate");
+    const publicToken = randomBytes(24).toString("base64url");
+    const rows = await tx
+      .update(frontDeskChannels)
+      .set({ tokenHash: sha256(publicToken), updatedAt: new Date() })
+      .where(eq(frontDeskChannels.id, input.channelId))
+      .returning({ id: frontDeskChannels.id });
+    if (!rows.length) throw new AppError("NOT_FOUND", "Front desk channel not found");
+    await recordAudit(tx, {
+      tenantId: input.orgId, actorType: "user", actorId: input.actorUserId, action: "front_desk.rotate",
+      target: `front_desk_channel:${input.channelId}`, tier: 4, outcome: "success", metadata: {},
+    });
+    return { publicToken };
+  });
+}
+
+/** Upcoming slots with how many seats are taken, for the owner's schedule view. */
+export async function listFrontDeskSlots(input: { actorUserId: string; orgId: string; channelId: string }) {
+  return inOrg(input.orgId, async (tx) => {
+    await requireRole(tx, input.orgId, input.actorUserId, ANY_ROLE, "front_desk.slots.list");
+    return tx
+      .select({ id: frontDeskSlots.id, startsAt: frontDeskSlots.startsAt, endsAt: frontDeskSlots.endsAt, capacity: frontDeskSlots.capacity, reservedCount: frontDeskSlots.reservedCount })
+      .from(frontDeskSlots)
+      .where(and(eq(frontDeskSlots.channelId, input.channelId), gt(frontDeskSlots.endsAt, new Date())))
+      .orderBy(asc(frontDeskSlots.startsAt))
+      .limit(200);
   });
 }

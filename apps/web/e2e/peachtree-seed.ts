@@ -18,7 +18,6 @@ import {
   enableFrontDesk,
   FakeCrmProvider,
   FakeInvoicingProvider,
-  FakeMailProvider,
   financeTools,
   frontDeskTools,
   forgeryTools,
@@ -61,7 +60,6 @@ await resetDb();
 
 const billing = new FakeInvoicingProvider();
 const crm = new FakeCrmProvider();
-const mail = new FakeMailProvider();
 const mailbox = async () => null;
 configureEngine({
   router: new ModelRouter([new UnconfiguredProvider()], "none"),

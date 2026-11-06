@@ -1,6 +1,7 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
-import { approvalRequests, closePool, frontDeskBookings, tasks, withTenant } from "@wos/db";
+import { approvalRequests, closePool, frontDeskBookings, tasks, withFrontDeskToken, withTenant } from "@wos/db";
+import { createHash } from "node:crypto";
 import {
   actionDigest,
   addFrontDeskSlots,
@@ -11,6 +12,12 @@ import {
   enableFrontDesk,
   FRONT_DESK_TOOL,
   listAvailability,
+  listFrontDeskChannels,
+  listFrontDeskSlots,
+  rotateFrontDeskLink,
+  setFrontDeskStatus,
+  inviteMember,
+  AppError,
   MockModelProvider,
   ModelRouter,
   requestBooking,
@@ -116,7 +123,7 @@ describe("AI front desk", () => {
     const avail = await listAvailability(token, new Date(), new Date(Date.now() + 7 * 86_400_000));
     const slotId = avail.slots[0]!.id;
     let limited = false;
-    for (let i = 0; i < 25; i++) {
+    for (let i = 0; i < 41; i++) { // 41: still refused if the run crosses a minute boundary
       try {
         await requestBooking({
           publicToken: token,
@@ -136,6 +143,116 @@ describe("AI front desk", () => {
       }
     }
     expect(limited).toBe(true);
+  });
+
+  it("counts failed attempts too: bad slot ids can't dodge the limit, and denials are audited", async () => {
+    let limitedAt = -1;
+    for (let i = 0; i < 41; i++) {
+      try {
+        await requestBooking({
+          publicToken: token,
+          slotId: "00000000-0000-4000-8000-000000000000", // never exists: every attempt fails
+          requesterKind: "person",
+          disclosureAck: true,
+          customerName: `Prober ${i}`,
+          customerEmail: `probe${i}@example.test`,
+          sourceIp: "7.7.7.7",
+        });
+      } catch (err) {
+        if ((err as { code?: string }).code === "RATE_LIMITED") {
+          limitedAt = i;
+          break;
+        }
+      }
+    }
+    // 20 attempts per clock minute, failed or not: refused at attempt 21, or by 41 if the run crosses a minute boundary.
+    expect(limitedAt).toBeGreaterThanOrEqual(20);
+    expect(limitedAt).toBeLessThanOrEqual(40);
+    const denied = await withTenant(orgId, async (tx) =>
+      (await tx.raw.query(`SELECT count(*)::int AS n FROM audit_events WHERE action = 'front_desk.rate_limited'`)).rows[0] as { n: number },
+    );
+    expect(denied.n).toBe(1); // only the first denial in a window is audited
+  });
+
+  it("booking links work without the admin connection (no god credential in the web process)", async () => {
+    const saved = { a: process.env.DATABASE_URL_ADMIN, t: process.env.TEST_DATABASE_URL_ADMIN };
+    delete process.env.DATABASE_URL_ADMIN;
+    delete process.env.TEST_DATABASE_URL_ADMIN;
+    try {
+      const avail = await listAvailability(token, new Date(), new Date(Date.now() + 7 * 86_400_000));
+      expect(avail.slots).toHaveLength(1);
+      const booked = await requestBooking({
+        publicToken: token, slotId: avail.slots[0]!.id, requesterKind: "person", disclosureAck: true,
+        customerName: "No Admin", customerEmail: "noadmin@example.test", sourceIp: "198.51.100.1",
+      });
+      expect(booked.bookingId).toBeTruthy();
+    } finally {
+      if (saved.a) process.env.DATABASE_URL_ADMIN = saved.a;
+      if (saved.t) process.env.TEST_DATABASE_URL_ADMIN = saved.t;
+    }
+  });
+
+  it("the token-lookup policy reveals only the matching channel, and nothing else", async () => {
+    await seedUser("other-owner", "other@example.test");
+    const other = (await createOrg({ actorUserId: "other-owner", name: "Other Co" })).orgId;
+    const otherCh = await enableFrontDesk({ actorUserId: "other-owner", orgId: other, displayName: "Other desk" });
+    const hash = (t: string) => createHash("sha256").update(t).digest("hex");
+    const seen = await withFrontDeskToken(hash(token), async (tx) => ({
+      channels: (await tx.raw.query("SELECT id, tenant_id FROM front_desk_channels")).rows,
+      slots: (await tx.raw.query("SELECT count(*)::int AS n FROM front_desk_slots")).rows[0],
+      bookings: (await tx.raw.query("SELECT count(*)::int AS n FROM front_desk_bookings")).rows[0],
+      orgs: (await tx.raw.query("SELECT count(*)::int AS n FROM organizations")).rows[0],
+    }));
+    expect(seen.channels).toEqual([{ id: channelId, tenant_id: orgId }]); // not the other org's channel
+    expect(seen).toMatchObject({ slots: { n: 0 }, bookings: { n: 0 } });
+    const none = await withFrontDeskToken(hash("a-token-nobody-has-0000"), async (tx) => (await tx.raw.query("SELECT id FROM front_desk_channels")).rows);
+    expect(none).toEqual([]);
+    // The policy is read-only: it can't be used to change a channel.
+    const upd = await withFrontDeskToken(hash(token), async (tx) => (await tx.raw.query("UPDATE front_desk_channels SET display_name = 'pwned' RETURNING id")).rowCount);
+    expect(upd).toBe(0);
+    expect(otherCh.channelId).not.toBe(channelId);
+  });
+
+  it("owners can pause a desk (link answers not found) and resume it", async () => {
+    await setFrontDeskStatus({ actorUserId: OWNER, orgId, channelId, status: "paused" });
+    await expect(listAvailability(token, new Date(), new Date(Date.now() + 7 * 86_400_000))).rejects.toMatchObject({ code: "NOT_FOUND" });
+    await setFrontDeskStatus({ actorUserId: OWNER, orgId, channelId, status: "active" });
+    expect((await listAvailability(token, new Date(), new Date(Date.now() + 7 * 86_400_000))).slots).toHaveLength(1);
+  });
+
+  it("rotating the link kills the old one at once and audits it as a credential change", async () => {
+    const { publicToken } = await rotateFrontDeskLink({ actorUserId: OWNER, orgId, channelId });
+    expect(publicToken).not.toBe(token);
+    await expect(listAvailability(token, new Date(), new Date(Date.now() + 7 * 86_400_000))).rejects.toMatchObject({ code: "NOT_FOUND" });
+    expect((await listAvailability(publicToken, new Date(), new Date(Date.now() + 7 * 86_400_000))).slots).toHaveLength(1);
+    const a = await withTenant(orgId, async (tx) => (await tx.raw.query(`SELECT tier FROM audit_events WHERE action = 'front_desk.rotate'`)).rows);
+    expect(a).toEqual([{ tier: 4 }]);
+  });
+
+  it("members can't pause, rotate or enable; the channel list never exposes the token hash", async () => {
+    await seedUser("fd-member", "fdm@example.test");
+    await inviteMember({ actorUserId: OWNER, orgId, email: "fdm@example.test", role: "member" });
+    const forbidden = (p: Promise<unknown>) => expect(p).rejects.toSatisfy((e: unknown) => e instanceof AppError && e.code === "FORBIDDEN");
+    await forbidden(setFrontDeskStatus({ actorUserId: "fd-member", orgId, channelId, status: "paused" }));
+    await forbidden(rotateFrontDeskLink({ actorUserId: "fd-member", orgId, channelId }));
+    await forbidden(enableFrontDesk({ actorUserId: "fd-member", orgId, displayName: "Sneaky" }));
+    const channels = await listFrontDeskChannels({ actorUserId: "fd-member", orgId });
+    expect(channels).toHaveLength(1);
+    expect(JSON.stringify(channels)).not.toMatch(/token|[0-9a-f]{64}/i);
+  });
+
+  it("refuses slots in the past, too long, too far out or over capacity", async () => {
+    const add = (startsAt: Date, endsAt: Date, capacity?: number) => addFrontDeskSlots({ actorUserId: OWNER, orgId, channelId, slots: [{ startsAt, endsAt, capacity }] });
+    const h = 3_600_000;
+    const soon = Date.now() + 2 * h;
+    await expect(add(new Date(Date.now() - h), new Date(Date.now()))).rejects.toMatchObject({ code: "VALIDATION" });
+    await expect(add(new Date(soon), new Date(soon + 13 * h))).rejects.toMatchObject({ code: "VALIDATION" });
+    await expect(add(new Date(Date.now() + 400 * 86_400_000), new Date(Date.now() + 400 * 86_400_000 + h))).rejects.toMatchObject({ code: "VALIDATION" });
+    await expect(add(new Date(soon), new Date(soon + h), 51)).rejects.toMatchObject({ code: "VALIDATION" });
+    await expect(addFrontDeskSlots({ actorUserId: OWNER, orgId, channelId, slots: [] })).rejects.toMatchObject({ code: "VALIDATION" });
+    await add(new Date(soon), new Date(soon + h), 3);
+    const slots = await listFrontDeskSlots({ actorUserId: OWNER, orgId, channelId });
+    expect(slots.map((x) => x.capacity)).toEqual([3, 50]);
   });
 
   it("stores the executor digest so approving a booking confirms it", async () => {

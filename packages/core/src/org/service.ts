@@ -82,7 +82,7 @@ function acceptUrlFor(orgId: string, token: string): string {
 
 export type InviteResult =
   | { kind: "member"; userId: string }
-  | { kind: "invitation"; invitationId: string; acceptUrl: string; emailed: boolean };
+  | { kind: "invitation"; invitationId: string; acceptUrl: string; emailed: boolean; emailDelivery: "sent" | "failed" | "not_configured" };
 
 /**
  * Adds a member to the organization. If the email already has an account the
@@ -166,7 +166,10 @@ export async function inviteMember(input: { actorUserId: string; orgId: string; 
       });
 
       const acceptUrl = acceptUrlFor(input.orgId, token);
-      const mailed = await getMailSender()
+      const sender = getMailSender();
+      // The MOCK console sender "succeeds" without delivering anything, so it
+      // must never be reported as emailed (Law 2).
+      const mailed = sender.mock ? false : await sender
         .send({
           to: email,
           subject: "You've been invited to Scout OS",
@@ -179,8 +182,9 @@ export async function inviteMember(input: { actorUserId: string; orgId: string; 
             return false;
           },
         );
-      logger.info({ orgId: input.orgId, actor: input.actorUserId, invitationId, role, emailed: mailed }, "invitation created");
-      return { kind: "invitation", invitationId, acceptUrl, emailed: mailed };
+      const emailDelivery = sender.mock ? ("not_configured" as const) : mailed ? ("sent" as const) : ("failed" as const);
+      logger.info({ orgId: input.orgId, actor: input.actorUserId, invitationId, role, emailDelivery }, "invitation created");
+      return { kind: "invitation", invitationId, acceptUrl, emailed: mailed, emailDelivery };
     }),
   );
 }

@@ -6,6 +6,9 @@ import {
   listFlaggedDocuments,
   listPendingFrontDeskBookings,
   listFrontDeskChannels,
+  listFrontDeskSlots,
+  rotateFrontDeskLink,
+  setFrontDeskStatus,
   latestAiAnswersCheck,
   listAiAnswersTrend,
   runAiAnswersCheck,
@@ -52,6 +55,13 @@ export const gaps2Router = router({
     ),
   frontDeskPending: protectedProcedure.input(z.object({ orgId })).query(({ ctx, input }) => listPendingFrontDeskBookings({ actorUserId: ctx.userId, ...input })),
   frontDeskChannels: protectedProcedure.input(z.object({ orgId })).query(({ ctx, input }) => listFrontDeskChannels({ actorUserId: ctx.userId, ...input })),
+  frontDeskSlots: protectedProcedure.input(z.object({ orgId, channelId: id })).query(({ ctx, input }) => listFrontDeskSlots({ actorUserId: ctx.userId, ...input })),
+  frontDeskSetStatus: protectedProcedure
+    .input(z.object({ orgId, channelId: id, paused: z.boolean() }))
+    .mutation(({ ctx, input }) =>
+      setFrontDeskStatus({ actorUserId: ctx.userId, orgId: input.orgId, channelId: input.channelId, status: input.paused ? "paused" : "active" }),
+    ),
+  frontDeskRotateLink: protectedProcedure.input(z.object({ orgId, channelId: id })).mutation(({ ctx, input }) => rotateFrontDeskLink({ actorUserId: ctx.userId, ...input })),
 
   aiAnswersRun: protectedProcedure
     .input(z.object({ orgId, trade: z.string().max(80).optional(), zip: z.string().max(10), force: z.boolean().optional() }))

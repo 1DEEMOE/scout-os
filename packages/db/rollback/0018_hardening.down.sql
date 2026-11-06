@@ -26,3 +26,6 @@ ALTER TABLE audit_events DROP COLUMN entry_hash;
 ALTER TABLE audit_events DROP COLUMN prev_hash;
 
 DROP TABLE organization_invitations;
+
+-- Forget this migration so a later `migrate` re-applies it (otherwise it's silently skipped).
+DELETE FROM schema_migrations WHERE name = '0018_hardening.sql';
