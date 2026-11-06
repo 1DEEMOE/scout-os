@@ -55,10 +55,10 @@ test.describe("chat-first Scout OS", () => {
     await expect(card.getByText("Risk level")).toBeVisible();
     // The sidebar is calm: five primary destinations; the rest waits behind "More".
     const nav = page.getByRole("navigation", { name: "Organization" });
-    await expect(nav.getByRole("link")).toHaveCount(5);
-    for (const name of ["Today", "Conversations", "Leads", "Jobs"]) await expect(nav.getByRole("link", { name, exact: true })).toBeVisible();
+    await expect(nav.getByRole("list", { name: "Main" }).getByRole("link")).toHaveCount(5);
+    for (const name of ["Today", "Work", "Customers", "Leads"]) await expect(nav.getByRole("link", { name, exact: true })).toBeVisible();
     // The count is part of the link's accessible name, not just a coloured dot.
-    await expect(nav.getByRole("link", { name: /^Needs your OK\s*,\s*\d+ waiting$/ })).toBeVisible();
+    await expect(nav.getByRole("link", { name: /^Approvals\s*,\s*\d+ waiting$/ })).toBeVisible();
     await page.screenshot({ path: path.join(shots, "today-desktop-light.png") });
 
     // Suggestion chips fill the composer; Enter sends and opens the new thread.
@@ -73,38 +73,6 @@ test.describe("chat-first Scout OS", () => {
     await expect(convo.getByText("MOCK").first()).toBeVisible(); // mock replies stay labelled
     await page.screenshot({ path: path.join(shots, "thread-desktop-light.png") });
     expect(errors).toEqual([]);
-  });
-
-  test("sidebar: five calm items, everything else behind More (remembered), Settings in the footer", async ({ page }) => {
-    test.setTimeout(90_000);
-    await page.setViewportSize({ width: 1366, height: 900 });
-    await signIn(page);
-    await page.goto(base());
-    const nav = page.getByRole("navigation", { name: "Organization" });
-    const more = nav.getByRole("button", { name: "More" });
-    await expect(more).toHaveAttribute("aria-expanded", "false");
-    await expect(nav.getByRole("link", { name: "Invoices" })).toHaveCount(0);
-    // Breathing room: primary items are at least 44px tall and spaced apart.
-    const boxes = await nav.getByRole("link").evaluateAll((els) => els.map((e) => e.getBoundingClientRect()).map((r) => ({ h: r.height, top: r.top, bottom: r.bottom })));
-    for (const b of boxes) expect(b.h).toBeGreaterThanOrEqual(44);
-    for (let i = 1; i < boxes.length; i++) expect(boxes[i]!.top - boxes[i - 1]!.bottom).toBeGreaterThanOrEqual(2);
-    await more.click();
-    await expect(more).toHaveAttribute("aria-expanded", "true");
-    for (const name of ["Customers & deals", "Invoices", "Front desk", "Plan & usage", "Guided setup"]) await expect(nav.getByRole("link", { name, exact: true })).toBeVisible();
-    await page.screenshot({ path: path.join(shots, "sidebar-more-open.png") });
-    await page.reload();
-    await expect(nav.getByRole("button", { name: "More" })).toHaveAttribute("aria-expanded", "true"); // remembered
-    await nav.getByRole("button", { name: "More" }).click();
-    await page.reload();
-    await expect(nav.getByRole("button", { name: "More" })).toHaveAttribute("aria-expanded", "false");
-    // On a page that lives under More, it opens itself so you can see where you are.
-    await page.goto(base() + "/billing");
-    await expect(nav.getByRole("link", { name: "Plan & usage" })).toHaveAttribute("aria-current", "page");
-    // Settings and sign-out sit in the footer, with comfortable targets.
-    const settings = page.getByRole("link", { name: "Settings", exact: true }).first();
-    await expect(settings).toBeVisible();
-    const signOut = page.getByRole("button", { name: "Sign out" });
-    expect((await signOut.boundingBox())!.height).toBeGreaterThanOrEqual(44);
   });
 
   test("Today leads with a generated morning briefing; setup is a slim card you can hide", async ({ page }) => {
@@ -155,7 +123,7 @@ test.describe("chat-first Scout OS", () => {
     const gap = await transcript.evaluate((el) => parseFloat(getComputedStyle(el).rowGap));
     expect(gap).toBeGreaterThanOrEqual(32);
     // Primary actions on the phone are at least 44px tall.
-    for (const loc of [page.getByRole("button", { name: "Send" }), page.getByRole("button", { name: "Menu" }), ...(await transcript.getByRole("button", { name: /^OK/ }).all())]) {
+    for (const loc of [page.getByRole("button", { name: "Send" }), page.getByRole("button", { name: "More", exact: true }), ...(await transcript.getByRole("button", { name: /^OK/ }).all())]) {
       if (await loc.isVisible()) expect((await loc.boundingBox())!.height, await loc.textContent() ?? "").toBeGreaterThanOrEqual(44);
     }
     await page.screenshot({ path: path.join(shots, "today-phone-priority.png"), fullPage: true });
@@ -193,8 +161,9 @@ test.describe("chat-first Scout OS", () => {
       await page.goto(base() + suffix);
       await expectAccessible(page, `${label} (light)`);
     }
-    // Switch to dark from the sidebar; it applies at once and survives a reload.
+    // Switch to dark from the profile menu; it applies at once and survives a reload.
     await page.goto(base());
+    await page.getByRole("button", { name: "Profile" }).click();
     await page.getByRole("group", { name: "Theme" }).getByRole("button", { name: "Dark" }).click();
     await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
     const bg = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
@@ -208,6 +177,7 @@ test.describe("chat-first Scout OS", () => {
       await expectAccessible(page, `${label} (dark)`);
     }
     // Back to following the system.
+    await page.getByRole("button", { name: "Profile" }).click();
     await page.getByRole("group", { name: "Theme" }).getByRole("button", { name: "System" }).click();
     await expect(page.locator("html")).not.toHaveAttribute("data-theme", /.+/);
   });
@@ -222,37 +192,20 @@ test.describe("chat-first Scout OS", () => {
     await ctx.close();
   });
 
-  test("phone: top bar, drawer with the full sidebar, five bottom tabs, no horizontal scroll", async ({ page }) => {
+  test("phone: five bottom tabs, no horizontal scroll, AA in light and dark", async ({ page }) => {
     test.setTimeout(120_000);
     await page.setViewportSize({ width: 390, height: 844 });
     await signIn(page);
     await page.goto(base());
     await expect(page.getByRole("heading", { level: 1, name: "Today" })).toBeVisible();
     const tabs = page.getByRole("navigation", { name: "Primary" });
-    for (const label of ["Today", "Approvals", "Leads", "Jobs", "Briefing"]) await expect(tabs.getByRole("link", { name: label })).toBeVisible();
+    for (const label of ["Today", "Approvals", "Work", "Customers", "Leads"]) await expect(tabs.getByRole("link", { name: new RegExp(`^${label}`) })).toBeVisible();
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
     expect(overflow).toBeLessThanOrEqual(0);
     await page.screenshot({ path: path.join(shots, "today-phone-light.png") });
-
-    // Drawer: opens with focus on Close, Escape closes and returns focus to Menu.
-    await page.getByRole("button", { name: "Menu" }).click();
-    const drawer = page.getByRole("dialog", { name: "Menu" });
-    await expect(drawer).toBeVisible();
-    await expect(drawer.getByRole("button", { name: "Close", exact: true })).toBeFocused();
-    await expect(drawer.getByRole("link", { name: /^Needs your OK/ })).toBeVisible();
-    await page.screenshot({ path: path.join(shots, "drawer-phone-light.png") });
-    await expectAccessible(page, "drawer (phone)");
-    await page.keyboard.press("Escape");
-    await expect(drawer).toHaveCount(0);
-    await expect(page.getByRole("button", { name: "Menu" })).toBeFocused();
-
-    // A drawer link navigates and closes the drawer.
-    await page.getByRole("button", { name: "Menu" }).click();
-    await page.getByRole("dialog", { name: "Menu" }).getByRole("link", { name: "Conversations" }).click();
-    await expect(page.getByRole("heading", { level: 1, name: /Chat/ })).toBeVisible();
-    await expect(page.getByRole("dialog", { name: "Menu" })).toHaveCount(0);
+    await expectAccessible(page, "today (phone)");
+    await page.goto(base() + "/chat");
     await expectAccessible(page, "chat (phone)");
-
     await page.emulateMedia({ colorScheme: "dark" });
     await page.goto(base());
     await page.screenshot({ path: path.join(shots, "today-phone-dark.png") });
@@ -305,6 +258,7 @@ test.describe("chat-first Scout OS", () => {
     await page.goto(base(), { waitUntil: "load" });
     await page.waitForTimeout(1500);
     await page.getByRole("button", { name: "Chase overdue invoices" }).click();
+    await page.getByRole("button", { name: "Profile" }).click();
     await page.getByRole("group", { name: "Theme" }).getByRole("button", { name: "Light" }).click();
     await page.waitForTimeout(500);
     const metrics = await page.evaluate(() => {
