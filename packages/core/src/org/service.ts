@@ -68,14 +68,14 @@ export async function createOrg(input: { actorUserId: string; name: string }): P
   );
 }
 
-const INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+export const INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const MAX_PENDING_INVITES = 25;
 
-function hashToken(token: string): string {
+export function hashToken(token: string): string {
   return createHash("sha256").update(token).digest("hex");
 }
 
-function acceptUrlFor(orgId: string, token: string): string {
+export function acceptUrlFor(orgId: string, token: string): string {
   const base = process.env.BETTER_AUTH_URL ?? "http://localhost:3000";
   return `${base}/accept-invite?org=${orgId}&token=${encodeURIComponent(token)}`;
 }

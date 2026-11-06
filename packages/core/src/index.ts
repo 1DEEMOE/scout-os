@@ -70,6 +70,8 @@ export * from "./onboarding/presets";
 export * from "./onboarding/csv-map";
 export * from "./onboarding/zip-to-county";
 export * from "./onboarding/service";
+export * from "./onboarding/quickstart";
+export * from "./platform/admin";
 
 export * from "./front-desk/service";
 export * from "./ai-answers/provider";
