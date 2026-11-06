@@ -33,7 +33,7 @@ function NavLink({ base, path, link, onNavigate }: { base: string; path: string;
       href={base + link.href}
       onClick={onNavigate}
       aria-current={active ? "page" : undefined}
-      className={`flex min-h-10 items-center justify-between gap-2 rounded-xl px-3 py-2 text-[0.95rem] transition-colors duration-150 ${
+      className={`flex min-h-11 items-center justify-between gap-2 rounded-xl px-3 py-2 text-small transition-colors duration-150 ${
         active ? "bg-surface font-medium text-ink shadow-[var(--shadow-raised)]" : "text-muted hover:bg-soft hover:text-ink"
       }`}
     >
@@ -48,97 +48,145 @@ function NavLink({ base, path, link, onNavigate }: { base: string; path: string;
   );
 }
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
+function Group({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div className="flex flex-col gap-0.5">
-      <h2 className="px-3 pb-1 text-sm font-medium text-muted">{title}</h2>
+    <div className="flex flex-col gap-1">
+      <h3 className="px-3 pb-1 text-sm text-muted">{title}</h3>
       {children}
     </div>
   );
 }
 
-/** The quiet sidebar: conversation first, then teammates, routines and the library. */
+const MORE_KEY = "scout-sidebar-more";
+
+/**
+ * The sidebar: five calm primary destinations, then everything else behind
+ * "More" (remembered per browser, and open whenever you're on one of its pages).
+ */
 function Sidebar({ d, path, onNavigate }: { d: ShellData; path: string; onNavigate?: () => void }) {
   const base = `/orgs/${d.orgId}`;
   const scout = d.hasScout && !d.isViewer;
-  const library: Link[] = [
-    ...(scout ? [{ href: "/scout", label: "Lead feed", also: ["/scout/opportunities"] } as Link] : []),
-    { href: "/inbox", label: "Inbox" },
-    { href: "/sales", label: "Customers & deals" },
+  const primary: Link[] = [
+    { href: "", label: "Today", exact: true },
+    { href: "/approvals", label: "Needs your OK", badge: d.waiting },
+    { href: "/chat", label: "Conversations" },
+    scout ? { href: "/scout", label: "Leads", also: ["/scout/opportunities"] } : { href: "/inbox", label: "Leads" },
     { href: "/tasks", label: "Jobs" },
+  ];
+  const library: Link[] = [
+    ...(scout ? [{ href: "/inbox", label: "Inbox" } as Link] : []),
+    { href: "/sales", label: "Customers & deals" },
     { href: "/finance", label: "Invoices" },
     ...(scout ? [{ href: "/analytics", label: "Analytics" } as Link] : []),
   ];
   const workspace: Link[] = [
-    { href: "/settings", label: "Team & connections", exact: true },
     { href: "/settings/front-desk", label: "Front desk" },
     ...(scout ? [{ href: "/scout/setup", label: "Scout setup" } as Link, { href: "/scout/signals", label: "Storm reports" } as Link, { href: "/scout/contacts", label: "Contact rules" } as Link] : []),
     { href: "/billing", label: "Plan & usage" },
     ...(d.isManager ? [{ href: "/audit", label: "Audit log" } as Link] : []),
     { href: "/setup", label: "Guided setup" },
   ];
+  const routines: Link[] = [
+    ...d.routines.map((r) => ({ href: r.kind === "morning_briefing" ? "/routines/briefing" : `/routines/${r.id}`, label: r.name })),
+    { href: "/routines", label: d.routines.length ? "All routines" : "Set up a routine", exact: true },
+  ];
+  const insideMore = [...library, ...workspace, ...routines, { href: "/agents", label: "" }].some((l) => isActive(path, base, l));
+  const [more, setMore] = useState(false);
+  useEffect(() => {
+    let saved = false;
+    try {
+      saved = localStorage.getItem(MORE_KEY) === "1";
+    } catch {
+      // Storage blocked: start closed.
+    }
+    setMore(saved || insideMore);
+  }, [insideMore]);
+  const toggle = () => {
+    const next = !more;
+    setMore(next);
+    try {
+      localStorage.setItem(MORE_KEY, next ? "1" : "0");
+    } catch {
+      // Not remembered this time.
+    }
+  };
+
   return (
-    <div className="flex h-full flex-col gap-7 px-3 py-5">
-      <div className="flex flex-col gap-4 px-2">
-        <a href="/orgs" className="self-start rounded-lg" aria-label="Scout OS: all organizations"><BrandMark /></a>
-        <a href="/orgs" className="flex flex-col rounded-xl border border-line bg-surface px-3 py-2 hover:bg-soft">
+    <div className="flex min-h-full flex-col gap-8 px-4 py-6">
+      <div className="flex flex-col gap-5 px-1">
+        <a href="/orgs" className="inline-flex min-h-11 items-center self-start rounded-lg" aria-label="Scout OS: all organizations"><BrandMark /></a>
+        <a href="/orgs" className="flex min-h-14 flex-col justify-center rounded-2xl border border-line bg-surface px-4 py-2.5 transition-colors duration-150 hover:bg-soft">
           <span className="truncate font-medium">{d.orgName}</span>
-          <span className="text-sm text-muted">{d.role} · switch</span>
+          <span className="text-sm text-muted">Switch organization</span>
         </a>
         {!d.isViewer && (
-          <a href={`${base}#composer`} onClick={onNavigate} className="inline-flex min-h-11 items-center justify-center rounded-full bg-accent px-4 font-medium text-on-accent hover:brightness-110">
+          <a href={`${base}#composer`} onClick={onNavigate} className="inline-flex min-h-12 items-center justify-center rounded-full bg-accent px-5 font-medium text-on-accent transition-[filter] duration-150 hover:brightness-110">
             New chat
           </a>
         )}
       </div>
 
-      <nav aria-label="Organization" className="flex flex-col gap-7">
-        <div className="flex flex-col gap-0.5">
-          <NavLink base={base} path={path} onNavigate={onNavigate} link={{ href: "", label: "Today", exact: true }} />
-          <NavLink base={base} path={path} onNavigate={onNavigate} link={{ href: "/approvals", label: "Needs your OK", badge: d.waiting }} />
-          <NavLink base={base} path={path} onNavigate={onNavigate} link={{ href: "/chat", label: "Conversations", exact: true }} />
-          {d.threads.map((t) => (
-            <NavLink key={t.id} base={base} path={path} onNavigate={onNavigate} link={{ href: `/chat/${t.id}`, label: t.title }} />
+      <nav aria-label="Organization" className="flex flex-col gap-8">
+        <ul className="flex flex-col gap-1">
+          {primary.map((l) => (
+            <li key={l.label}><NavLink base={base} path={path} onNavigate={onNavigate} link={l} /></li>
           ))}
-        </div>
+        </ul>
 
-        <Section title="Teammates">
-          {d.teammates.length === 0 ? (
-            <NavLink base={base} path={path} onNavigate={onNavigate} link={{ href: "/agents", label: "Add your AI workforce" }} />
-          ) : (
-            d.teammates.map((a) => (
-              <a key={a.id} href={`${base}/agents`} onClick={onNavigate} className="flex min-h-10 items-center gap-2.5 rounded-xl px-3 py-2 text-[0.95rem] text-muted hover:bg-soft hover:text-ink">
-                <span aria-hidden className={`h-2 w-2 shrink-0 rounded-full ${a.active ? "bg-accent" : "bg-line"}`} />
-                <span className="truncate">{a.name}</span>
-                <span className="sr-only"> ({a.active ? "active" : "paused"})</span>
-              </a>
-            ))
+        <div className="flex flex-col gap-3">
+          <button
+            type="button"
+            onClick={toggle}
+            aria-expanded={more}
+            aria-controls="sidebar-more"
+            className="flex min-h-11 items-center justify-between rounded-xl px-3 text-small text-muted transition-colors duration-150 hover:bg-soft hover:text-ink"
+          >
+            More
+            <svg aria-hidden viewBox="0 0 20 20" className={`h-4 w-4 transition-transform duration-200 ${more ? "rotate-180" : ""}`} fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <path d="m5 8 5 5 5-5" />
+            </svg>
+          </button>
+          {more && (
+            <div id="sidebar-more" className="motion-rise flex flex-col gap-7">
+              <Group title="Teammates">
+                {d.teammates.length === 0 ? (
+                  <NavLink base={base} path={path} onNavigate={onNavigate} link={{ href: "/agents", label: "Add your AI workforce" }} />
+                ) : (
+                  <>
+                    {d.teammates.slice(0, 4).map((a) => (
+                      <a key={a.id} href={`${base}/agents`} onClick={onNavigate} className="flex min-h-11 items-center gap-3 rounded-xl px-3 text-small text-muted transition-colors duration-150 hover:bg-soft hover:text-ink">
+                        <span aria-hidden className={`h-2 w-2 shrink-0 rounded-full ${a.active ? "bg-accent" : "bg-line"}`} />
+                        <span className="truncate">{a.name}</span>
+                        <span className="sr-only"> ({a.active ? "active" : "paused"})</span>
+                      </a>
+                    ))}
+                  </>
+                )}
+              </Group>
+              <Group title="Routines">
+                {routines.map((l) => (
+                  <NavLink key={l.href} base={base} path={path} onNavigate={onNavigate} link={l} />
+                ))}
+              </Group>
+              <Group title="Library">
+                {library.map((l) => (
+                  <NavLink key={l.href} base={base} path={path} onNavigate={onNavigate} link={l} />
+                ))}
+              </Group>
+              <Group title="Workspace">
+                {workspace.map((l) => (
+                  <NavLink key={l.href} base={base} path={path} onNavigate={onNavigate} link={l} />
+                ))}
+              </Group>
+            </div>
           )}
-        </Section>
-
-        <Section title="Routines">
-          {d.routines.map((r) => (
-            <NavLink key={r.id} base={base} path={path} onNavigate={onNavigate} link={{ href: r.kind === "morning_briefing" ? "/routines/briefing" : `/routines/${r.id}`, label: r.name }} />
-          ))}
-          <NavLink base={base} path={path} onNavigate={onNavigate} link={{ href: "/routines", label: d.routines.length ? "All routines" : "Set up a routine", exact: true }} />
-        </Section>
-
-        <Section title="Library">
-          {library.map((l) => (
-            <NavLink key={l.href} base={base} path={path} onNavigate={onNavigate} link={l} />
-          ))}
-        </Section>
-
-        <Section title="Workspace">
-          {workspace.map((l) => (
-            <NavLink key={l.href} base={base} path={path} onNavigate={onNavigate} link={l} />
-          ))}
-        </Section>
+        </div>
       </nav>
 
-      <div className="mt-auto flex flex-col gap-3 border-t border-line px-2 pt-5">
+      <div className="mt-auto flex flex-col gap-4 border-t border-line px-1 pt-6">
+        <NavLink base={base} path={path} onNavigate={onNavigate} link={{ href: "/settings", label: "Settings", exact: true }} />
         <ThemeToggle />
-        <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex flex-wrap items-center justify-between gap-3">
           <SignOutButton />
           <span className="text-sm text-muted">Development build</span>
         </div>

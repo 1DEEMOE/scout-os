@@ -9,7 +9,7 @@ export function SignOutButton() {
     <button
       type="button"
       disabled={busy}
-      className="text-sm text-muted hover:underline"
+      className="inline-flex min-h-11 items-center rounded-full border border-line px-4 text-small text-ink transition-colors duration-150 hover:bg-soft disabled:opacity-60"
       onClick={async () => {
         setBusy(true);
         try {
