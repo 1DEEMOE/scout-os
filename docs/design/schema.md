@@ -112,3 +112,10 @@ All forced RLS with the standard tenant policy, composite FKs, seeded in the iso
 
 - New read-only policy `front_desk_channels_by_token`: `FOR SELECT USING (token_hash = current_setting('app.front_desk_token_hash', true))`, non-empty setting required. Used only by `withFrontDeskToken()` for public booking links, which carry no tenant id. Lets `app_user` read just the channel whose token hash it presents; replaces the admin (BYPASSRLS) lookup in the web process. Tested: other tenants' channels, slots and bookings stay invisible; UPDATE through the policy affects 0 rows.
 - `listFrontDeskChannels` no longer returns `token_hash` (it works as a read key under this policy).
+
+
+### Proposed migration 0020 — workspace brand and briefing topics (NOT APPLIED; for SQL review)
+
+`packages/db/proposed/0020_workspace_brand_and_watch.sql` (rollback alongside). Adds `organizations.brand_accent` (fixed palette) and `routines.watch_topics` (subset of briefing section keys; must include `pending_approvals`). Additive only. No code reads these columns yet. See `docs/design/plug-and-play.md`.
+
+No schema change was needed for plug and play itself: provisioning reuses `organizations` (name, industry, timezone, plan) and `organization_invitations` (role `owner`), and Google sign-in reuses `auth_accounts`.
