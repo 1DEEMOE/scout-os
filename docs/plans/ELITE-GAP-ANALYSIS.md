@@ -167,4 +167,44 @@ OMEGA or Darian re-runs the same commands. Their counts are the verification.
 
 ## 12. Second pass
 
-Filled in after the implementation commits. Empty until then.
+**SELF-ASSESSMENT, after the implementation on `feat/elite-engineering`.** Not an independent grade.
+
+Re-read the new modules against the P1 list. No new agent was added. The bus rejects `maxTier` other than 0 or 1, and the existing `evaluatePolicy` path is unchanged. A second implementation loop would mostly be adopting 0022 or paying for an OTel collector. That is diminishing return under the hard rules, so the loop stops here.
+
+### What changed
+
+| ID | Result |
+|---|---|
+| P0-1 | Still NO-GO. This branch does not say the product is production-ready. |
+| P1-1 | `runEvent` is detect → decide → act → verify → log, with in-process dedupe, exponential backoff, a per-integration breaker, and audit-backed dead letters. Managers replay from `/orgs/[orgId]/recovery`. |
+| P1-2 | `assertSafeOutbound` allowlists `https://api.weather.gov` only. `fetchNwsAlerts` uses it and the breaker, and serves a stale cache when a later fetch fails. |
+| P1-3 | POST `/api/trpc` and public booking POST reject a missing or foreign `Origin`. |
+| P1-4 | Tool definitions carry an output schema. The executor checks it and enforces an optional per-tenant rate window. Forgery output must be `paid: false`. Payment-with-new-destination output must be `recorded_destination_only`. |
+| P1-5 | Tests cover a wrapped SMS injection, `evaluatePolicy` on an unknown tool, a forgery result that claims payment, and a cross-tenant snapshot (tenant B sees 0 of tenant A's leads). |
+| P1-6 | `modelForPurpose` picks a cheap model for classify/summarize/route and the strong model otherwise. Mock mode still selects no live model. The existing budget ledger is unchanged. |
+| P1-7 | `logOp` writes correlation id, actor, agent, tool, input hash, short output label, duration, outcome, failure, and recovery. The input itself is not logged. `scrubPii` also masks phone-shaped numbers. |
+| P1-8 | `/api/healthz` still returns 503 when the database is down, and now includes `degraded` with the names of open breakers. |
+| P1-9 | `packages/core/test/elite.test.ts` covers concurrent duplicates (25 callers, 1 act), backoff, timeout, tier-2 refusal, breaker open/half-open, and the rate limiter. |
+| P2-1 | `EXPLAIN` on `wos_test`: open tasks use `tasks_tenant_state_idx`. The audit prefix filter uses `audit_events_tenant_seq_idx` and then filters `action`. The `(tenant_id, action)` index is proposed in 0022 and was not created. |
+| P2-2 | Production client static assets are 976K. Largest chunk is 229,389 bytes. The `.next` directory is 530M because it includes the server build, not the browser payload. Today lab metrics in e2e stayed CLS 0.04, LCP 100ms, INP 24ms. |
+| P2-3 | Phone-shaped numbers in free strings are replaced with `[phone]`. |
+| P2-4 | `secretFindings` flags live/test Stripe-shaped keys, AWS access-key shapes, private-key banners, and SendGrid-shaped tokens. A fixture test covers it. |
+| P2-5 | Deferred. The breaker is per process. Two workers would not share an open circuit until 0022 is applied. |
+
+### Deferred, and why
+
+- Applying 0020, 0021, or 0022. Darian reviews SQL. The bus is real on `audit_events` until then.
+- A recovery agent. Replay is deterministic. A model that suggests a send would be a new way to skip the approval floor.
+- A live collector, paging, pen-test, trademark search, or a paid model call.
+- Multi-instance breaker state (P2-5), for the reason above.
+
+### Commands (this workspace)
+
+- `pnpm lint` — pass
+- `pnpm typecheck` — pass
+- `pnpm test` — 715 passed (57 files); migrate reported 19 files
+- `pnpm test:isolation` — 18 passed (15 applied schema, 2 proposed 0021, 1 proposed 0022, both proposals rolled back)
+- `pnpm build` — pass (Next.js 16.4.5), including `/orgs/[orgId]/recovery`
+- `WOS_MOCK_MODE=1 pnpm test:e2e` — 45 passed (5.1m), including axe. Owner gets 200 on `/recovery`; member and viewer get 404.
+
+`schema_migrations` was not given a 0021 or 0022 row.

@@ -13,6 +13,8 @@ import {
   ModelRouter,
   ToolRegistry,
   UnconfiguredProvider,
+  fetchNwsAlerts,
+  registerBusHandler,
   type ModelProvider,
 } from "@wos/core";
 import { registerProductTools } from "./tools";
@@ -61,6 +63,16 @@ export function ensureEngine(): void {
     status = "none";
   }
   configureEngine({ router: new ModelRouter(providers, defaultProvider, meteringHooks), tools, mailbox, crm, invoicing });
+  registerBusHandler({
+    type: "weather.refresh",
+    maxTier: 0,
+    decide: () => ({ act: true, reason: "refresh public alerts" }),
+    async act() {
+      const r = await fetchNwsAlerts();
+      return { count: r.alerts.length, degraded: r.degraded === true };
+    },
+    verify: (_event, result) => typeof result.count === "number",
+  });
   logger.info({ model: defaultProvider, mockMode, tools: tools.list().map((t) => t.name) }, "engine configured");
   configured = true;
 }

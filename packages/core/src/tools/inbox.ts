@@ -1,7 +1,7 @@
 import { and, desc, eq } from "drizzle-orm";
 import { z } from "zod";
 import { CONVERSATION_CATEGORIES, conversations, messages, withTenant } from "@wos/db";
-import { ToolError, type ToolContext, type ToolDefinition, type ToolRegistry } from "../engine/tools";
+import { objectResult, ToolError, type ToolContext, type ToolDefinition, type ToolRegistry } from "../engine/tools";
 import { messageIdFor } from "../integrations/mail";
 import type { MailboxResolver } from "../inbox/mailbox";
 import { checkEmailAllowed, recordOutreach } from "../scout/consent";
@@ -36,6 +36,8 @@ export function inboxTools(mailbox: MailboxResolver): ToolDefinition[] {
     name: "inbox.categorize",
     description: "Set the category and a one-paragraph summary on an email conversation.",
     tier: 1,
+    output: objectResult,
+    rate: { limit: 60, windowMs: 60_000 },
     args: z.object({ conversationId, category: z.enum(CONVERSATION_CATEGORIES), summary: z.string().trim().min(1).max(600) }),
     summarize: (a) => `Mark conversation as ${a.category}`,
     async execute(ctx, a) {
@@ -55,6 +57,7 @@ export function inboxTools(mailbox: MailboxResolver): ToolDefinition[] {
     name: "inbox.create_draft",
     description: "Write a reply as a draft in the mailbox (not sent). Recipients and subject come from the thread.",
     tier: 1,
+    output: objectResult,
     args: z.object({ conversationId, body: z.string().trim().min(1).max(20000) }),
     summarize: (a) => `Draft a reply (${a.body.length} characters)`,
     async execute(ctx, a) {
@@ -84,6 +87,8 @@ export function inboxTools(mailbox: MailboxResolver): ToolDefinition[] {
     name: "inbox.send_draft",
     description: "Send the drafted reply in a conversation. The approval shows exactly what goes out.",
     tier: 2,
+    output: z.object({ externalId: z.string(), to: z.array(z.string()) }),
+    rate: { limit: 20, windowMs: 60_000 },
     args: z.object({ conversationId, to: z.array(z.email()).min(1).max(20), subject: z.string().max(500), body: z.string().max(20000) }),
     summarize: (a) => `Send email to ${a.to.join(", ")}: "${a.subject}"`,
     async execute(ctx, a) {

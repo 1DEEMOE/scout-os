@@ -1,7 +1,7 @@
 import { and, eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import { contacts, crmRecords, withTenant } from "@wos/db";
-import { ToolError, type ToolContext, type ToolDefinition, type ToolRegistry } from "../engine/tools";
+import { objectResult, ToolError, type ToolContext, type ToolDefinition, type ToolRegistry } from "../engine/tools";
 import type { CrmResolver } from "../crm/resolver";
 
 export const DEAL_STAGES = ["appointmentscheduled", "qualifiedtobuy", "presentationscheduled", "decisionmakerboughtin", "contractsent", "closedwon", "closedlost"] as const;
@@ -29,6 +29,7 @@ export function crmTools(resolve: CrmResolver): ToolDefinition[] {
     name: "crm.upsert_contact",
     description: "Create or update a contact in the CRM, matched by email.",
     tier: 1,
+    output: objectResult,
     args: z.object({ email, name: z.string().max(200).optional(), phone: z.string().max(40).optional(), company: z.string().max(200).optional() }),
     summarize: (a) => `Save contact ${a.email}`,
     async execute(ctx, a) {
@@ -51,6 +52,7 @@ export function crmTools(resolve: CrmResolver): ToolDefinition[] {
     name: "crm.create_deal",
     description: "Open a new deal for a contact (no amount; amounts need a separate, higher-risk step).",
     tier: 1,
+    output: objectResult,
     args: z.object({ name: z.string().trim().min(1).max(200), contactEmail: email, stage: z.enum(DEAL_STAGES).default("appointmentscheduled") }),
     summarize: (a) => `Open deal "${a.name}" for ${a.contactEmail}`,
     async execute(ctx, a) {
@@ -73,6 +75,7 @@ export function crmTools(resolve: CrmResolver): ToolDefinition[] {
     name: "crm.update_deal_stage",
     description: "Move a deal to another pipeline stage.",
     tier: 2,
+    output: objectResult,
     args: z.object({ dealId: z.uuid(), stage: z.enum(DEAL_STAGES) }),
     summarize: (a) => `Move deal ${a.dealId.slice(0, 8)} to ${a.stage}`,
     async execute(ctx, a) {
@@ -88,6 +91,7 @@ export function crmTools(resolve: CrmResolver): ToolDefinition[] {
     name: "crm.set_deal_amount",
     description: "Set a deal's amount. A pricing commitment, so it always needs a human.",
     tier: 3,
+    output: objectResult,
     args: z.object({ dealId: z.uuid(), amountCents: z.number().int().min(0).max(100_000_000_00) }),
     summarize: (a) => `Set deal ${a.dealId.slice(0, 8)} amount to ${money(a.amountCents)}`,
     async execute(ctx, a) {
@@ -103,6 +107,7 @@ export function crmTools(resolve: CrmResolver): ToolDefinition[] {
     name: "crm.add_note",
     description: "Add a note to a contact's CRM timeline.",
     tier: 1,
+    output: objectResult,
     args: z.object({ contactEmail: email, body: z.string().trim().min(1).max(5000) }),
     summarize: (a) => `Add a note to ${a.contactEmail}`,
     async execute(ctx, a) {

@@ -10,6 +10,6 @@ describe("/api/healthz", () => {
   it("returns ok when the database answers", async () => {
     const res = await GET();
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ ok: true });
+    expect(await res.json()).toMatchObject({ ok: true, degraded: [] });
   });
 });

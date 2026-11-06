@@ -15,6 +15,7 @@ export const REDACT_PATHS = [
 const PII_FIELDS = new Set(["body", "content", "text", "subject", "to", "from", "sender", "recipients", "email", "address", "html", "raw", "phone", "customerPhone"]);
 
 const EMAIL_RE = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g;
+const PHONE_RE = /(?<![A-Za-z0-9])(?:\+?1[\s.-]?)?(?:\(\d{3}\)|\d{3})[\s.-]?\d{3}[\s.-]?\d{4}(?!\d)/g;
 
 /**
  * Deep-scrubs a log object (G8): values under PII field names are replaced, and
@@ -23,7 +24,7 @@ const EMAIL_RE = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g;
  */
 export function scrubPii(value: unknown, depth = 0): unknown {
   if (depth > 6 || value === null || value === undefined) return value;
-  if (typeof value === "string") return value.replace(EMAIL_RE, "[email]");
+  if (typeof value === "string") return value.replace(EMAIL_RE, "[email]").replace(PHONE_RE, "[phone]");
   if (Array.isArray(value)) return value.map((v) => scrubPii(v, depth + 1));
   if (typeof value === "object") {
     if (value instanceof Error) {

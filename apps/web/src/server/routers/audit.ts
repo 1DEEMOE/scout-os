@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { listAuditEvents, verifyAuditChain } from "@wos/core";
+import { listAuditEvents, listDeadLetters, replayDeadLetter, verifyAuditChain } from "@wos/core";
 import { protectedProcedure, router } from "../trpc";
 
 export const auditRouter = router({
@@ -19,4 +19,12 @@ export const auditRouter = router({
   verifyChain: protectedProcedure
     .input(z.object({ orgId: z.string().max(64) }))
     .query(({ ctx, input }) => verifyAuditChain({ actorUserId: ctx.userId, orgId: input.orgId })),
+
+  deadLetters: protectedProcedure
+    .input(z.object({ orgId: z.string().max(64) }))
+    .query(({ ctx, input }) => listDeadLetters({ actorUserId: ctx.userId, orgId: input.orgId })),
+
+  replay: protectedProcedure
+    .input(z.object({ orgId: z.string().max(64), auditId: z.uuid() }))
+    .mutation(({ ctx, input }) => replayDeadLetter({ actorUserId: ctx.userId, orgId: input.orgId, auditId: input.auditId })),
 });

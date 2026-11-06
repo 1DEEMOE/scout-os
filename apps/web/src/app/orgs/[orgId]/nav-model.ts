@@ -113,7 +113,10 @@ export function moreGroups(d: ShellData): NavGroup[] {
             ]
           : []),
         { href: "/billing", label: "Plan & billing", keywords: "usage subscription payment" },
-        ...(d.isManager ? [{ href: "/audit", label: "Audit log", keywords: "history security" }] : []),
+        ...(d.isManager ? [
+          { href: "/audit", label: "Audit log", keywords: "history security" },
+          { href: "/recovery", label: "Recovery", keywords: "dead letter replay failures" },
+        ] : []),
         { href: "/setup", label: "Guided setup", keywords: "onboarding checklist getting started" },
       ],
     },

@@ -1,4 +1,6 @@
 import { createHash } from "node:crypto";
+import { integrations } from "../events/breaker";
+import { assertSafeOutbound } from "../security/ssrf";
 
 /**
  * National Weather Service public alerts (api.weather.gov). No API key.
@@ -28,6 +30,7 @@ const cache = new Map<string, CacheEntry>();
 
 export function resetNwsCache(): void {
   cache.clear();
+  integrations.reset("nws");
 }
 
 export function alertKind(event: string, headline: string): "tornado" | "hail" | "wind" | null {
@@ -73,17 +76,22 @@ export function alertsUrl(area?: string): string {
   return area ? `${base}&area=${encodeURIComponent(area)}` : base;
 }
 
-export async function fetchNwsAlerts(opts: { fetchImpl?: typeof fetch; now?: Date; area?: string } = {}): Promise<{ alerts: NwsAlert[]; cached: boolean }> {
-  const url = alertsUrl(opts.area);
+export async function fetchNwsAlerts(opts: { fetchImpl?: typeof fetch; now?: Date; area?: string } = {}): Promise<{ alerts: NwsAlert[]; cached: boolean; degraded?: boolean }> {
+  const url = assertSafeOutbound(alertsUrl(opts.area)).toString();
   const now = opts.now ?? new Date();
   const hit = cache.get(url);
   if (hit && now.getTime() - hit.at < CACHE_MS) return { alerts: hit.alerts, cached: true };
   const doFetch = opts.fetchImpl ?? fetch;
-  const res = await doFetch(url, { headers: { Accept: "application/geo+json", "User-Agent": NWS_USER_AGENT } });
-  if (!res.ok) throw new Error(`weather.gov responded ${res.status}`);
-  const alerts = parseNwsPayload(await res.json());
-  cache.set(url, { at: now.getTime(), alerts });
-  return { alerts, cached: false };
+  try {
+    const res = await integrations.run("nws", () => doFetch(url, { headers: { Accept: "application/geo+json", "User-Agent": NWS_USER_AGENT } }), now.getTime());
+    if (!res.ok) throw new Error(`weather.gov responded ${res.status}`);
+    const alerts = parseNwsPayload(await res.json());
+    cache.set(url, { at: now.getTime(), alerts });
+    return { alerts, cached: false };
+  } catch (err) {
+    if (hit) return { alerts: hit.alerts, cached: true, degraded: true };
+    throw err;
+  }
 }
 
 /** Stable id so the same alert stored twice is one signal. */

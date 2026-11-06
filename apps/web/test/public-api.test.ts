@@ -74,7 +74,7 @@ describe("public booking routes", () => {
     for (let i = 0; i < 41 && !limited; i++) {
       const res = await book(new Request("http://x/", {
         method: "POST",
-        headers: { "content-type": "application/json", "x-forwarded-for": `10.0.0.${i}, 203.0.113.50` }, // new fake IP each time, same real one
+        headers: { "content-type": "application/json", origin: "http://x", "x-forwarded-for": `10.0.0.${i}, 203.0.113.50` }, // new fake IP each time, same real one
         body: JSON.stringify({ slotId: "00000000-0000-4000-8000-000000000000", customerName: "X", customerEmail: `x${i}@example.test`, disclosureAck: true }),
       }), params());
       limited = res.status === 429;
@@ -85,7 +85,7 @@ describe("public booking routes", () => {
   it("a string 'false' doesn't count as acknowledging the disclosure for AI agents", async () => {
     const slotId = (await listAvailability(token, new Date(), new Date(Date.now() + 7 * 86_400_000))).slots[0]!.id;
     const res = await book(new Request("http://x/", {
-      method: "POST", headers: { "x-forwarded-for": "203.0.113.60" },
+      method: "POST", headers: { origin: "http://x", "x-forwarded-for": "203.0.113.60" },
       body: JSON.stringify({ slotId, requesterKind: "ai_agent", agentName: "Bot", agentProvider: "Acme", disclosureAck: "false", customerName: "X", customerEmail: "x@example.test" }),
     }), params());
     expect(res.status).toBe(400);

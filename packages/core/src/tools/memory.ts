@@ -12,6 +12,7 @@ export function memoryTools(): ToolDefinition[] {
     name: "memory.note",
     description: "Keep a short working note for the rest of this task only.",
     tier: 1,
+    output: z.object({ saved: z.literal(true) }),
     args: z.object({ content: z.string().trim().min(1).max(1000) }),
     summarize: (a) => `Note for this task: ${a.content.slice(0, 80)}`,
     async execute(ctx, a) {
@@ -26,6 +27,7 @@ export function memoryTools(): ToolDefinition[] {
     name: "memory.propose_fact",
     description: "Ask a person to approve remembering a fact about the business for future tasks.",
     tier: 2,
+    output: z.object({ remembered: z.literal(true) }),
     args: z.object({ content: z.string().trim().min(1).max(1000), reason: z.string().trim().min(1).max(300) }),
     summarize: (a) => `Remember for all future tasks: "${a.content.slice(0, 160)}"`,
     async execute(ctx, a) {

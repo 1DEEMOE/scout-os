@@ -78,6 +78,15 @@ export { bookVisit, dueForRebook, setVisitStatus } from "./speed/appointments";
 export { collectSignals, seasonalHits } from "./signals/sources";
 export { NWS_USER_AGENT, fetchNwsAlerts, parseNwsPayload, resetNwsCache } from "./speed/nws";
 export { isStopKeyword, normalizePhone, resetMockSms } from "./speed/sms";
+export { integrations } from "./events/breaker";
+export { correlation, logOp } from "./events/correlation";
+export { backoffMs, MemoryJournal, runEvent } from "./events/bus";
+export { listDeadLetters, replayDeadLetter, registerBusHandler } from "./events/recovery";
+export { modelForPurpose } from "./engine/model-route";
+export { assertSafeOutbound } from "./security/ssrf";
+export { sameOrigin } from "./security/origin";
+export { secretFindings } from "./security/secrets";
+export { checkToolOutput, resetToolRates, takeToolRate } from "./engine/tool-guard";
 export { smsWindowOpen } from "./speed/hours";
 
 export * from "./front-desk/service";

@@ -6,7 +6,7 @@ import { evidenceDir } from "./evidence-dir";
 // Independent verification pass: every nav page for each role, plus key flows.
 const seed = JSON.parse(readFileSync(path.resolve(import.meta.dirname, ".seed.json"), "utf8")) as { orgId: string; scoutOrgId: string; password: string };
 const shots = process.env.VERIFY_SHOTS ? path.resolve(path.resolve(import.meta.dirname, "../../.."), process.env.VERIFY_SHOTS) : evidenceDir("verify");
-const NAV = ["", "/scout", "/scout/signals", "/scout/contacts", "/scout/setup", "/routines", "/routines/briefing", "/chat", "/approvals", "/tasks", "/inbox", "/sales", "/finance", "/analytics", "/agents", "/audit", "/billing", "/settings"];
+const NAV = ["", "/scout", "/scout/signals", "/scout/contacts", "/scout/setup", "/routines", "/routines/briefing", "/chat", "/approvals", "/tasks", "/inbox", "/sales", "/finance", "/analytics", "/agents", "/audit", "/recovery", "/billing", "/settings"];
 
 async function signIn(page: Page, email: string, password = seed.password) {
   for (let attempt = 0; ; attempt++) {
@@ -58,7 +58,7 @@ for (const [email, role, orgs] of [
         // Hidden-by-role pages answer 404 by design; anything else must be 200.
         expect([200, 404], `${role} ${p}`).toContain(status);
         if (role === "viewer" && (p === "/audit" || p.startsWith("/scout") || p === "/analytics")) expect(status, `${role} ${p}`).toBe(404);
-        if (role === "viewer") await expect(page.getByRole("navigation", { name: "Organization" }).getByRole("link", { name: /^(Scout|Analytics|Audit log)$/ })).toHaveCount(0);
+        if (role === "viewer") await expect(page.getByRole("navigation", { name: "Organization" }).getByRole("link", { name: /^(Scout|Analytics|Audit log|Recovery)$/ })).toHaveCount(0);
         if (status === 200) {
           await expect(page.getByText(/Application error|Something went wrong|Internal Server Error/i)).toHaveCount(0);
           await expect(page.getByRole("heading").first()).toBeVisible();
