@@ -65,6 +65,9 @@ describe("navigation model", () => {
     expect(isActive("/orgs/o1/chat/t1", base, today!)).toBe(true);
     expect(isActive("/orgs/o1/tasks", base, today!)).toBe(false);
     expect(isActive("/orgs/o1/settings", base, { href: "/settings#team", label: "Team" })).toBe(true);
+    expect(isActive("/orgs/o1/settings/front-desk", base, { href: "/settings#team", label: "Team" })).toBe(false);
+    expect(isActive("/orgs/o1/settings/front-desk", base, { href: "/settings/front-desk", label: "Front desk" })).toBe(true);
+    expect(isActive("/orgs/o1/settings/front-desk", base, { href: "/settings", label: "Settings", exact: true })).toBe(false);
   });
 });
 

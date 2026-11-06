@@ -44,6 +44,23 @@ describe("design token contrast (WCAG 2.2 AA)", () => {
     });
   }
 
+  it("entrance motion never fades text (contrast stays AA on the first frame)", () => {
+    for (const name of ["rise-in", "pop-in"]) {
+      const start = css.indexOf(`@keyframes ${name}`);
+      expect(start, name).toBeGreaterThanOrEqual(0);
+      let depth = 0;
+      let end = -1;
+      for (let i = css.indexOf("{", start); i < css.length; i++) {
+        if (css[i] === "{") depth++;
+        else if (css[i] === "}" && --depth === 0) {
+          end = i;
+          break;
+        }
+      }
+      expect(css.slice(start, end + 1), name).not.toMatch(/opacity/);
+    }
+  });
+
   it("the system-dark block matches the explicit dark theme", () => {
     const sys = css.slice(css.indexOf(':root:not([data-theme="light"])'));
     const sysVals = Object.fromEntries([...sys.slice(0, sys.indexOf("}")).matchAll(/--color-([a-z-]+):\s*(#[0-9a-f]{6})/gi)].map((m) => [m[1]!, m[2]!]));

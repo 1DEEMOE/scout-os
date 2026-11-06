@@ -40,10 +40,17 @@ export interface NavGroup {
   items: NavItem[];
 }
 
+/** Page path of a href, ignoring an in-page anchor (`/settings#team` → `/settings`). */
+function pagePath(base: string, href: string): string {
+  return base + href.split("#")[0]!;
+}
+
 export function isActive(path: string, base: string, l: NavItem): boolean {
-  if (l.exact) return path === base + l.href || (l.also ?? []).some((h) => path === base + h || path.startsWith(base + h + "/"));
+  // Anchors are current only on their own page. `/settings#team` must not light up on `/settings/front-desk`.
+  if (l.href.includes("#")) return path === pagePath(base, l.href);
+  if (l.exact) return path === pagePath(base, l.href) || (l.also ?? []).some((h) => path === pagePath(base, h) || path.startsWith(pagePath(base, h) + "/"));
   const href = l.href.split("#")[0]!;
-  return [href, ...(l.also ?? [])].some((h) => path === base + h || path.startsWith(base + h + "/"));
+  return [href, ...(l.also ?? [])].some((h) => path === pagePath(base, h) || path.startsWith(pagePath(base, h) + "/"));
 }
 
 /** The five calm primary destinations, in order. */

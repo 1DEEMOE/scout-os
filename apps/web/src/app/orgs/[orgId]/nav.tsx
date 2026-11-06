@@ -110,10 +110,10 @@ function Group({ group, base, path, onNavigate }: { group: NavGroup; base: strin
   const panel = `nav-group-${group.id}`;
   return (
     <li>
-      <button type="button" onClick={toggle} aria-expanded={open} aria-controls={panel} className={`${row} w-full ${quiet}`}>
-        <Icon name={group.icon} className="h-5 w-5" />
-        <span className="flex-1 text-left">{group.title}</span>
-        <Icon name="chevron" className={`h-4 w-4 transition-transform duration-200 ${open ? "rotate-180" : ""}`} />
+      <button type="button" onClick={toggle} aria-expanded={open} aria-controls={panel} className={`${row} w-full text-ink hover:bg-soft`}>
+        <Icon name={group.icon} className="h-5 w-5 text-muted group-hover:text-ink" />
+        <span className="min-w-0 flex-1 text-left">{group.title}</span>
+        <Icon name="chevron" className={`h-4 w-4 text-muted transition-transform duration-200 group-hover:text-ink ${open ? "rotate-180" : ""}`} />
       </button>
       {open && (
         <ul id={panel} className="motion-rise mt-2 ml-5 flex flex-col gap-2 border-l border-line pl-3">
