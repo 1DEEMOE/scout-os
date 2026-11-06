@@ -29,6 +29,9 @@ envVarGroups:
         value: "15"
       - key: WOS_INBOX_SYNC_SECONDS
         value: "300"
+      # Proxies in front of the app (Render's load balancer). Use 2 if Cloudflare is added.
+      - key: WOS_TRUSTED_PROXY_HOPS
+        value: "1"
       - key: BETTER_AUTH_SECRET
         generateValue: true
       - key: WOS_SECRETS_KEY

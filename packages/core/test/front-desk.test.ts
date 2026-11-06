@@ -116,7 +116,7 @@ describe("AI front desk", () => {
     const avail = await listAvailability(token, new Date(), new Date(Date.now() + 7 * 86_400_000));
     const slotId = avail.slots[0]!.id;
     let limited = false;
-    for (let i = 0; i < 25; i++) {
+    for (let i = 0; i < 41; i++) { // 41: still refused if the run crosses a minute boundary
       try {
         await requestBooking({
           publicToken: token,
@@ -136,6 +136,35 @@ describe("AI front desk", () => {
       }
     }
     expect(limited).toBe(true);
+  });
+
+  it("counts failed attempts too: bad slot ids can't dodge the limit, and denials are audited", async () => {
+    let limitedAt = -1;
+    for (let i = 0; i < 41; i++) {
+      try {
+        await requestBooking({
+          publicToken: token,
+          slotId: "00000000-0000-4000-8000-000000000000", // never exists: every attempt fails
+          requesterKind: "person",
+          disclosureAck: true,
+          customerName: `Prober ${i}`,
+          customerEmail: `probe${i}@example.test`,
+          sourceIp: "7.7.7.7",
+        });
+      } catch (err) {
+        if ((err as { code?: string }).code === "RATE_LIMITED") {
+          limitedAt = i;
+          break;
+        }
+      }
+    }
+    // 20 attempts per clock minute, failed or not: refused at attempt 21, or by 41 if the run crosses a minute boundary.
+    expect(limitedAt).toBeGreaterThanOrEqual(20);
+    expect(limitedAt).toBeLessThanOrEqual(40);
+    const denied = await withTenant(orgId, async (tx) =>
+      (await tx.raw.query(`SELECT count(*)::int AS n FROM audit_events WHERE action = 'front_desk.rate_limited'`)).rows[0] as { n: number },
+    );
+    expect(denied.n).toBe(1); // only the first denial in a window is audited
   });
 
   it("stores the executor digest so approving a booking confirms it", async () => {

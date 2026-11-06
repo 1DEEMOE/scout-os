@@ -234,9 +234,16 @@ export async function requestBooking(input: BookingRequest): Promise<{ bookingId
   const windowStart = new Date(Math.floor(Date.now() / WINDOW_MS) * WINDOW_MS);
   const dayStart = new Date(`${daySalt()}T00:00:00.000Z`);
 
-  return withTenant(ch.tenantId, async (tx) => {
+  // Count the attempt in its own committed transaction BEFORE trying to book.
+  // Counting inside the booking transaction meant every failed attempt (bad
+  // slot, full slot, validation) rolled its own increment back, so failures
+  // were never limited, and the denial audit row was rolled back with them.
+  const limited = await withTenant(ch.tenantId, async (tx) => {
     const perIp = await bumpRate(tx, ch.tenantId, ch.id, `ip:${ipHash}`, windowStart);
-    if (perIp > PER_WINDOW) {
+    const perDay = await bumpRate(tx, ch.tenantId, ch.id, `day:${ipHash}`, dayStart);
+    const reason = perIp > PER_WINDOW ? "per_ip_window" : perDay > ABUSE_PER_DAY ? "per_ip_day" : null;
+    // Audit only the first denial in a window, so a flood can't flood the audit log.
+    if (reason && (reason === "per_ip_window" ? perIp === PER_WINDOW + 1 : perDay === ABUSE_PER_DAY + 1)) {
       await recordAudit(tx, {
         tenantId: ch.tenantId,
         actorType: "system",
@@ -245,14 +252,15 @@ export async function requestBooking(input: BookingRequest): Promise<{ bookingId
         target: `front_desk_channel:${ch.id}`,
         tier: 0,
         outcome: "denied",
-        metadata: { reason: "per_ip_window" },
+        metadata: { reason },
       });
-      throw new AppError("RATE_LIMITED", "Too many booking attempts. Try again shortly.");
     }
-    const perDay = await bumpRate(tx, ch.tenantId, ch.id, `day:${ipHash}`, dayStart);
-    if (perDay > ABUSE_PER_DAY) {
-      throw new AppError("RATE_LIMITED", "Daily booking limit reached for this network.");
-    }
+    return reason;
+  });
+  if (limited === "per_ip_window") throw new AppError("RATE_LIMITED", "Too many booking attempts. Try again shortly.");
+  if (limited === "per_ip_day") throw new AppError("RATE_LIMITED", "Daily booking limit reached for this network.");
+
+  return withTenant(ch.tenantId, async (tx) => {
 
     const [slot] = await tx.select().from(frontDeskSlots).where(eq(frontDeskSlots.id, input.slotId));
     if (!slot || slot.channelId !== ch.id) throw new AppError("NOT_FOUND", "Slot not found");

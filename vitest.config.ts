@@ -1,6 +1,9 @@
+import { fileURLToPath } from "node:url";
 import { defineConfig } from "vitest/config";
 
 export default defineConfig({
+  // The web app's "@/..." import alias, so route handlers can be tested directly.
+  resolve: { alias: [{ find: /^@\//, replacement: fileURLToPath(new URL("./apps/web/src/", import.meta.url)) }] },
   test: {
     include: ["packages/*/test/**/*.test.ts", "apps/web/test/**/*.test.ts"],
     // Tests share one Postgres database, so files run one at a time. Defaults
