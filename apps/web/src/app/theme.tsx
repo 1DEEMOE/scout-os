@@ -1,13 +1,11 @@
 "use client";
 import { useEffect, useState } from "react";
+import { THEME_KEY as KEY } from "./boot";
 
-type Choice = "system" | "light" | "dark";
-const KEY = "scout-theme";
+export { RAIL_KEY } from "./boot";
+export type Choice = "system" | "light" | "dark";
 
-/** Runs before first paint (inlined in <head>) so the page never flashes the wrong theme. */
-export const THEME_BOOT = `(function(){try{var t=localStorage.getItem("${KEY}");if(t==="light"||t==="dark")document.documentElement.dataset.theme=t;}catch(e){}})();`;
-
-function apply(choice: Choice) {
+export function apply(choice: Choice) {
   const root = document.documentElement;
   if (choice === "system") delete root.dataset.theme;
   else root.dataset.theme = choice;
@@ -23,8 +21,14 @@ function apply(choice: Choice) {
 export function ThemeToggle() {
   const [choice, setChoice] = useState<Choice>("system");
   useEffect(() => {
-    const t = document.documentElement.dataset.theme;
-    if (t === "light" || t === "dark") setChoice(t);
+    const sync = () => {
+      const t = document.documentElement.dataset.theme;
+      setChoice(t === "light" || t === "dark" ? t : "system");
+    };
+    sync();
+    // The command palette can change the theme too.
+    window.addEventListener("scout:theme", sync);
+    return () => window.removeEventListener("scout:theme", sync);
   }, []);
   const options: [Choice, string][] = [
     ["system", "System"],
