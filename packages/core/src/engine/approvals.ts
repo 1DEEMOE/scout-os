@@ -6,6 +6,7 @@ import { ANY_ROLE, auditDenied, inOrg, MANAGERS, requireRole } from "../org/acce
 import { enqueueTaskRun } from "./queue";
 import { assertPaymentCallbackVerified, markPaymentChangeRejected } from "../finance/payment-guard";
 import { FRONT_DESK_TOOL, rejectFrontDeskBooking } from "../front-desk/service";
+import { closeSpeedApproval, fulfillSpeedApproval } from "../speed/service";
 
 export type ApprovalRow = typeof approvalRequests.$inferSelect;
 
@@ -98,6 +99,11 @@ export async function decideApproval(input: { actorUserId: string; orgId: string
       outcome: "success",
       metadata: { tool: row.toolName, digest: row.actionDigest, taskId: row.taskId, ...(selfApprovalWaiver ? { selfApprovalWaiver: "sole_manager" } : {}) },
     });
+    if (row.toolName === "speed.send_message") {
+      const leadId = (row.payload as { leadId?: string }).leadId;
+      if (leadId && input.decision === "approve" && status === "approved") await fulfillSpeedApproval(tx, input.orgId, leadId);
+      if (leadId && input.decision === "reject") await closeSpeedApproval(tx, input.orgId, leadId);
+    }
     if (status !== "awaiting_confirmation") await wakeTask(tx, input.orgId, row.taskId);
     return { status };
   });

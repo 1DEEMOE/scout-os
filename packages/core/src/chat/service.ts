@@ -11,6 +11,7 @@ import { getEngine } from "../engine/runtime";
 import { insertTask } from "../engine/tasks";
 import { externalData, SAFETY_PREAMBLE } from "../engine/orchestrator";
 import { DELEGATE_TOOL, delegateArgs, LEAD_BOT_SYSTEM, MAX_DELEGATION_DEPTH, MAX_DELEGATIONS_PER_TURN, type DelegableKind } from "./lead";
+import { workspaceSnapshot } from "./read";
 
 export type ChatThreadRow = typeof chatThreads.$inferSelect;
 export type ChatMessageRow = typeof chatMessages.$inferSelect;
@@ -154,7 +155,7 @@ export async function sendMessage(input: { actorUserId: string; orgId: string; t
           content: [earlier.length ? externalData("chat_history", earlier.map((m) => `${m.authorType}: ${m.content}`).join("\n")) : "", `Request from the business user:\n${content.data}`].filter(Boolean).join("\n\n"),
         },
       ],
-      tools: [DELEGATE_TOOL],
+      tools: [DELEGATE_TOOL, { name: "read.workspace", description: "Read-only counts across leads, jobs, inbox, invoices and approvals for this workspace. Cannot send, pay, or change anything.", inputSchema: { type: "object", properties: {} } }],
       maxTokens: 1024,
     });
   } catch (err) {
@@ -174,7 +175,12 @@ export async function sendMessage(input: { actorUserId: string; orgId: string; t
     await requireRole(tx, input.orgId, input.actorUserId, STAFF, "chat.message.send");
     const accepted: { agent: DelegableKind; request: string }[] = [];
     const refused: { name: string; reason: string }[] = [];
+    let snapshot = "";
     for (const call of res.toolCalls) {
+      if (call.name === "read.workspace") {
+        snapshot = await workspaceSnapshot(tx, input.orgId);
+        continue;
+      }
       const parsed = call.name === "delegate" ? delegateArgs.safeParse(call.input) : null;
       if (!parsed?.success) refused.push({ name: call.name, reason: call.name === "delegate" ? "invalid_arguments" : "unknown_tool" });
       else if (accepted.some((a) => a.agent === parsed.data.agent)) refused.push({ name: parsed.data.agent, reason: "one_task_per_agent_per_turn" });
@@ -183,7 +189,7 @@ export async function sendMessage(input: { actorUserId: string; orgId: string; t
       else accepted.push(parsed.data);
     }
     const note = refused.length ? `\n\n(${refused.length} hand-off${refused.length > 1 ? "s" : ""} refused: ${refused.map((r) => `${r.name}: ${r.reason.replaceAll("_", " ")}`).join("; ")})` : "";
-    const text = (res.text.trim() || (accepted.length ? `Handed to ${accepted.map((a) => a.agent).join(", ")}.` : "No hand-offs.")).slice(0, 7000) + note;
+    const text = ((res.text.trim() || (accepted.length ? `Handed to ${accepted.map((a) => a.agent).join(", ")}.` : "No hand-offs.")) + (snapshot ? `\n\n${snapshot}` : "")).slice(0, 7000) + note;
     const [reply] = await tx
       .insert(chatMessages)
       .values({ tenantId: input.orgId, threadId: input.threadId, authorType: "lead", content: text, provider: res.provider, model: res.model, mock: router.isMock })

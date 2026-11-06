@@ -19,7 +19,9 @@ import { MANAGERS, inOrg, requireRole } from "../org/access";
 import { acceptUrlFor, hashToken, INVITE_TTL_MS } from "../org/service";
 import { assertPlatformAdmin } from "../platform/admin";
 import { getBusinessProfile, listOpportunities, reviewBusinessProfile, saveBusinessProfile } from "../scout/service";
+import { legacyColumn, requirePack, writePackId } from "../industries/store";
 import { getPreset, type IndustryId } from "./presets";
+import { approveAllTemplates, stagePackTemplates } from "../speed/service";
 import { finishOnboarding, getOnboardingState, loadDemoData, type OnboardingState } from "./service";
 import { lookupZip, normalizeZip } from "./zip-to-county";
 
@@ -36,7 +38,7 @@ const tzSchema = z.string().trim().min(1).max(64).refine((tz) => {
 
 const provisionSchema = z.object({
   name: z.string().trim().min(1, "Business name is required").max(120, "Business name is too long"),
-  industry: z.enum(["roofing", "general"]),
+  industry: z.string().min(1).max(40),
   clientEmail: z.string().trim().toLowerCase().email("Enter the client's email address").max(254),
   confirmEmail: z.string().trim().toLowerCase(),
   zip: z.string().trim().max(10).optional(),
@@ -81,9 +83,12 @@ export async function provisionClientWorkspace(input: {
   const token = randomBytes(32).toString("base64url");
   const invitationId = randomUUID();
   const expiresAt = new Date(Date.now() + INVITE_TTL_MS);
+  const pack = requirePack(v.industry);
   const preset = getPreset(v.industry);
   await withTenant(orgId, async (tx) => {
-    await tx.insert(organizations).values({ id: orgId, name: v.name, industry: v.industry, timezone: v.timezone, onboardingStep: "basics" });
+    await tx.insert(organizations).values({ id: orgId, name: v.name, industry: legacyColumn(pack), timezone: v.timezone, onboardingStep: "basics" });
+    await writePackId(tx, orgId, pack.id, input.actorUserId);
+    await stagePackTemplates(tx, orgId, input.actorUserId, pack.id);
     await applyPlan(tx, orgId, preset.trialPlan, { type: "system", id: "provisioning" }, `client workspace trial: ${v.industry} by platform admin user:${input.actorUserId}`);
     await tx.insert(organizationInvitations).values({
       id: invitationId,
@@ -132,9 +137,12 @@ export async function quickstartBusiness(input: Actor & { name: string; industry
     await requireRole(tx, input.orgId, input.actorUserId, MANAGERS, "onboarding.quickstart.business");
     const [org] = await tx.select({ industry: organizations.industry, completed: organizations.onboardingCompletedAt }).from(organizations).where(eq(organizations.id, input.orgId));
     if (!org) throw new AppError("NOT_FOUND", "Organization not found");
-    const industryChanged = org.industry !== input.industry;
+    const pack = requirePack(input.industry);
+    const industryChanged = org.industry !== legacyColumn(pack);
     if (industryChanged && org.completed) throw new AppError("CONFLICT", "Setup is already finished. Change your trade from Settings.");
-    await tx.update(organizations).set({ name, timezone: tz.data, industry: input.industry, onboardingStep: "connect" }).where(eq(organizations.id, input.orgId));
+    await tx.update(organizations).set({ name, timezone: tz.data, industry: legacyColumn(pack), onboardingStep: "connect" }).where(eq(organizations.id, input.orgId));
+    await writePackId(tx, input.orgId, pack.id, input.actorUserId);
+    await stagePackTemplates(tx, input.orgId, input.actorUserId, pack.id);
     if (industryChanged) await applyPlan(tx, input.orgId, getPreset(input.industry).trialPlan, { type: "system", id: "onboarding" }, `onboarding trial: ${input.industry} by user:${input.actorUserId}`);
     await recordAudit(tx, {
       tenantId: input.orgId,
@@ -187,7 +195,7 @@ export interface QuickstartFinish {
  * (roofing) so there's something to look at right away. Then the first
  * briefing runs inline — the first win.
  */
-export async function finishQuickstart(input: Actor & { briefingHour: number; samples: boolean; timezone: string }): Promise<QuickstartFinish> {
+export async function finishQuickstart(input: Actor & { briefingHour: number; samples: boolean; timezone: string; approveTemplates?: boolean }): Promise<QuickstartFinish> {
   if (!Number.isInteger(input.briefingHour) || input.briefingHour < 5 || input.briefingHour > 10) throw new AppError("VALIDATION", "Pick a briefing time between 5 and 10 am");
   let state = await getOnboardingState(input);
   if (!state.industry || !state.timezone) {
@@ -199,6 +207,7 @@ export async function finishQuickstart(input: Actor & { briefingHour: number; sa
     if (!(await getBusinessProfile(input))) throw new AppError("CONFLICT", "Add your service-area ZIP in step 1 so the samples land in your area, or untick samples.");
     await loadDemoData(input);
   }
+  if (input.approveTemplates) await approveAllTemplates(input);
   const { briefingRunId } = await finishOnboarding({ ...input, briefingHour: input.briefingHour });
   if (state.industry === "roofing") {
     const opps = await listOpportunities({ ...input, limit: 3 });

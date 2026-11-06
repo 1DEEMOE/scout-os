@@ -13,7 +13,7 @@ const seed = JSON.parse(readFileSync(path.resolve(import.meta.dirname, ".seed.js
 const shots = evidenceDir("plug-and-play");
 
 const TEN_MINUTES = 10 * 60 * 1000;
-const MAX_CLICKS = 15;
+const MAX_CLICKS = 10;
 
 async function signIn(page: Page, email: string) {
   for (let attempt = 0; ; attempt++) {
@@ -36,7 +36,7 @@ async function axe(page: Page, where: string) {
   expect(r.violations.map((v) => `${v.id}: ${v.nodes.slice(0, 3).map((n) => n.target.join(" ")).join(" | ")}`), `axe on ${where}`).toEqual([]);
 }
 
-test("invite to first briefing: under 10 minutes and under 15 clicks", async ({ browser }) => {
+test("invite to first briefing: pack already chosen, under 10 minutes and at most 10 client clicks", async ({ browser }) => {
   test.setTimeout(300_000);
   const t0 = Date.now();
   const clientEmail = `maya+${Date.now()}@peachtree.test`;
@@ -108,6 +108,7 @@ test("invite to first briefing: under 10 minutes and under 15 clicks", async ({ 
   await expect(page.getByText("about a minute left")).toBeVisible();
   await expect(page.getByRole("radio", { name: "7:00 am" })).toBeChecked();
   await expect(page.getByRole("checkbox", { name: /3 sample opportunities/ })).toBeChecked();
+  await expect(page.getByRole("checkbox", { name: /Approve the ready-to-send replies/ })).toBeChecked();
   await expect(page.getByText(/Fulton County, GA/)).toBeVisible();
   await axe(page, "welcome step 3 (phone)");
   await page.screenshot({ path: path.join(shots, "5-step3-watch.png"), fullPage: true });
@@ -177,4 +178,8 @@ test("nothing to install: a web app manifest and icons for the home screen; help
   await expect(page.getByRole("heading", { name: "Put it on your phone's home screen" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Optional: a desktop shortcut" })).toBeVisible();
   await axe(page, "help & install");
+  await page.goto("/trust");
+  await expect(page.getByRole("heading", { level: 1, name: "How decisions are kept" })).toBeVisible();
+  await expect(page.getByText(/not a customer list/i)).toBeVisible();
+  await axe(page, "trust");
 });

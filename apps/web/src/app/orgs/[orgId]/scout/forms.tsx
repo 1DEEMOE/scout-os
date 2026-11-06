@@ -72,7 +72,7 @@ export function ProfileForm({ orgId, profile, suggestedServices, canEdit }: { or
       <fieldset disabled={!canEdit} className="grid grid-cols-1 gap-4 md:grid-cols-2">
         <label className="flex flex-col gap-1 text-sm">Industry
           <input value="Residential roofing" readOnly className={`${inputCls} text-muted`} aria-describedby="vertical-note" />
-          <span id="vertical-note" className="text-xs text-muted">Roofing is the first industry Scout supports.</span>
+          <span id="vertical-note" className="text-xs text-muted">Storm reports are one signal, used when the industry pack includes weather.</span>
         </label>
         <label className="flex flex-col gap-1 text-sm">Website (optional)
           <input name="website" type="url" defaultValue={profile?.website ?? ""} placeholder="https://" className={inputCls} />
