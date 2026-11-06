@@ -45,6 +45,7 @@ import {
   UnconfiguredProvider,
   uploadJobPhoto,
 } from "@wos/core";
+import { seedMorningBriefing } from "./briefing-seed";
 import { withTenant } from "@wos/db";
 import { getAuth } from "../src/server/auth";
 import { resetDb } from "../../../packages/db/test/helpers";
@@ -313,6 +314,9 @@ const photo3 = await uploadJobPhoto({
   gpsLat: 33.7566,
   gpsLng: -84.3519,
 });
+
+// Generated from everything seeded above, so the demo's Today opens on a filled-in briefing.
+await seedMorningBriefing({ actorUserId: owner, orgId, timezone: "America/New_York" });
 
 await stopBoss();
 await closePool();
