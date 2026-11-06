@@ -280,7 +280,8 @@ describe("routines: kill switch, plan caps, roles", () => {
   it("pause-all-agents: scheduled runs are recorded as skipped, read nothing, use no quota; Run now is refused", async () => {
     const r = await newRoutine();
     await setAgentsPaused({ actorUserId: "owner", orgId: h.orgId, paused: true });
-    const out = await executeRoutineRun(jobFor(r));
+    // Pinned clock: with the real clock this assertion broke once the wall time passed 2026-11-06 12:00Z.
+    const out = await executeRoutineRun(jobFor(r), { now: at(new Date("2026-11-05T12:00:05Z")) });
     expect(out).toMatchObject({ status: "skipped", reason: "agents_paused" });
     const [run] = await runsOf(h.orgId);
     expect(run).toMatchObject({ status: "skipped", skipReason: "agents_paused", sources: [], output: null });
