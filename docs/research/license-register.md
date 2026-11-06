@@ -71,3 +71,10 @@ No new dependencies were added. The CSV reader (`packages/core/src/scout/csv.ts`
 |---|---|---|---|
 | nodemailer | 10.2.1 | MIT-0 | Platform email over SMTP (password resets, invitations) |
 | @types/nodemailer | 8.0.2 | MIT | Type definitions (dev only) |
+
+## Chat-first UI (2026-11-06)
+
+| Name | Version | License | Use |
+|---|---|---|---|
+| @fontsource-variable/schibsted-grotesk | 5.3.0 | OFL-1.1 (font), MIT (package) | Self-hosted interface typeface |
+| @axe-core/playwright | 4.14.0 | MPL-2.0 | Accessibility checks in e2e tests only (dev dependency, not shipped) |
