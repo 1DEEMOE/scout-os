@@ -4,8 +4,12 @@ import { useRouter } from "next/navigation";
 import { errorMessage, trpc } from "@/lib/trpc";
 import { buttonCls, ErrorText, inputCls, quietButtonCls } from "../../../../ui";
 
-/** Shows a freshly issued booking link once, with copy. It can't be shown again: only its hash is stored. */
-function NewLink({ token }: { token: string }) {
+/**
+ * Shows a freshly issued booking link once, with copy. It can't be shown
+ * again (only its hash is stored), so it stays on screen until the owner
+ * dismisses it; the page refreshes only then.
+ */
+function NewLink({ token, onDismiss }: { token: string; onDismiss: () => void }) {
   const [copied, setCopied] = useState(false);
   const url = `${window.location.origin}/book/${token}`;
   return (
@@ -19,6 +23,7 @@ function NewLink({ token }: { token: string }) {
         <a className="underline" href={url} target="_blank" rel="noreferrer">Open it</a>
       </div>
       <p className="text-muted">Save it now. For security it isn&apos;t stored, so it can&apos;t be shown again; you can always replace it with a new one.</p>
+      <button type="button" className={`${buttonCls} self-start`} onClick={onDismiss}>I&apos;ve saved this link</button>
     </div>
   );
 }
@@ -28,7 +33,16 @@ export function EnableDesk({ orgId, defaultName }: { orgId: string; defaultName:
   const [token, setToken] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  if (token) return <NewLink token={token} />;
+  if (token)
+    return (
+      <NewLink
+        token={token}
+        onDismiss={() => {
+          setToken(null);
+          router.refresh(); // now show the desk's settings
+        }}
+      />
+    );
   return (
     <form
       className="flex flex-col gap-3"
@@ -41,8 +55,8 @@ export function EnableDesk({ orgId, defaultName }: { orgId: string; defaultName:
             displayName: String(f.get("displayName") ?? ""),
             timezone: String(f.get("timezone") ?? "") || undefined,
           });
+          // No refresh here: re-rendering the page would unmount the one-time link.
           setToken(r.publicToken);
-          router.refresh();
         } catch (e) {
           setError(errorMessage(e));
         } finally {
@@ -65,7 +79,7 @@ export function EnableDesk({ orgId, defaultName }: { orgId: string; defaultName:
 export function RotateLink({ orgId, channelId }: { orgId: string; channelId: string }) {
   const [token, setToken] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  if (token) return <NewLink token={token} />;
+  if (token) return <NewLink token={token} onDismiss={() => setToken(null)} />;
   return (
     <div className="flex flex-col gap-2">
       <button

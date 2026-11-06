@@ -39,9 +39,13 @@ test("front desk: owner creates a link and times, a customer requests one, it wa
   const link = (await code.textContent())!.trim();
   await expect(page.getByText(/can't be shown again/)).toBeVisible();
   await page.screenshot({ path: path.join(shots, "1-link-created.png"), fullPage: true });
+  // The one-time link stays until the owner dismisses it, then the desk settings appear.
+  await page.waitForTimeout(1500);
+  await expect(code).toBeVisible();
+  await page.getByRole("button", { name: "I've saved this link" }).click();
+  await expect(code).toHaveCount(0);
 
   // Add times (tomorrow, repeating 2 weeks).
-  await page.reload();
   const tomorrow = new Date(Date.now() + 86_400_000);
   const ymd = `${tomorrow.getFullYear()}-${String(tomorrow.getMonth() + 1).padStart(2, "0")}-${String(tomorrow.getDate()).padStart(2, "0")}`;
   await page.getByLabel("Date").fill(ymd);
