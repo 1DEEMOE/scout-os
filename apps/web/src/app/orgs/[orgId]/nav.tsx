@@ -117,6 +117,7 @@ export function Nav({
       matchPrefix: ["/settings", "/audit", "/setup"],
       children: [
         { href: "/settings", label: "Team & connections" },
+        { href: "/settings/front-desk", label: "Front desk" },
         ...(isManager ? [{ href: "/audit", label: "Audit log" }] : []),
         { href: "/setup", label: "Guided setup" },
       ],

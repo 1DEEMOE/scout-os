@@ -12,6 +12,12 @@ import {
   enableFrontDesk,
   FRONT_DESK_TOOL,
   listAvailability,
+  listFrontDeskChannels,
+  listFrontDeskSlots,
+  rotateFrontDeskLink,
+  setFrontDeskStatus,
+  inviteMember,
+  AppError,
   MockModelProvider,
   ModelRouter,
   requestBooking,
@@ -205,6 +211,48 @@ describe("AI front desk", () => {
     const upd = await withFrontDeskToken(hash(token), async (tx) => (await tx.raw.query("UPDATE front_desk_channels SET display_name = 'pwned' RETURNING id")).rowCount);
     expect(upd).toBe(0);
     expect(otherCh.channelId).not.toBe(channelId);
+  });
+
+  it("owners can pause a desk (link answers not found) and resume it", async () => {
+    await setFrontDeskStatus({ actorUserId: OWNER, orgId, channelId, status: "paused" });
+    await expect(listAvailability(token, new Date(), new Date(Date.now() + 7 * 86_400_000))).rejects.toMatchObject({ code: "NOT_FOUND" });
+    await setFrontDeskStatus({ actorUserId: OWNER, orgId, channelId, status: "active" });
+    expect((await listAvailability(token, new Date(), new Date(Date.now() + 7 * 86_400_000))).slots).toHaveLength(1);
+  });
+
+  it("rotating the link kills the old one at once and audits it as a credential change", async () => {
+    const { publicToken } = await rotateFrontDeskLink({ actorUserId: OWNER, orgId, channelId });
+    expect(publicToken).not.toBe(token);
+    await expect(listAvailability(token, new Date(), new Date(Date.now() + 7 * 86_400_000))).rejects.toMatchObject({ code: "NOT_FOUND" });
+    expect((await listAvailability(publicToken, new Date(), new Date(Date.now() + 7 * 86_400_000))).slots).toHaveLength(1);
+    const a = await withTenant(orgId, async (tx) => (await tx.raw.query(`SELECT tier FROM audit_events WHERE action = 'front_desk.rotate'`)).rows);
+    expect(a).toEqual([{ tier: 4 }]);
+  });
+
+  it("members can't pause, rotate or enable; the channel list never exposes the token hash", async () => {
+    await seedUser("fd-member", "fdm@example.test");
+    await inviteMember({ actorUserId: OWNER, orgId, email: "fdm@example.test", role: "member" });
+    const forbidden = (p: Promise<unknown>) => expect(p).rejects.toSatisfy((e: unknown) => e instanceof AppError && e.code === "FORBIDDEN");
+    await forbidden(setFrontDeskStatus({ actorUserId: "fd-member", orgId, channelId, status: "paused" }));
+    await forbidden(rotateFrontDeskLink({ actorUserId: "fd-member", orgId, channelId }));
+    await forbidden(enableFrontDesk({ actorUserId: "fd-member", orgId, displayName: "Sneaky" }));
+    const channels = await listFrontDeskChannels({ actorUserId: "fd-member", orgId });
+    expect(channels).toHaveLength(1);
+    expect(JSON.stringify(channels)).not.toMatch(/token|[0-9a-f]{64}/i);
+  });
+
+  it("refuses slots in the past, too long, too far out or over capacity", async () => {
+    const add = (startsAt: Date, endsAt: Date, capacity?: number) => addFrontDeskSlots({ actorUserId: OWNER, orgId, channelId, slots: [{ startsAt, endsAt, capacity }] });
+    const h = 3_600_000;
+    const soon = Date.now() + 2 * h;
+    await expect(add(new Date(Date.now() - h), new Date(Date.now()))).rejects.toMatchObject({ code: "VALIDATION" });
+    await expect(add(new Date(soon), new Date(soon + 13 * h))).rejects.toMatchObject({ code: "VALIDATION" });
+    await expect(add(new Date(Date.now() + 400 * 86_400_000), new Date(Date.now() + 400 * 86_400_000 + h))).rejects.toMatchObject({ code: "VALIDATION" });
+    await expect(add(new Date(soon), new Date(soon + h), 51)).rejects.toMatchObject({ code: "VALIDATION" });
+    await expect(addFrontDeskSlots({ actorUserId: OWNER, orgId, channelId, slots: [] })).rejects.toMatchObject({ code: "VALIDATION" });
+    await add(new Date(soon), new Date(soon + h), 3);
+    const slots = await listFrontDeskSlots({ actorUserId: OWNER, orgId, channelId });
+    expect(slots.map((x) => x.capacity)).toEqual([3, 50]);
   });
 
   it("stores the executor digest so approving a booking confirms it", async () => {

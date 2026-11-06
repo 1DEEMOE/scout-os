@@ -14,7 +14,7 @@ const ACTIONS = [
   "scout.reviewProfile", "scout.scan", "scout.engage", "scout.disqualify", "scout.handoff",
   "scout.recordPermission", "scout.revokePermission", "scout.suppress",
   "routines.pause", "routines.resume", "routines.runNow", "routines.recoverLost",
-  "gaps2.frontDeskEnable", "gaps2.frontDeskAddSlots", "gaps2.aiAnswersRun", "gaps2.jobPhotoUpload", "gaps2.documentAnalyze",
+  "gaps2.frontDeskEnable", "gaps2.frontDeskAddSlots", "gaps2.frontDeskSetStatus", "gaps2.aiAnswersRun", "gaps2.jobPhotoUpload", "gaps2.documentAnalyze",
 ] as const;
 export type ActionPath = (typeof ACTIONS)[number];
 

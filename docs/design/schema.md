@@ -107,3 +107,8 @@ All forced RLS with the standard tenant policy, composite FKs, seeded in the iso
 1. Tenant data: `tenant_id uuid NOT NULL`, composite FKs to parents, `ENABLE` + `FORCE ROW LEVEL SECURITY`, the standard policy, minimal grants.
 2. Add a seed row in `packages/db/test/isolation.test.ts`. The test discovers every table with a `tenant_id` column and fails until the new table is both protected and seeded.
 3. Every new API procedure is covered by `apps/web/test/all-endpoints-isolation.test.ts` automatically.
+
+### Migration 0019 — public booking-link lookup (additive; rollback in `packages/db/rollback/0019_front_desk_token_lookup.down.sql`)
+
+- New read-only policy `front_desk_channels_by_token`: `FOR SELECT USING (token_hash = current_setting('app.front_desk_token_hash', true))`, non-empty setting required. Used only by `withFrontDeskToken()` for public booking links, which carry no tenant id. Lets `app_user` read just the channel whose token hash it presents; replaces the admin (BYPASSRLS) lookup in the web process. Tested: other tenants' channels, slots and bookings stay invisible; UPDATE through the policy affects 0 rows.
+- `listFrontDeskChannels` no longer returns `token_hash` (it works as a read key under this policy).
