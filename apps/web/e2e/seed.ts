@@ -17,9 +17,12 @@ await auth.api.signUpEmail({ body: { name: "Victor Viewer", email: "viewer@e2e.t
 // (whoever asks can't approve their own request while another manager exists).
 await auth.api.signUpEmail({ body: { name: "Omar Owner", email: "owner2@e2e.test", password: PASSWORD } });
 const member = await auth.api.signUpEmail({ body: { name: "Sam Lee", email: "sam@e2e.test", password: PASSWORD } });
-// The operator (Darian's role): creates client workspaces from /admin/clients.
-await auth.api.signUpEmail({ body: { name: "Dana Operator", email: "ops@e2e.test", password: PASSWORD } });
-await ownerQuery("UPDATE users SET email_verified = true WHERE email = 'ops@e2e.test'");
+// MOCK platform operator, and only when this process is in mock mode.
+// owner@e2e.test is a normal demo owner and is never made a platform admin.
+if (process.env.WOS_MOCK_MODE === "1") {
+  await auth.api.signUpEmail({ body: { name: "MOCK Platform Admin", email: "mock-admin@e2e.test", password: PASSWORD } });
+  await ownerQuery("UPDATE users SET email_verified = true WHERE email = 'mock-admin@e2e.test'");
+}
 const userId = ownerUser.user.id;
 const samId = member.user.id;
 
