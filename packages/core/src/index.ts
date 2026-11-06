@@ -77,6 +77,7 @@ export * from "./front-desk/service";
 export * from "./ai-answers/provider";
 export * from "./ai-answers/service";
 export * from "./job-photos/service";
+export * from "./job-photos/packet-pdf";
 export * from "./documents/forgery";
 export { frontDeskTools, forgeryTools, registerFrontDeskTools } from "./tools/front-desk";
 

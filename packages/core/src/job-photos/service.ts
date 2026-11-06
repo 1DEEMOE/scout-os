@@ -33,11 +33,52 @@ export async function uploadJobPhoto(input: {
     throw new AppError("VALIDATION", "Photo must be between 1 byte and 20 MB");
   }
   if (!input.contentType.startsWith("image/")) throw new AppError("VALIDATION", "Only image uploads are accepted");
+  return appendChainItem({ ...input, kind: "photo" });
+}
+
+/**
+ * A written note in the same hash chain as the photos: hashed, timestamped
+ * (server upload time plus the time it was observed), attributed, and linked
+ * to the previous item, so it can't be changed or reordered unnoticed.
+ */
+export async function addJobNote(input: { actorUserId: string; orgId: string; jobId: string; text: string; observedAt?: Date }): Promise<{ noteId: string; sha256: string; chainIndex: number }> {
+  const text = input.text.replace(/\r\n?/g, "\n").trim();
+  if (text.length < 2 || text.length > 5000) throw new AppError("VALIDATION", "A note is 2 to 5,000 characters");
+  const r = await appendChainItem({
+    actorUserId: input.actorUserId,
+    orgId: input.orgId,
+    jobId: input.jobId,
+    filename: `note-${Date.now()}.txt`,
+    contentType: NOTE_TYPE,
+    bytes: Buffer.from(text, "utf8"),
+    captureAt: input.observedAt ?? new Date(),
+    kind: "note",
+  });
+  return { noteId: r.photoId, sha256: r.sha256, chainIndex: r.chainIndex };
+}
+
+export const NOTE_TYPE = "text/plain; charset=utf-8";
+export const isNote = (contentType: string) => contentType.startsWith("text/plain");
+
+async function appendChainItem(input: {
+  actorUserId: string;
+  orgId: string;
+  jobId: string;
+  filename: string;
+  contentType: string;
+  bytes: Buffer;
+  captureAt: Date;
+  gpsLat?: number;
+  gpsLng?: number;
+  kind: "photo" | "note";
+}): Promise<{ photoId: string; sha256: string; chainIndex: number; integrityStatus: string }> {
   const hash = sha256Buffer(input.bytes);
   return inOrg(input.orgId, async (tx) => {
     await requireRole(tx, input.orgId, input.actorUserId, STAFF, "job_photo.upload");
     const [job] = await tx.select().from(tasks).where(eq(tasks.id, input.jobId));
     if (!job) throw new AppError("NOT_FOUND", "Job not found");
+    // Serialise appends per job so two uploads can't claim the same chain index.
+    await tx.raw.query("SELECT pg_advisory_xact_lock(hashtext($1))", [`job_chain:${input.jobId}`]);
 
     const prior = await tx
       .select()
@@ -116,7 +157,7 @@ export async function uploadJobPhoto(input: {
       tenantId: input.orgId,
       actorType: "user",
       actorId: input.actorUserId,
-      action: "job_photo.upload",
+      action: input.kind === "note" ? "job_note.add" : "job_photo.upload",
       target: `job_photo:${photoId}`,
       tier: 1,
       outcome: "success",
@@ -151,6 +192,7 @@ export async function verifyJobPhotoChain(input: { actorUserId: string; orgId: s
       integrityStatus: string;
       bytesMatch: boolean | null;
       linkOk: boolean;
+      kind: "photo" | "note";
     }[] = [];
 
     let broken = false;
@@ -176,6 +218,7 @@ export async function verifyJobPhotoChain(input: { actorUserId: string; orgId: s
         integrityStatus: !linkOk || bytesMatch === false ? "broken_chain" : r.integrityStatus,
         bytesMatch,
         linkOk,
+        kind: isNote(r.contentType) ? "note" : "photo",
       });
     }
     return {
@@ -222,6 +265,12 @@ export async function exportClaimPacket(input: { actorUserId: string; orgId: str
     })
     .join("\n");
 
+  const esc = (t: string) => t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  const notes: string[] = [];
+  for (const r of rows.filter((x) => isNote(x.contentType))) {
+    const body = await readFile(path.join(/*turbopackIgnore: true*/ STORAGE_ROOT, r.storageRef), "utf8").catch(() => "(stored note is missing)");
+    notes.push(`<li><p><strong>#${r.chainIndex}</strong> · observed ${r.captureAt.toISOString()} · added ${r.uploadedAt.toISOString()}</p><p style="white-space:pre-wrap">${esc(body)}</p><p><code>${r.sha256}</code></p></li>`);
+  }
   const html = `<!DOCTYPE html>
 <html lang="en"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/>
 <title>Claim packet · job ${input.jobId}</title>
@@ -241,7 +290,7 @@ export async function exportClaimPacket(input: { actorUserId: string; orgId: str
     code{font-size:0.65rem;word-break:break-all}
   }
 </style></head><body>
-<h1>Job photo claim packet</h1>
+<h1>Claim packet: photos and notes</h1>
 <p>Job <code>${input.jobId}</code> · Org <code>${input.orgId}</code> · Exported ${new Date().toISOString()}</p>
 <div class="banner ${verification.chainIntact ? (verification.flagged.length ? "warn" : "ok") : "bad"}"><strong>${status}</strong></div>
 <table>
@@ -249,6 +298,7 @@ export async function exportClaimPacket(input: { actorUserId: string; orgId: str
 <tbody>
 ${photoRows || '<tr><td colspan="8">No photos</td></tr>'}
 </tbody></table>
+${notes.length ? `<h2>Notes</h2><ol>${notes.join("\n")}</ol>` : ""}
 <p style="margin-top:2rem;color:#666;font-size:0.85rem">This packet is evidence of integrity checks performed by Scout OS. It does not prove scene authenticity by itself.</p>
 </body></html>`;
 
