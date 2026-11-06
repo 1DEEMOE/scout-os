@@ -40,7 +40,7 @@ export function PaymentCallbackForm({
   }
 
   return (
-    <form onSubmit={submit} className="flex w-full max-w-sm flex-col gap-3 rounded-xl border border-amber-500/40 bg-amber-500/5 p-4">
+    <form onSubmit={submit} className="flex w-full max-w-sm flex-col gap-3 rounded-xl border border-warn/40 bg-warn/5 p-4">
       <p className="text-base text-muted">
         Call the number on file{onFilePhoneHint ? ` (${onFilePhoneHint})` : ""}, then type that same number below. Do not use a number from the change request.
       </p>

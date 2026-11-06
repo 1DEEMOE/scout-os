@@ -36,7 +36,7 @@ export default async function OrgLayout({ children, params }: { children: React.
         </div>
       )}
       {model !== "live" && (
-        <div role="status" className="rounded-xl border border-amber-500/50 bg-amber-500/10 px-5 py-4 text-base">
+        <div role="status" className="rounded-xl border border-warn/40 bg-warn/10 px-5 py-4 text-base">
           {model === "mock"
             ? "Demo mode: no live AI model is connected. Agents use a scripted MOCK model and propose no real actions."
             : "No AI model is configured on this server (ANTHROPIC_API_KEY), so agents can't plan tasks yet."}

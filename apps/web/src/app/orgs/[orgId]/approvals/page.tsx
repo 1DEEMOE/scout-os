@@ -49,7 +49,7 @@ function OpenCard({ item, orgId, mockTool }: { item: ApprovalForReview; orgId: s
         </ul>
 
         {item.externalDataFields.length > 0 && (
-          <p role="note" className="rounded-xl border border-amber-500/50 bg-amber-500/10 px-4 py-3 text-base">
+          <p role="note" className="rounded-xl border border-warn/40 bg-warn/10 px-4 py-3 text-base">
             <strong>Check the address.</strong> {item.externalDataFields.join(", ")}{" "}
             {item.externalDataFields.length === 1 ? "was" : "were"} copied from an email or chat message, which anyone can write. That&apos;s why this
             needs your OK even though the action itself is lower risk.

@@ -30,7 +30,7 @@ export default async function ThreadPage({ params }: { params: Promise<{ orgId: 
       <a href={`/orgs/${orgId}/chat`} className="text-sm text-muted underline">All conversations</a>
       <PageTitle sub="The lead bot hands work to your AI employees as tasks. Anything external still waits in Approvals.">{thread.title}</PageTitle>
       {waiting > 0 && (
-        <p role="status" className="rounded-md border border-amber-500/50 bg-amber-500/10 px-3 py-2 text-sm">
+        <p role="status" className="rounded-md border border-warn/40 bg-warn/10 px-3 py-2 text-sm">
           {waiting} hand-off{waiting === 1 ? " is" : "s are"} waiting for approval. <a className="underline" href={`/orgs/${orgId}/approvals`}>Open Approvals</a>
         </p>
       )}

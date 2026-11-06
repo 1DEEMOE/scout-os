@@ -1,54 +1,145 @@
 @import "tailwindcss";
+@import "@fontsource-variable/schibsted-grotesk";
 
+/*
+ * Scout OS design tokens. One accent (lagoon teal), cool neutral surfaces.
+ * Every text/background pair is >= 4.5:1 in both themes (checked by
+ * apps/web/test/contrast.test.ts). Theme: data-theme="light" | "dark" on
+ * <html>, or follow the system when unset.
+ */
 @theme {
-  --color-ink: #1c1f24;
-  --color-muted: #5f6672;
-  --color-line: #e3e5e8;
-  --color-paper: #f7f6f3;
+  --color-paper: #f5f6f8;
   --color-surface: #ffffff;
-  --color-accent: #2f5d50;
-  --color-danger: #a33a2b;
+  --color-soft: #eef1f4;
+  --color-ink: #15181e;
+  --color-muted: #575e6b;
+  --color-line: #e2e5ea;
+  --color-accent: #17616a;
+  --color-accent-soft: #e3f0f1;
   --color-on-accent: #ffffff;
-  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --color-danger: #b3261e;
+  --color-warn: #8a5a00;
+  --color-caution: #9a4a12;
+
+  --font-sans: "Schibsted Grotesk Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+
   --spacing-page: 1.5rem;
-  --spacing-section: 2rem;
+  --spacing-section: 2.5rem;
   --spacing-card: 1.5rem;
-  --radius-card: 0.75rem;
+  --radius-card: 1.25rem;
+  --radius-control: 0.75rem;
+
+  --shadow-raised: 0 1px 2px rgb(21 24 30 / 0.04), 0 8px 24px -12px rgb(21 24 30 / 0.12);
+
+  --ease-calm: cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+
+:root[data-theme="dark"] {
+  --color-paper: #0f1216;
+  --color-surface: #161a20;
+  --color-soft: #1c2128;
+  --color-ink: #e7e9ec;
+  --color-muted: #a1a8b3;
+  --color-line: #262b33;
+  --color-accent: #73c7ce;
+  --color-accent-soft: #15302f;
+  --color-on-accent: #0b2326;
+  --color-danger: #f2a099;
+  --color-warn: #e6b85c;
+  --color-caution: #f0a873;
+  --shadow-raised: 0 1px 2px rgb(0 0 0 / 0.3), 0 10px 28px -14px rgb(0 0 0 / 0.6);
+  color-scheme: dark;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --color-paper: #0f1216;
+    --color-surface: #161a20;
+    --color-soft: #1c2128;
+    --color-ink: #e7e9ec;
+    --color-muted: #a1a8b3;
+    --color-line: #262b33;
+    --color-accent: #73c7ce;
+    --color-accent-soft: #15302f;
+    --color-on-accent: #0b2326;
+    --color-danger: #f2a099;
+    --color-warn: #e6b85c;
+    --color-caution: #f0a873;
+    --shadow-raised: 0 1px 2px rgb(0 0 0 / 0.3), 0 10px 28px -14px rgb(0 0 0 / 0.6);
+    color-scheme: dark;
+  }
 }
 
 html {
   font-size: 16px;
+  -webkit-text-size-adjust: 100%;
 }
 
 body {
   background: var(--color-paper);
   color: var(--color-ink);
-  line-height: 1.55;
+  line-height: 1.6;
   font-size: 1rem;
+  font-feature-settings: "ss01", "tnum" 0;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --color-ink: #e9eaec;
-    --color-muted: #a2a8b1;
-    --color-line: #2d3138;
-    --color-paper: #12141a;
-    --color-surface: #1a1d24;
-    --color-accent: #7fb8a6;
-    --color-danger: #e08474;
-    --color-on-accent: #15171b;
-  }
+h1,
+h2,
+h3 {
+  text-wrap: balance;
+  letter-spacing: -0.01em;
 }
 
-/* Visible keyboard focus for accessibility (AA). */
+p {
+  text-wrap: pretty;
+}
+
+/* Visible keyboard focus (WCAG 2.4.7 / 2.4.11). */
 :focus-visible {
   outline: 2px solid var(--color-accent);
   outline-offset: 2px;
+  border-radius: 6px;
 }
 
-a:focus-visible,
-button:focus-visible,
-summary:focus-visible {
-  outline: 2px solid var(--color-accent);
-  outline-offset: 2px;
+::selection {
+  background: var(--color-accent-soft);
+  color: var(--color-ink);
+}
+
+/* New messages and expanding cards: one calm motion, answering what changed. */
+@keyframes rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.motion-rise {
+  animation: rise-in 220ms var(--ease-calm) both;
+}
+
+@keyframes drawer-in {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: none;
+  }
+}
+.motion-drawer {
+  animation: drawer-in 200ms var(--ease-calm) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

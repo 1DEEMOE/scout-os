@@ -32,7 +32,7 @@ export default async function ScoutPage({ params, searchParams }: { params: Prom
       {title}
       <ScoutTabs orgId={orgId} active="feed" role={org.role} />
       {!ready && (
-        <div role="status" className="mb-4 rounded-md border border-amber-500/50 bg-amber-500/10 px-3 py-2 text-sm">
+        <div role="status" className="mb-4 rounded-md border border-warn/40 bg-warn/10 px-3 py-2 text-sm">
           {profile ? "Your business profile is a draft." : "Set up your business profile first."} Scout won&apos;t scan until a manager reviews it.{" "}
           <a className="underline" href={`/orgs/${orgId}/scout/setup`}>Go to setup</a>
         </div>

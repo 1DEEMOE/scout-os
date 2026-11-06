@@ -1,6 +1,7 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { BRAND } from "@/brand";
-import { BrandMark } from "./brand-mark";
+import { Frame } from "./frame";
+import { THEME_BOOT } from "./theme";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -10,17 +11,23 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 };
 
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#f5f6f8" },
+    { media: "(prefers-color-scheme: dark)", color: "#0f1216" },
+  ],
+};
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: THEME_BOOT }} />
+      </head>
       <body className="min-h-screen font-sans antialiased">
-        <header className="border-b border-line bg-surface">
-          <div className="mx-auto flex max-w-6xl items-center justify-between px-5 py-4 sm:px-8">
-            <a href="/orgs" aria-label={`${BRAND.name} home`}><BrandMark /></a>
-            <span className="rounded-md border border-line px-2.5 py-1 text-sm text-muted">Development build</span>
-          </div>
-        </header>
-        <main className="mx-auto max-w-6xl px-5 py-8 sm:px-8 sm:py-12">{children}</main>
+        <Frame>{children}</Frame>
       </body>
     </html>
   );
