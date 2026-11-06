@@ -5,9 +5,12 @@ import {
   collectSignals,
   createOrg,
   getPack,
+  bookVisit,
+  dueForRebook,
   ingestLead,
   listTemplates,
   quickstartBusiness,
+  setVisitStatus,
   recordSmsConsent,
   resetNwsCache,
   smsWindowOpen,
@@ -73,6 +76,19 @@ describe("speed to lead", () => {
     const other = (await createOrg({ actorUserId: "other", name: "Other Shop" })).orgId;
     expect((await speedSummary({ actorUserId: "other", orgId: other })).leads).toBe(0);
     await expect(speedSummary({ actorUserId: "other", orgId })).rejects.toMatchObject({ code: "NOT_FOUND" });
+  });
+});
+
+describe("appointment packs", () => {
+  it("books a chair without taking payment, rejects a double book, and lists who is due", async () => {
+    await quickstartBusiness({ actorUserId: "owner", orgId, name: "Northside Nails", industry: "nail_salon", timezone: "America/Chicago" });
+    const start = new Date("2026-05-01T15:00:00Z");
+    const first = await bookVisit({ actorUserId: "owner", orgId, serviceId: "fill", resourceId: "chair-1", name: "Ana", phone: "3125550100", startsAt: start });
+    expect(first.status).toBe("booked");
+    await expect(bookVisit({ actorUserId: "owner", orgId, serviceId: "manicure", resourceId: "chair-1", name: "Bea", startsAt: new Date(start.getTime() + 30 * 60_000) })).rejects.toMatchObject({ code: "CONFLICT" });
+    await setVisitStatus({ actorUserId: "owner", orgId, visitId: first.id, status: "completed" });
+    const due = await dueForRebook({ actorUserId: "owner", orgId, now: new Date(start.getTime() + 30 * 86_400_000) });
+    expect(due.some((d) => d.serviceId === "fill" && d.days >= 18)).toBe(true);
   });
 });
 
