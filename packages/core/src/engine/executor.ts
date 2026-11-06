@@ -5,6 +5,7 @@ import { logger } from "../logger";
 import { withSpan } from "../tracing";
 import { actionDigest } from "./digest";
 import { getEngine } from "./runtime";
+import { scrubPii } from "../logger";
 import { beforeToolCall, checkToolOutput } from "./tool-guard";
 import { logOp } from "../events/correlation";
 import { ToolError, type Tier, type ToolContext } from "./tools";
@@ -112,7 +113,7 @@ export async function executeStep(task: { id: string; tenantId: string; assigned
     });
     output = checkToolOutput(tool, output);
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
+    const message = String(scrubPii(err instanceof Error ? err.message : String(err)) ?? "error");
     await withTenant(task.tenantId, async (tx) => {
       await tx.update(workflowExecutions).set({ status: "failed", error: message.slice(0, 2000), finishedAt: new Date() }).where(eq(workflowExecutions.id, claim.rowId));
       await recordAudit(tx, { tenantId: task.tenantId, actorType: "agent", actorId: agentId, action: `tool.${step.tool}`, target: `task:${task.id}`, tier: step.tier, outcome: "error", metadata: { step: step.index, error: message.slice(0, 500) } });

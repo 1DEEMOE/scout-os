@@ -4,8 +4,8 @@ Deterministic pipeline for integration events. Models do not choose these handle
 
 `runEvent` is detect → decide → act → verify → log. A handler with `maxTier` other than 0 or 1 is rejected before it runs, so the bus cannot send email, SMS, or money. Those stay on the existing tool policy.
 
-Idempotency is an audit row `ops.event` keyed by `(tenant_id, idempotency_key)`. Dead letters are `ops.dead_letter`. A manager replays from `/orgs/[orgId]/recovery`. The replay reuses the key, so a success still happens once.
+A timed-out attempt is aborted and is not retried. `ctx.once` applies the effect at most once for that key inside the process. Dead letters store the full event key in metadata. A successful replay writes `ops.dead_letter.resolved`. The once-set is not a cross-worker lease.
 
-The circuit breaker is in-process. Proposed migration `0022` (not applied) is the shared table shape for events, dead letters, and breaker state, plus an audit action index. The running app does not read those tables.
+The circuit breaker is in-process. HTTP 5xx and timeouts count as failures. Proposed migration `0022` (not applied) is the shared table shape. The running app journals through `audit_events` and does not read those tables.
 
-Outbound HTTP goes through `assertSafeOutbound`. The only allowlisted host is `api.weather.gov`.
+Outbound HTTP goes through `fetchAllowlisted`: `https://api.weather.gov` only, redirects manual, every hop checked again.

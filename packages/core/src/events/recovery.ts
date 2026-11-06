@@ -19,9 +19,10 @@ export function busHandler(type: string): BusHandler | undefined {
 }
 
 export async function listDeadLetters(input: { actorUserId: string; orgId: string }) {
-  const rows = await listAuditEvents({ actorUserId: input.actorUserId, orgId: input.orgId, actionPrefix: "ops.dead_letter", limit: 100 });
+  const rows = await listAuditEvents({ actorUserId: input.actorUserId, orgId: input.orgId, actionPrefix: "ops.dead_letter", limit: 500 });
+  const resolved = new Set(rows.filter((r) => r.action === "ops.dead_letter.resolved").map((r) => String(r.metadata.deadLetterId ?? "")));
   return rows
-    .filter((r) => r.action === "ops.dead_letter")
+    .filter((r) => r.action === "ops.dead_letter" && !resolved.has(r.id))
     .map((r) => ({
       id: r.id,
       at: r.at.toISOString(),
@@ -46,27 +47,45 @@ export async function replayDeadLetter(input: { actorUserId: string; orgId: stri
       throw new AppError("NOT_FOUND", "That dead letter is not in this workspace");
     }
     const type = String(row.metadata.type ?? "");
+    const eventKey = String(row.metadata.eventKey ?? "");
+    if (!eventKey) throw new AppError("CONFLICT", "This dead letter has no event key");
     const handler = handlers.get(type);
     if (!handler) throw new AppError("CONFLICT", "Nothing in this process can replay that event");
-    await recordAudit(tx, {
-      tenantId: input.orgId,
-      actorType: "user",
-      actorId: input.actorUserId,
-      action: "ops.dead_letter.replay",
-      target: `audit:${row.id}`,
-      tier: 1,
-      outcome: "success",
-      metadata: { type },
-    });
     const busEvent: BusEvent = {
       tenantId: input.orgId,
-      idempotencyKey: row.idempotencyKey.slice(4),
+      idempotencyKey: eventKey,
       type,
       source: "replay",
       integration: String(row.metadata.integration ?? "") || undefined,
       payload: {},
     };
-    return { busEvent, handler };
+    return { busEvent, handler, deadLetterId: row.id };
   });
-  return runEvent(event.busEvent, event.handler, { journal: auditJournal() });
+  const result = await runEvent(event.busEvent, event.handler, { journal: auditJournal() });
+  const ok = result.status === "done" || result.status === "duplicate";
+  await inOrg(input.orgId, async (tx) => {
+    await recordAudit(tx, {
+      tenantId: input.orgId,
+      actorType: "user",
+      actorId: input.actorUserId,
+      action: "ops.dead_letter.replay",
+      target: `audit:${event.deadLetterId}`,
+      tier: 1,
+      outcome: ok ? "success" : "error",
+      metadata: { type: event.busEvent.type, status: result.status },
+    });
+    if (ok) {
+      await recordAudit(tx, {
+        tenantId: input.orgId,
+        actorType: "user",
+        actorId: input.actorUserId,
+        action: "ops.dead_letter.resolved",
+        target: `audit:${event.deadLetterId}`,
+        tier: 1,
+        outcome: "success",
+        metadata: { deadLetterId: event.deadLetterId, eventKey: event.busEvent.idempotencyKey },
+      });
+    }
+  });
+  return result;
 }

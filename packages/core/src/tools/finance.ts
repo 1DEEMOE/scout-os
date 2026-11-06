@@ -2,6 +2,7 @@ import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { invoices, withTenant } from "@wos/db";
 import { applyPaymentDestinationChange, PAYMENT_DETAIL_MIN_TIER } from "../finance/payment-guard";
+import { produceIntegration } from "../events/produce";
 import { objectResult, ToolError, type ToolContext, type ToolDefinition, type ToolRegistry } from "../engine/tools";
 import type { ProviderInvoice } from "../integrations/invoicing";
 import type { InvoicingResolver } from "../finance/resolver";
@@ -79,7 +80,12 @@ export function financeTools(resolve: InvoicingResolver): ToolDefinition[] {
     summarize: (a) => `Invoice ${a.customerEmail} for ${money(a.lines.reduce((s, l) => s + l.amountCents, 0))} (${a.lines.length} line${a.lines.length > 1 ? "s" : ""}, due in ${a.daysUntilDue} days)`,
     async execute(ctx, a) {
       const p = await provider(resolve, ctx);
-      const created = await p.createInvoice({ ...a, currency: "usd" }, ctx.idempotencyKey);
+      const created = await produceIntegration({
+        tenantId: ctx.tenantId,
+        integration: "payments",
+        idempotencyKey: `pay:${ctx.idempotencyKey}`,
+        effect: (fx) => fx.once(() => p.createInvoice({ ...a, currency: "usd" }, ctx.idempotencyKey)),
+      });
       const invoiceId = await storeInvoice(ctx.tenantId, p.name, created);
       return { invoiceId, externalId: created.externalId, amountDueCents: created.amountDueCents };
     },

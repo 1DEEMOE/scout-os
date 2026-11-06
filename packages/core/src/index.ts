@@ -82,6 +82,8 @@ export { integrations } from "./events/breaker";
 export { correlation, logOp } from "./events/correlation";
 export { backoffMs, MemoryJournal, runEvent } from "./events/bus";
 export { listDeadLetters, replayDeadLetter, registerBusHandler } from "./events/recovery";
+export { produceIntegration, setIntegrationJournal } from "./events/produce";
+export { auditJournal, deadLetterIdempotencyKey } from "./events/journal";
 export { modelForPurpose } from "./engine/model-route";
 export { assertSafeOutbound } from "./security/ssrf";
 export { sameOrigin } from "./security/origin";

@@ -1,4 +1,5 @@
 import pino from "pino";
+import { redactText } from "./security/secrets";
 
 /** Structured JSON logger. Secrets and tokens are redacted by path; PII is scrubbed by value. */
 /** Field names that hold credentials, at any depth up to three levels. */
@@ -23,13 +24,18 @@ const PHONE_RE = /(?<![A-Za-z0-9])(?:\+?1[\s.-]?)?(?:\(\d{3}\)|\d{3})[\s.-]?\d{3
  * names and timestamps pass through untouched. Returns a copy; never mutates.
  */
 export function scrubPii(value: unknown, depth = 0): unknown {
-  if (depth > 6 || value === null || value === undefined) return value;
-  if (typeof value === "string") return value.replace(EMAIL_RE, "[email]").replace(PHONE_RE, "[phone]");
+  if (depth > 12 || value === null || value === undefined) return value;
+  if (typeof value === "string") return redactText(value.replace(EMAIL_RE, "[email]").replace(PHONE_RE, "[phone]"));
   if (Array.isArray(value)) return value.map((v) => scrubPii(v, depth + 1));
   if (typeof value === "object") {
     if (value instanceof Error) {
-      // Error messages can quote provider responses (which may contain addresses).
-      return { name: value.name, message: scrubPii(value.message, depth + 1), stack: undefined };
+      const cause = (value as { cause?: unknown }).cause;
+      return {
+        name: value.name,
+        message: scrubPii(value.message, depth + 1),
+        cause: cause === undefined ? undefined : scrubPii(cause, depth + 1),
+        stack: undefined,
+      };
     }
     const out: Record<string, unknown> = {};
     for (const [k, v] of Object.entries(value as Record<string, unknown>)) {

@@ -1,6 +1,7 @@
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { integrations } from "../events/breaker";
-import { assertSafeOutbound } from "../security/ssrf";
+import { produceIntegration } from "../events/produce";
+import { fetchAllowlisted } from "../security/ssrf";
 
 /**
  * National Weather Service public alerts (api.weather.gov). No API key.
@@ -76,15 +77,19 @@ export function alertsUrl(area?: string): string {
   return area ? `${base}&area=${encodeURIComponent(area)}` : base;
 }
 
-export async function fetchNwsAlerts(opts: { fetchImpl?: typeof fetch; now?: Date; area?: string } = {}): Promise<{ alerts: NwsAlert[]; cached: boolean; degraded?: boolean }> {
-  const url = assertSafeOutbound(alertsUrl(opts.area)).toString();
+async function fetchNwsOnce(opts: { fetchImpl?: typeof fetch; now?: Date; area?: string; signal?: AbortSignal }): Promise<{ alerts: NwsAlert[]; cached: boolean; degraded?: boolean }> {
+  const url = alertsUrl(opts.area);
   const now = opts.now ?? new Date();
   const hit = cache.get(url);
   if (hit && now.getTime() - hit.at < CACHE_MS) return { alerts: hit.alerts, cached: true };
   const doFetch = opts.fetchImpl ?? fetch;
   try {
-    const res = await integrations.run("nws", () => doFetch(url, { headers: { Accept: "application/geo+json", "User-Agent": NWS_USER_AGENT } }), now.getTime());
-    if (!res.ok) throw new Error(`weather.gov responded ${res.status}`);
+    const res = await integrations.run("nws", async () => {
+      const response = await fetchAllowlisted(url, { signal: opts.signal, headers: { Accept: "application/geo+json", "User-Agent": NWS_USER_AGENT } }, doFetch);
+      if (response.status >= 500 || response.status === 408) throw new Error(`weather.gov responded ${response.status}`);
+      if (!response.ok) throw new Error(`weather.gov responded ${response.status}`);
+      return response;
+    }, now.getTime());
     const alerts = parseNwsPayload(await res.json());
     cache.set(url, { at: now.getTime(), alerts });
     return { alerts, cached: false };
@@ -92,6 +97,17 @@ export async function fetchNwsAlerts(opts: { fetchImpl?: typeof fetch; now?: Dat
     if (hit) return { alerts: hit.alerts, cached: true, degraded: true };
     throw err;
   }
+}
+
+/** Public entry. Goes through the event bus so a failure is dead-lettered when a tenant is known. */
+export async function fetchNwsAlerts(opts: { fetchImpl?: typeof fetch; now?: Date; area?: string; signal?: AbortSignal; tenantId?: string; direct?: boolean } = {}): Promise<{ alerts: NwsAlert[]; cached: boolean; degraded?: boolean }> {
+  if (opts.direct || !opts.tenantId) return fetchNwsOnce(opts);
+  return produceIntegration({
+    tenantId: opts.tenantId,
+    integration: "nws",
+    idempotencyKey: `nws:${randomUUID()}`,
+    effect: (ctx) => fetchNwsOnce({ ...opts, signal: ctx.signal }),
+  });
 }
 
 /** Stable id so the same alert stored twice is one signal. */

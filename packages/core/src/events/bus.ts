@@ -1,5 +1,12 @@
+import { scrubPii } from "../logger";
 import { BreakerOpenError, integrations, type CircuitBreaker } from "./breaker";
 import { logOp } from "./correlation";
+
+export function safeErrorText(err: unknown): string {
+  const raw = err instanceof Error ? err.message : String(err);
+  const scrubbed = scrubPii(raw);
+  return (typeof scrubbed === "string" ? scrubbed : "error").slice(0, 200);
+}
 
 /**
  * Deterministic pipeline: detect → decide → act → verify → log.
@@ -16,12 +23,18 @@ export interface BusEvent {
   payload?: Record<string, string | number | boolean | null>;
 }
 
+export interface EffectContext {
+  signal: AbortSignal;
+  /** Runs fn at most once for this event key. A late or overlapping attempt does not call fn again. */
+  once<T>(fn: () => Promise<T>): Promise<T>;
+}
+
 export interface BusHandler {
   type: string;
   /** Refused unless this is 0 or 1. Email, chat sends, and payments are not bus work. */
   maxTier: number;
   decide(event: BusEvent): { act: boolean; reason: string };
-  act(event: BusEvent): Promise<Record<string, unknown>>;
+  act(event: BusEvent, ctx: EffectContext): Promise<Record<string, unknown>>;
   verify?(event: BusEvent, result: Record<string, unknown>): boolean;
 }
 
@@ -132,10 +145,11 @@ async function runEventInner(
   const maxAttempts = deps.maxAttempts ?? 3;
   const sleep = deps.sleep ?? ((ms) => new Promise((r) => setTimeout(r, ms)));
   const breaker = deps.breaker ?? integrations;
+  const applied = new Set<string>();
   let lastError = "unknown";
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
-      const act = () => withTimeout(handler.act(event), deps.timeoutMs ?? 8_000);
+      const act = () => withTimeout((signal) => handler.act(event, effectContext(event.idempotencyKey, signal, applied)), deps.timeoutMs ?? 8_000);
       const result = event.integration ? await breaker.run(event.integration, act) : await act();
       if (handler.verify && !handler.verify(event, result)) throw new Error("verify_failed");
       const wrote = await deps.journal.put({ tenantId: event.tenantId, key: event.idempotencyKey, type: event.type, source: event.source, attempt });
@@ -143,30 +157,68 @@ async function runEventInner(
       logOp({ message: "event done", tenantId: event.tenantId, tool: event.type, input: event.idempotencyKey, outcome: "success", output: "verified", durationMs: Date.now() - started, recovery: attempt > 1 ? `attempt ${attempt}` : undefined });
       return { status: "done", attempt, result };
     } catch (err) {
-      lastError = err instanceof Error ? err.message : String(err);
+      lastError = safeErrorText(err);
       if (err instanceof BreakerOpenError) {
         await deps.journal.dead({ tenantId: event.tenantId, key: event.idempotencyKey, type: event.type, source: event.source, integration: event.integration, error: "breaker_open", attempts: attempt });
-        logOp({ message: "event degraded", tenantId: event.tenantId, tool: event.type, input: event.idempotencyKey, outcome: "degraded", failure: lastError, durationMs: Date.now() - started, recovery: "dead_letter" });
+        logOp({ message: "event degraded", tenantId: event.tenantId, tool: event.type, input: event.idempotencyKey, outcome: "degraded", failure: "breaker_open", durationMs: Date.now() - started, recovery: "dead_letter" });
         return { status: "degraded", reason: "breaker_open", attempt };
+      }
+      // A timeout means the effect may still be finishing. Do not start another attempt.
+      if (isTimeout(err)) {
+        await deps.journal.dead({ tenantId: event.tenantId, key: event.idempotencyKey, type: event.type, source: event.source, integration: event.integration, error: "timeout", attempts: attempt });
+        logOp({ message: "event timed out", tenantId: event.tenantId, tool: event.type, input: event.idempotencyKey, outcome: "error", failure: "timeout", durationMs: Date.now() - started, recovery: "dead_letter" });
+        return { status: "dead", reason: "timeout", attempt };
       }
       if (attempt < maxAttempts) await sleep(backoffMs(attempt));
     }
   }
-  await deps.journal.dead({ tenantId: event.tenantId, key: event.idempotencyKey, type: event.type, source: event.source, integration: event.integration, error: lastError.slice(0, 200), attempts: maxAttempts });
+  await deps.journal.dead({ tenantId: event.tenantId, key: event.idempotencyKey, type: event.type, source: event.source, integration: event.integration, error: lastError, attempts: maxAttempts });
   logOp({ message: "event dead", tenantId: event.tenantId, tool: event.type, input: event.idempotencyKey, outcome: "error", failure: lastError, durationMs: Date.now() - started, recovery: "dead_letter" });
   return { status: "dead", reason: lastError, attempt: maxAttempts };
 }
 
-function withTimeout<T>(work: Promise<T>, ms: number): Promise<T> {
+function effectContext(key: string, signal: AbortSignal, applied: Set<string>): EffectContext {
+  return {
+    signal,
+    once: (fn) => {
+      if (signal.aborted) return Promise.reject(abortError());
+      if (applied.has(key)) return Promise.reject(new Error("already_applied"));
+      applied.add(key);
+      if (signal.aborted) {
+        applied.delete(key);
+        return Promise.reject(abortError());
+      }
+      return fn();
+    },
+  };
+}
+
+function abortError(): Error {
+  const err = new Error("aborted");
+  err.name = "AbortError";
+  return err;
+}
+
+function isTimeout(err: unknown): boolean {
+  if (err instanceof Error && (err.name === "AbortError" || err.message === "timeout" || err.message === "aborted")) return true;
+  return false;
+}
+
+function withTimeout<T>(fn: (signal: AbortSignal) => Promise<T>, ms: number): Promise<T> {
+  const controller = new AbortController();
   return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error("timeout")), ms);
-    work.then(
+    const timer = setTimeout(() => {
+      controller.abort();
+      reject(new Error("timeout"));
+    }, ms);
+    fn(controller.signal).then(
       (value) => {
         clearTimeout(timer);
         resolve(value);
       },
       (err) => {
         clearTimeout(timer);
+        controller.abort();
         reject(err);
       },
     );

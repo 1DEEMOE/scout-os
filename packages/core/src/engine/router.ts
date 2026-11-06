@@ -1,4 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
+import { integrationKey, produceIntegration } from "../events/produce";
 import { modelForPurpose } from "./model-route";
 
 export interface ModelMessage {
@@ -68,7 +69,15 @@ export class ModelRouter {
     const provider = this.providers.get(providerName ?? this.defaultProvider) ?? this.providers.get(this.defaultProvider)!;
     const routed: ModelRequest = { ...req, model: req.model ?? modelForPurpose(req.purpose) };
     await this.hooks.beforeCall?.(routed);
-    const res = await provider.complete(routed);
+    const res = await produceIntegration({
+      tenantId: routed.tenantId,
+      integration: "model",
+      idempotencyKey: integrationKey(`model:${routed.purpose}`),
+      effect: (ctx) => {
+        if (ctx.signal.aborted) return Promise.reject(new Error("aborted"));
+        return ctx.once(() => provider.complete(routed));
+      },
+    });
     await this.hooks.afterCall?.(routed, res);
     return res;
   }

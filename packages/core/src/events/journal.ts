@@ -1,7 +1,19 @@
+import { createHash } from "node:crypto";
 import { and, eq } from "drizzle-orm";
 import { auditEvents, withTenant } from "@wos/db";
 import { recordAudit } from "../audit";
+import { scrubPii } from "../logger";
 import type { DeadLetter, EventJournal, JournalEntry } from "./bus";
+
+/** Short stable id. The full event key is stored in metadata, never truncated. */
+export function deadLetterIdempotencyKey(eventKey: string): string {
+  return `dlq:${createHash("sha256").update(eventKey).digest("hex")}`;
+}
+
+function redactStored(value: string): string {
+  const scrubbed = scrubPii(value);
+  return (typeof scrubbed === "string" ? scrubbed : "error").slice(0, 200);
+}
 
 function duplicate(err: unknown): boolean {
   const e = err as { code?: string; cause?: { code?: string }; message?: string };
@@ -52,12 +64,13 @@ export function auditJournal(): EventJournal {
             target: entry.type,
             tier: 0,
             outcome: "error",
-            idempotencyKey: `dlq:${entry.key}`.slice(0, 200),
+            idempotencyKey: deadLetterIdempotencyKey(entry.key),
             metadata: {
               type: entry.type,
               source: entry.source,
               integration: entry.integration ?? "",
-              error: entry.error.slice(0, 200),
+              eventKey: entry.key,
+              error: redactStored(entry.error),
               attempts: entry.attempts,
             },
           }),

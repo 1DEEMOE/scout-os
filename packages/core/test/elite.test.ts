@@ -87,8 +87,8 @@ describe("security helpers", () => {
   });
 
   it("rejects a cross-site mutation and a missing origin", () => {
-    const req = (origin?: string) => ({ url: "http://localhost:3100/api/trpc", headers: { get: (n: string) => (n === "origin" ? origin ?? null : n === "host" ? "localhost:3100" : null) } });
-    expect(sameOrigin(req("http://localhost:3100"))).toBe(true);
+    const req = (origin?: string) => ({ url: "http://localhost:3000/api/trpc", headers: { get: (n: string) => (n === "origin" ? origin ?? null : n === "host" ? "evil.example" : null) } });
+    expect(sameOrigin(req("http://localhost:3000"))).toBe(true);
     expect(sameOrigin(req("https://evil.example"))).toBe(false);
     expect(sameOrigin(req())).toBe(false);
   });

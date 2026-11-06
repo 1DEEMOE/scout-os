@@ -1,6 +1,7 @@
 import { and, eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import { contacts, crmRecords, withTenant } from "@wos/db";
+import { produceIntegration } from "../events/produce";
 import { objectResult, ToolError, type ToolContext, type ToolDefinition, type ToolRegistry } from "../engine/tools";
 import type { CrmResolver } from "../crm/resolver";
 
@@ -34,7 +35,12 @@ export function crmTools(resolve: CrmResolver): ToolDefinition[] {
     summarize: (a) => `Save contact ${a.email}`,
     async execute(ctx, a) {
       const crm = await crmFor(resolve, ctx);
-      const { externalId } = await crm.upsertContact(a);
+      const { externalId } = await produceIntegration({
+        tenantId: ctx.tenantId,
+        integration: "crm",
+        idempotencyKey: `crm-contact:${ctx.idempotencyKey}`,
+        effect: (fx) => fx.once(() => crm.upsertContact(a)),
+      });
       const contactId = await withTenant(ctx.tenantId, async (tx) => {
         const [existing] = await tx.select().from(contacts).where(sql`lower(${contacts.email}) = ${a.email}`);
         if (existing) {
@@ -59,7 +65,12 @@ export function crmTools(resolve: CrmResolver): ToolDefinition[] {
       const crm = await crmFor(resolve, ctx);
       const contact = await contactByEmail(ctx, a.contactEmail);
       if (!contact) throw new ToolError(`No contact with email ${a.contactEmail}; save the contact first`, false, "NO_CONTACT");
-      const { externalId } = await crm.createDeal({ name: a.name, stage: a.stage, contactExternalId: contact.externalId ?? undefined }, ctx.idempotencyKey);
+      const { externalId } = await produceIntegration({
+        tenantId: ctx.tenantId,
+        integration: "crm",
+        idempotencyKey: `crm-deal:${ctx.idempotencyKey}`,
+        effect: (fx) => fx.once(() => crm.createDeal({ name: a.name, stage: a.stage, contactExternalId: contact.externalId ?? undefined }, ctx.idempotencyKey)),
+      });
       return recordDeal(ctx, crm.name, externalId, contact.id, a);
     },
     async reconcile(ctx, a) {

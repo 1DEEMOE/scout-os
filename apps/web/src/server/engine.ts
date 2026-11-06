@@ -15,6 +15,8 @@ import {
   UnconfiguredProvider,
   fetchNwsAlerts,
   registerBusHandler,
+  setIntegrationJournal,
+  auditJournal,
   type ModelProvider,
 } from "@wos/core";
 import { registerProductTools } from "./tools";
@@ -63,12 +65,13 @@ export function ensureEngine(): void {
     status = "none";
   }
   configureEngine({ router: new ModelRouter(providers, defaultProvider, meteringHooks), tools, mailbox, crm, invoicing });
+  setIntegrationJournal(auditJournal());
   registerBusHandler({
     type: "weather.refresh",
     maxTier: 0,
     decide: () => ({ act: true, reason: "refresh public alerts" }),
-    async act() {
-      const r = await fetchNwsAlerts();
+    async act(event) {
+      const r = await fetchNwsAlerts({ tenantId: event.tenantId, direct: true });
       return { count: r.alerts.length, degraded: r.degraded === true };
     },
     verify: (_event, result) => typeof result.count === "number",

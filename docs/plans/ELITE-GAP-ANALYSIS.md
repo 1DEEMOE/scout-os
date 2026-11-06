@@ -167,22 +167,41 @@ OMEGA or Darian re-runs the same commands. Their counts are the verification.
 
 ## 12. Second pass
 
-**SELF-ASSESSMENT, after the implementation on `feat/elite-engineering`.** Not an independent grade.
+**SELF-ASSESSMENT.** An independent check of `89c9d6f` was NO-GO. The notes below replace the earlier claim that the bus and the hardening were finished. Production stays NO-GO. 0020, 0021, and 0022 stay proposed and unapplied.
 
-Re-read the new modules against the P1 list. No new agent was added. The bus rejects `maxTier` other than 0 or 1, and the existing `evaluatePolicy` path is unchanged. A second implementation loop would mostly be adopting 0022 or paying for an OTel collector. That is diminishing return under the hard rules, so the loop stops here.
+What `89c9d6f` overstated:
+
+- The bus had no producer on the mail, CRM, payments, model, or weather paths, so Recovery stayed empty in normal operation.
+- A timeout did not cancel the handler, and retries could apply the effect again.
+- Dead-letter keys were cut from 200 characters to 196, and a successful replay left the letter listed.
+- Error strings were logged and stored without secret redaction.
+- The origin check compared hosts and trusted `X-Forwarded-Host`.
+- Weather fetches followed redirects without checking the next host, and HTTP 503 did not open the breaker.
+- The new injection test only checked tag escaping.
+
+The follow-up on this branch wires those call sites, aborts timed-out work, checks the idempotency key at the effect, stores the full event key, marks a successful replay resolved, redacts secret-shaped text in errors, compares scheme+host+port to `APP_ORIGIN` / `BETTER_AUTH_URL`, re-checks every redirect, and counts 5xx and timeouts as breaker failures. Deeper tests cover inbound-email tool smuggling, a lead note that tries to instruct a send, and a model call that names another tenant.
+
+Still true, and not claimed as done:
+
+- The breaker and the effect-once set are per process. Two workers can still both pass `once` before either audit row commits. 0022 is the proposed shared table and is not applied, so it does not by itself fix that.
+- `logOp` correlation is set on tRPC requests. The worker does not open that scope, and the bus result does not return a correlation id.
+- Tool output schemas are strict for forgery and the new-destination payout. Other tools still use a passthrough object schema.
+- Model routing picks a name. Billing still uses one price pair. No live model call was made, so there is no measured cost change.
+- The query-shape test is `EXPLAIN` on an empty tenant, not `EXPLAIN ANALYZE` under load.
+- Secret redaction is the logger and the dead-letter text. It is not a repository-wide CI scanner.
 
 ### What changed
 
 | ID | Result |
 |---|---|
 | P0-1 | Still NO-GO. This branch does not say the product is production-ready. |
-| P1-1 | `runEvent` is detect → decide → act → verify → log, with in-process dedupe, exponential backoff, a per-integration breaker, and audit-backed dead letters. Managers replay from `/orgs/[orgId]/recovery`. |
-| P1-2 | `assertSafeOutbound` allowlists `https://api.weather.gov` only. `fetchNwsAlerts` uses it and the breaker, and serves a stale cache when a later fetch fails. |
-| P1-3 | POST `/api/trpc` and public booking POST reject a missing or foreign `Origin`. |
+| P1-1 | `runEvent` is the pipeline. Weather fetch, inbox sync, mail draft/send, CRM writes, invoice create, and model complete go through it. A failure is dead-lettered. Replay uses the full event key and then records `ops.dead_letter.resolved`. Timed-out work is aborted and not retried. |
+| P1-2 | `fetchAllowlisted` allowlists `https://api.weather.gov`, uses `redirect: "manual"`, and checks every hop. HTTP 503 and timeouts count as breaker failures. |
+| P1-3 | POST `/api/trpc` and public booking POST must match `APP_ORIGIN` or `BETTER_AUTH_URL` (scheme, host, and port). `X-Forwarded-Host` is ignored. |
 | P1-4 | Tool definitions carry an output schema. The executor checks it and enforces an optional per-tenant rate window. Forgery output must be `paid: false`. Payment-with-new-destination output must be `recorded_destination_only`. |
-| P1-5 | Tests cover a wrapped SMS injection, `evaluatePolicy` on an unknown tool, a forgery result that claims payment, and a cross-tenant snapshot (tenant B sees 0 of tenant A's leads). |
+| P1-5 | Tests cover an email that smuggles a tool call, a lead note that tries to order a send, a model call that names another tenant, and a snapshot that does not contain the other tenant's note. |
 | P1-6 | `modelForPurpose` picks a cheap model for classify/summarize/route and the strong model otherwise. Mock mode still selects no live model. The existing budget ledger is unchanged. |
-| P1-7 | `logOp` writes correlation id, actor, agent, tool, input hash, short output label, duration, outcome, failure, and recovery. The input itself is not logged. `scrubPii` also masks phone-shaped numbers. |
+| P1-7 | `logOp` writes correlation id, actor, agent, tool, input hash, duration, and outcome when a tRPC request set the scope. Error messages, causes, and stacks are scrubbed for secret-shaped text before they are logged. The worker does not open that scope. |
 | P1-8 | `/api/healthz` still returns 503 when the database is down, and now includes `degraded` with the names of open breakers. |
 | P1-9 | `packages/core/test/elite.test.ts` covers concurrent duplicates (25 callers, 1 act), backoff, timeout, tier-2 refusal, breaker open/half-open, and the rate limiter. |
 | P2-1 | `EXPLAIN` on `wos_test`: open tasks use `tasks_tenant_state_idx`. The audit prefix filter uses `audit_events_tenant_seq_idx` and then filters `action`. The `(tenant_id, action)` index is proposed in 0022 and was not created. |
@@ -198,13 +217,13 @@ Re-read the new modules against the P1 list. No new agent was added. The bus rej
 - A live collector, paging, pen-test, trademark search, or a paid model call.
 - Multi-instance breaker state (P2-5), for the reason above.
 
-### Commands (this workspace)
+### Commands (self-assessment after the follow-up)
 
 - `pnpm lint` — pass
 - `pnpm typecheck` — pass
-- `pnpm test` — 715 passed (57 files); migrate reported 19 files
-- `pnpm test:isolation` — 18 passed (15 applied schema, 2 proposed 0021, 1 proposed 0022, both proposals rolled back)
-- `pnpm build` — pass (Next.js 16.4.5), including `/orgs/[orgId]/recovery`
-- `WOS_MOCK_MODE=1 pnpm test:e2e` — 45 passed (5.1m), including axe. Owner gets 200 on `/recovery`; member and viewer get 404.
+- `pnpm test` — 726 passed (58 files); migrate reported 19 files
+- `pnpm test:isolation` — 18 passed (15 applied, 2 proposed 0021, 1 proposed 0022, both rolled back)
+- `pnpm build` — pass (Next.js 16.4.5)
+- `WOS_MOCK_MODE=1 pnpm test:e2e` — 45 passed (about 5.0m), including axe
 
-`schema_migrations` was not given a 0021 or 0022 row.
+These counts are not an independent grade. 0020, 0021, and 0022 were not applied.

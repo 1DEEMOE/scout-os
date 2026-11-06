@@ -12,6 +12,27 @@ export class UnsafeUrlError extends Error {
   }
 }
 
+/**
+ * Fetches an allowlisted URL and does not follow redirects blindly.
+ * Each hop is checked again. A redirect to any other host is rejected.
+ */
+export async function fetchAllowlisted(
+  raw: string,
+  init: RequestInit,
+  fetchImpl: typeof fetch = fetch,
+  hops = 2,
+): Promise<Response> {
+  const url = assertSafeOutbound(raw);
+  const res = await fetchImpl(url.toString(), { ...init, redirect: "manual" });
+  if (res.status >= 300 && res.status < 400) {
+    if (hops <= 0) throw new UnsafeUrlError("Too many redirects");
+    const location = res.headers.get("location");
+    if (!location) throw new UnsafeUrlError("Redirect is missing a location");
+    return fetchAllowlisted(new URL(location, url).toString(), init, fetchImpl, hops - 1);
+  }
+  return res;
+}
+
 export function assertSafeOutbound(raw: string): URL {
   let url: URL;
   try {
