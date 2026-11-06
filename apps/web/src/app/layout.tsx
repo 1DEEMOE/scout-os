@@ -9,6 +9,8 @@ export const metadata: Metadata = {
   description: BRAND.promise,
   applicationName: BRAND.name,
   robots: { index: false, follow: false },
+  icons: { icon: "/icons/icon-192.png", apple: "/icons/apple-touch-icon.png" },
+  appleWebApp: { capable: true, title: BRAND.name, statusBarStyle: "default" },
 };
 
 export const viewport: Viewport = {
