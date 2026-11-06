@@ -3,12 +3,16 @@ import {
   chooseIndustry,
   clearDemoData,
   finishOnboarding,
+  finishQuickstart,
   getOnboardingState,
   importLeadCsv,
   inviteDuringOnboarding,
   loadDemoData,
   markConnectLater,
   previewLeadCsv,
+  provisionClientWorkspace,
+  quickstartBusiness,
+  quickstartSkipConnect,
   saveBasics,
   skipDataStep,
   skipInvite,
@@ -20,7 +24,33 @@ const leadField = z.enum([
   "fullName", "email", "phone", "addressLine1", "city", "state", "postalCode", "county", "notes", "ignore",
 ]);
 
+const tz = z.string().max(64);
+
 export const onboardingRouter = router({
+  /** Operator only (checked in core against server config): new client workspace + one owner invite link. */
+  provisionWorkspace: protectedProcedure
+    .input(z.object({
+      name: z.string().max(200),
+      industry: z.enum(["roofing", "general"]),
+      clientEmail: z.string().max(254),
+      confirmEmail: z.string().max(254),
+      zip: z.string().max(16).optional(),
+      timezone: tz,
+    }))
+    .mutation(({ ctx, input }) => provisionClientWorkspace({ actorUserId: ctx.userId, ...input })),
+
+  quickstartBusiness: protectedProcedure
+    .input(z.object({ orgId, name: z.string().max(200), industry: z.enum(["roofing", "general"]), timezone: tz, zip: z.string().max(16).optional() }))
+    .mutation(({ ctx, input }) => quickstartBusiness({ actorUserId: ctx.userId, ...input })),
+
+  quickstartSkipConnect: protectedProcedure
+    .input(z.object({ orgId }))
+    .mutation(({ ctx, input }) => quickstartSkipConnect({ actorUserId: ctx.userId, orgId: input.orgId })),
+
+  finishQuickstart: protectedProcedure
+    .input(z.object({ orgId, briefingHour: z.number().int(), samples: z.boolean(), timezone: tz }))
+    .mutation(({ ctx, input }) => finishQuickstart({ actorUserId: ctx.userId, ...input })),
+
   state: protectedProcedure
     .input(z.object({ orgId }))
     .query(({ ctx, input }) => getOnboardingState({ actorUserId: ctx.userId, orgId: input.orgId })),

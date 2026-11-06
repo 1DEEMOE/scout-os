@@ -341,7 +341,7 @@ function BottomTabs({ d, path }: { d: ShellData; path: string }) {
                 </span>
                 {t.label}
                 {t.badge ? (
-                  <span className="absolute top-1 right-[calc(50%-1.5rem)] min-w-5 rounded-full bg-accent px-1 text-center text-[0.6875rem] leading-5 font-semibold text-on-accent">
+                  <span className="absolute top-1 right-[calc(50%-1.5rem)] min-w-5 rounded-full bg-accent px-1 text-center text-xs leading-5 font-semibold text-on-accent">
                     <span aria-hidden>{t.badge}</span>
                     <span className="sr-only">, {t.badge} waiting</span>
                   </span>
@@ -405,11 +405,11 @@ function MoreSheet({ d, path, onClose }: { d: ShellData; path: string; onClose: 
           </ul>
         </nav>
         <section aria-label="Workspace" className="mt-8 flex flex-col gap-1">
-          <h3 className="px-3 pb-1 text-sm text-muted">Workspace</h3>
+          <h3 className="px-3 pb-1 text-sm font-semibold text-ink">Workspace</h3>
           <WorkspaceLinks d={d} onNavigate={onClose} />
         </section>
         <section aria-label="Profile" className="mt-8 flex flex-col gap-1">
-          <h3 className="px-3 pb-1 text-sm text-muted">You</h3>
+          <h3 className="px-3 pb-1 text-sm font-semibold text-ink">You</h3>
           <ProfileItems d={d} onNavigate={onClose} />
         </section>
       </div>

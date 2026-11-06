@@ -82,6 +82,11 @@ const input = () => ({
   amountCents: 1,
   trade: "roofing",
   documentKind: "invoice",
+  // plug-and-play (provisioning refuses anyone who isn't a configured platform admin)
+  clientEmail: "victim@example.test",
+  confirmEmail: "victim@example.test",
+  briefingHour: 7,
+  samples: false,
 });
 
 beforeAll(async () => {

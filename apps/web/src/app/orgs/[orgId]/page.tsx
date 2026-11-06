@@ -7,11 +7,14 @@ import {
   listFlaggedDocuments,
   listFlaggedPaymentChanges,
   listPendingFrontDeskBookings,
+  listOpportunities,
   listTasks,
+  planSummary,
   taskLabel,
   type Briefing,
 } from "@wos/core";
 import { orgContext } from "@/server/org-context";
+import { ActionButton } from "../../actions";
 import { Badge, money, StateBadge, When } from "../../ui";
 import { ApprovalCard, Panel, ScoutMessage, Transcript } from "./chat-ui";
 import { Composer } from "./composer";
@@ -49,12 +52,22 @@ function Update({ summary, children }: { summary: React.ReactNode; children: Rea
  * leads; then what needs a decision; then safety warnings; everything else is
  * one calm "Also today" message with collapsed rows.
  */
-export default async function TodayPage({ params }: { params: Promise<{ orgId: string }> }) {
+/** Sample opportunities shown right after setup: invented (DEMO) rows only, top three. */
+async function sampleOpportunities(who: { actorUserId: string; orgId: string }, staff: boolean) {
+  if (!staff) return [];
+  const plan = await planSummary(who);
+  if (!plan.plan.features.includes("scout")) return [];
+  const rows = await listOpportunities({ ...who, limit: 3 });
+  return rows.filter((o) => o.demo || o.prospect.demo);
+}
+
+export default async function TodayPage({ params, searchParams }: { params: Promise<{ orgId: string }>; searchParams: Promise<{ welcome?: string }> }) {
   const { orgId } = await params;
+  const justSetUp = (await searchParams).welcome === "1";
   const { userId, org } = await orgContext(orgId);
   const staff = org.role !== "viewer";
   const who = { actorUserId: userId, orgId };
-  const [review, tasks, overdue, latest, paymentFlags, frontDesk, flaggedDocs, aiCheck] = await Promise.all([
+  const [review, tasks, overdue, latest, paymentFlags, frontDesk, flaggedDocs, aiCheck, samples] = await Promise.all([
     approvalsForReview(who),
     listTasks({ ...who, limit: 100 }),
     findOverdue(who),
@@ -63,6 +76,7 @@ export default async function TodayPage({ params }: { params: Promise<{ orgId: s
     listPendingFrontDeskBookings(who),
     listFlaggedDocuments(who),
     latestAiAnswersCheck(who),
+    justSetUp ? sampleOpportunities(who, staff) : Promise.resolve([]),
   ]);
   const open = review.open;
   const briefing = latest?.run.output as Briefing | undefined;
@@ -121,6 +135,27 @@ export default async function TodayPage({ params }: { params: Promise<{ orgId: s
           <ScoutMessage id="briefing" title="Each morning I can put a short briefing here: storm leads, unanswered leads, overdue invoices and approvals. Nothing is emailed.">
             {staff && (
               <a href={`/orgs/${orgId}/routines`} className="inline-flex min-h-11 items-center rounded-full border border-line bg-surface px-5 font-medium transition-colors duration-150 hover:bg-soft">Set up the morning briefing</a>
+            )}
+          </ScoutMessage>
+        )}
+
+        {justSetUp && (
+          <ScoutMessage id="first-win" title={samples.length ? `You're set up. Here ${samples.length === 1 ? "is a sample opportunity" : `are ${samples.length} sample opportunities`} to try first.` : "You're set up. Your briefing will be here every morning."}>
+            {samples.length > 0 && (
+              <Panel>
+                <ul aria-label="Sample opportunities" className="flex flex-col gap-3">
+                  {samples.map((o) => (
+                    <li key={o.id} className="flex flex-wrap items-center justify-between gap-3">
+                      <a className={`${inlineLink} font-medium`} href={`/orgs/${orgId}/scout/opportunities/${o.id}`}>{o.prospect.name}</a>
+                      <span className="text-small text-muted">{o.prospect.city ? `${o.prospect.city} · ` : ""}score {o.score}</span>
+                    </li>
+                  ))}
+                </ul>
+                <p className="mt-4 text-small text-muted">These are invented DEMO records so you can see how Scout works.</p>
+                <div className="mt-3">
+                  <ActionButton path="onboarding.clearDemo" input={{ orgId }} label="Remove sample data" confirm="Remove every DEMO sample record?" />
+                </div>
+              </Panel>
             )}
           </ScoutMessage>
         )}
