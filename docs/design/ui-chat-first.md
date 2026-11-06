@@ -10,7 +10,7 @@ Built from publicly describable qualities only (chat-first home, inline approval
 
 - **Today is a conversation with Scout.** The briefing, approvals, payment-change warnings, front-desk requests, flagged documents, overdue invoices and failed jobs arrive as Scout messages. Nothing from the old Today page was dropped. The composer sits under the heading (not sticky) so it never covers content; threads keep it pinned at the bottom.
 - **Approvals inline, rules unchanged.** `ApprovalCard` calls the same `approval.decide` / `approval.confirm` procedures with the same labels ("OK", "OK (needs second person)", "Decline", "Confirm and run"). Tiers 0–4, the second confirmation by a different person, no self-approval and expiry are all enforced on the server as before. The colored rail only shows the tier.
-- **Shell:** a 280px sidebar on large screens (Today, Needs your OK with count, Conversations and recent threads, Teammates, Routines, Library, Workspace, theme, sign out). Below 1024px: a top bar with a Menu drawer (focus moves to Close, Escape returns focus to Menu) and the same five bottom tabs as before. Nav landmark names ("Organization", "Primary") and link names are kept, so the existing tests and assistive tech see the same structure.
+- **Shell (superseded by "Sidebar v2" below):** originally a 280px sidebar with every section visible and a Menu drawer on phones.
 - **Tokens** (`globals.css`): cool neutral surfaces, one lagoon-teal accent, warn/caution/danger for tiers. The dark theme is applied by `data-theme` or the system preference. An inline boot script sets the stored choice before first paint (no flash). `contrast.test.ts` checks every text/background pair is at least 4.5:1 in both themes.
 - **Motion:** one rise-in for new messages and the drawer slide (200–220ms). Everything collapses under `prefers-reduced-motion`.
 - **Message-first chat:** a conversation is created by its first message (title = the message, truncated), replacing the old separate "title, then Start" step. The `approvals.spec` chat test was updated to that flow, with the same assertions.
@@ -24,3 +24,22 @@ Built from publicly describable qualities only (chat-first home, inline approval
 ## Not done here
 
 Visual baselines (pixel diff) aren't committed: screenshots depend on the machine's font rendering. Evidence screenshots are in `docs/plans/evidence/chat-first/`, and layout is asserted by tests (no horizontal scroll, landmarks, focus).
+
+
+## Sidebar v2 (2026-11-06, owner request: "a powerful engine underneath, nothing that feels compacted")
+
+- **One navigation model** (`orgs/[orgId]/nav-model.ts`) feeds the sidebar, the icon rail, the phone tabs, the More sheet and the command palette, so a page can't be reachable in one and missing in another, and pages a role can't open (Scout, Analytics, Storm reports and Scout setup for viewers; Audit log for non-managers; New chat for viewers) are never offered anywhere. Unit-tested in `test/nav-model.test.ts`.
+- **Five primary items, each an icon plus a label:** Today (the chat), Approvals (count badge, announced as "N waiting"), Work (jobs and tasks), Customers, and Scout (leads). Orgs without Scout and viewers get "Leads" (the inbox) instead.
+- **Everything else behind one More section**, in three groups: Teammates & routines; Library (conversations, inbox, invoices, analytics, storm reports); Workspace (settings, team, integrations, front desk, Scout setup, contact rules, plan & billing, audit log, guided setup). More and each group start closed. Open/closed state is remembered per browser (localStorage, wrapped in try/catch), and the group containing the current page opens itself.
+- **Spacing:** 44px rows with 8px gaps, 15px labels, generous section padding, no row dividers, and one quiet active state (accent-soft background, accent icon). Asserted in `e2e/sidebar.spec.ts`.
+- **Icon rail:** the collapse button (or Ctrl/Cmd+\, or the palette) narrows the sidebar to an 84px rail. Labels become tooltips on hover and focus but stay the links' accessible names. The choice is set on `<html data-rail>` by an inline boot script before first paint (`boot.ts`), so there's no wide-then-narrow flash. A Tailwind `rail:` variant scopes rail styles to large screens.
+- **Phones:** the same five items as bottom tabs (icon + label, 56px tall), a top bar with Search and More, and More as a bottom sheet (focus moves to Close, focus is trapped while open, Escape returns focus to More) containing the groups, the workspace switcher and the profile, with sign-out.
+- **Command palette:** Ctrl/Cmd-K (or the Search button) opens a modal dialog with a combobox and a grouped listbox (WAI-ARIA combobox pattern: arrows move `aria-activedescendant`, Enter runs, Escape closes and returns focus). It holds every page, recent conversations, workspaces and actions (new chat, collapse sidebar, themes, sign out). Search matches every word against labels and keywords ("gmail" finds Integrations).
+- **Footer:** one row with the workspace switcher (initial plus name) and the profile button. Sign-out, theme and Help live in the profile menu (44px targets). Both are disclosure popovers: Escape or a click outside closes them, and focus returns to the button.
+- **Skip link:** "Skip to content" is the first tab stop.
+- **Fixed on the way:** the theme boot script was imported from a `"use client"` module into the server layout, so the inline script could be a client reference rather than the string. Both boot scripts now live in the plain module `boot.ts`.
+- Icons are original 24px line drawings (`icons.tsx`), not from any icon set.
+
+## Plug and play for selling (2026-11-06)
+
+See `docs/design/plug-and-play.md`.
