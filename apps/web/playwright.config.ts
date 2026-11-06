@@ -14,6 +14,8 @@ const env = {
   WOS_SECRETS_KEY: Buffer.alloc(32, 7).toString("base64"),
   ANTHROPIC_API_KEY: "",
   LOG_LEVEL: "warn",
+  // The operator account that may create client workspaces (seeded with a verified email).
+  WOS_PLATFORM_ADMIN_EMAILS: "ops@e2e.test",
 };
 Object.assign(process.env, env);
 

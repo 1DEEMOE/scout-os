@@ -27,9 +27,9 @@ export function ForgotPasswordForm({ emailConfigured }: { emailConfigured: boole
 
   return (
     <form action={onSubmit} className="mx-auto flex max-w-sm flex-col gap-4">
-      <h1 className="text-2xl font-semibold">Reset your password</h1>
+      <h1 className="text-display font-semibold">Reset your password</h1>
       {!emailConfigured && (
-        <p role="note" className="rounded-md border border-amber-500/50 bg-amber-500/10 px-3 py-2 text-sm">
+        <p role="note" className="rounded-md border border-warn/40 bg-warn/10 px-3 py-2 text-sm">
           Email isn&apos;t set up on this server yet, so reset links can&apos;t be delivered. Ask whoever runs this Scout OS install to reset it for you.
         </p>
       )}

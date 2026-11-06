@@ -1,9 +1,10 @@
-import { mkdirSync, readFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import path from "node:path";
 import { expect, test } from "@playwright/test";
+import { evidenceDir } from "./evidence-dir";
 
 const seed = JSON.parse(readFileSync(path.resolve(import.meta.dirname, ".seed.json"), "utf8")) as { orgId: string; scoutOrgId: string; password: string };
-const shots = path.resolve(import.meta.dirname, "../../../docs/plans/evidence");
+const shots = evidenceDir("pages");
 
 // Every page renders for the owner without a server error, and has its heading.
 const PAGES: [string, string][] = [
@@ -13,7 +14,6 @@ const PAGES: [string, string][] = [
 ];
 
 test("every org page renders", async ({ page }) => {
-  mkdirSync(shots, { recursive: true });
   // Sign-in is rate limited per IP (a few per 10 s) and other specs just signed in: retry after the window.
   test.setTimeout(90_000);
   for (let attempt = 0; ; attempt++) {

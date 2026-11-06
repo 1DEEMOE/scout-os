@@ -31,3 +31,14 @@ export function seedUser(id: string, email: string, name = id): Promise<void> {
 export function ownerQuery<R extends pg.QueryResultRow>(text: string, params: unknown[] = []): Promise<R[]> {
   return asOwner(async (c) => (await c.query<R>(text, params)).rows);
 }
+
+/** Superuser read for test assertions only: tenant tables FORCE row-level security, even for their owner. */
+export async function adminQuery<R extends pg.QueryResultRow>(text: string, params: unknown[] = []): Promise<R[]> {
+  const c = new pg.Client({ connectionString: process.env.DATABASE_URL_ADMIN });
+  await c.connect();
+  try {
+    return (await c.query<R>(text, params)).rows;
+  } finally {
+    await c.end();
+  }
+}

@@ -38,8 +38,8 @@ test("key flows are roomy and usable at 390px with bottom nav", async ({ page })
 
   const primary = page.getByRole("navigation", { name: "Primary" });
   await expect(primary).toBeVisible();
-  for (const label of ["Today", "Approvals", "Leads", "Jobs", "Briefing"]) {
-    await expect(primary.getByRole("link", { name: label })).toBeVisible();
+  for (const label of ["Today", "Approvals", "Work", "Customers", "Leads"]) {
+    await expect(primary.getByRole("link", { name: new RegExp(`^${label}`) })).toBeVisible();
   }
 
   for (const flow of KEY_FLOWS) {

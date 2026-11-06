@@ -193,7 +193,7 @@ export function SetupWizard({ orgId, initial }: { orgId: string; initial: State 
         <section className="flex flex-col gap-4 rounded-md border border-line p-4">
           <h2 className="font-semibold">Get to first value</h2>
           {state.industry === "roofing" && (
-            <div className="flex flex-col gap-2 rounded-md border border-amber-500/40 bg-amber-500/5 p-3">
+            <div className="flex flex-col gap-2 rounded-md border border-warn/40 bg-warn/5 p-3">
               <div className="flex items-center gap-2">
                 <Badge tone="warn">DEMO</Badge>
                 <span className="text-sm font-medium">One-click sample data</span>

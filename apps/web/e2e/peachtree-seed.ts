@@ -45,11 +45,13 @@ import {
   UnconfiguredProvider,
   uploadJobPhoto,
 } from "@wos/core";
+import { seedMorningBriefing } from "./briefing-seed";
+import { evidenceDir } from "./evidence-dir";
 import { withTenant } from "@wos/db";
 import { getAuth } from "../src/server/auth";
 import { resetDb } from "../../../packages/db/test/helpers";
 
-const OUT = process.env.DEMO_DIR || "/workspace/scout-os/demo";
+const OUT = process.env.DEMO_DIR ? path.resolve(path.resolve(import.meta.dirname, "../../.."), process.env.DEMO_DIR) : evidenceDir("demo");
 const PHOTO_DIR = process.env.WOS_JOB_PHOTO_DIR || path.join(OUT, "job-photos");
 const EMAIL = process.env.DEMO_EMAIL || "jordan@peachtree.example.test";
 const PASSWORD = process.env.DEMO_PASSWORD || "sample-peachtree-2026";
@@ -313,6 +315,9 @@ const photo3 = await uploadJobPhoto({
   gpsLat: 33.7566,
   gpsLng: -84.3519,
 });
+
+// Generated from everything seeded above, so the demo's Today opens on a filled-in briefing.
+await seedMorningBriefing({ actorUserId: owner, orgId, timezone: "America/New_York" });
 
 await stopBoss();
 await closePool();

@@ -1,8 +1,8 @@
 import { listThreads } from "@wos/core";
 import { orgContext } from "@/server/org-context";
 import { modelStatus } from "@/server/engine";
-import { ActionForm } from "../../../actions";
-import { Card, Empty, inputCls, MockBadge, PageTitle, When } from "../../../ui";
+import { Empty, MockBadge, PageTitle, When } from "../../../ui";
+import { Composer } from "../composer";
 
 export const dynamic = "force-dynamic";
 
@@ -11,26 +11,20 @@ export default async function ChatPage({ params }: { params: Promise<{ orgId: st
   const { userId, org } = await orgContext(orgId);
   const threads = await listThreads({ actorUserId: userId, orgId });
   return (
-    <div className="flex flex-col gap-6">
-      <PageTitle sub="Talk to your lead bot. It hands work to your AI employees; anything external still waits for approval.">
+    <div className="mx-auto flex max-w-3xl flex-col gap-10">
+      <PageTitle sub="Every conversation with Scout. It hands work to your teammates; anything external still waits for your OK.">
         Chat {modelStatus() === "mock" && <MockBadge />}
       </PageTitle>
-      {org.role !== "viewer" && (
-        <Card title="New conversation">
-          <ActionForm path="chat.createThread" fixed={{ orgId }} submitLabel="Start" redirectToThread={{ orgId }}>
-            <input name="title" required maxLength={200} placeholder="e.g. This week's follow-ups" className={inputCls} />
-          </ActionForm>
-        </Card>
-      )}
+      {org.role !== "viewer" && <Composer orgId={orgId} />}
       {threads.length === 0 ? (
-        <Empty>No conversations yet.</Empty>
+        <Empty>No conversations yet. Ask Scout something above to start one.</Empty>
       ) : (
-        <ul className="divide-y divide-line rounded-md border border-line">
+        <ul aria-label="Conversations" className="flex flex-col gap-2">
           {threads.map((t) => (
             <li key={t.id}>
-              <a href={`/orgs/${orgId}/chat/${t.id}`} className="flex items-center justify-between gap-2 px-4 py-3 hover:bg-line/40">
-                <span className="min-w-0 flex-1 truncate">{t.title}</span>
-                <When date={t.updatedAt} />
+              <a href={`/orgs/${orgId}/chat/${t.id}`} className="flex min-h-14 items-center justify-between gap-4 rounded-2xl border border-line bg-surface px-5 py-3 transition-colors duration-150 hover:bg-soft">
+                <span className="min-w-0 flex-1 truncate font-medium">{t.title}</span>
+                <span className="shrink-0 text-sm text-muted"><When date={t.updatedAt} /></span>
               </a>
             </li>
           ))}

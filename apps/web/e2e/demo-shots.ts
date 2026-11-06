@@ -1,10 +1,10 @@
 // Captures demo screenshots from a running app (default http://localhost:3100).
-import { mkdirSync } from "node:fs";
+import path from "node:path";
 import { chromium } from "@playwright/test";
+import { evidenceDir } from "./evidence-dir";
 
 const seed = JSON.parse(process.env.SEED!) as { orgId: string; conversationId: string; taskId: string };
-const out = process.env.OUT ?? "demo-shots";
-mkdirSync(out, { recursive: true });
+const out = process.env.OUT ? path.resolve(path.resolve(import.meta.dirname, "../../.."), process.env.OUT) : evidenceDir("demo-shots");
 const browser = await chromium.launch({ executablePath: process.env.CHROME_PATH ?? "/usr/bin/google-chrome", args: ["--no-sandbox"] });
 const page = await browser.newPage({ viewport: { width: 1280, height: 900 }, deviceScaleFactor: 1 });
 const base = process.env.BASE ?? "http://localhost:3100";

@@ -15,6 +15,17 @@ async function deliver(to: string, subject: string, text: string): Promise<void>
   }
 }
 
+/**
+ * "Continue with Google" for people accepting an invite. Opt-in with
+ * WOS_GOOGLE_SIGNIN=1 and the same Google OAuth client as the Gmail
+ * integration (GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET); the client must list
+ * <BETTER_AUTH_URL>/api/auth/callback/google as a redirect URI. Off by default.
+ * Live sign-in is UNVERIFIED until tested against a real Google client.
+ */
+export function googleSignInEnabled(): boolean {
+  return process.env.WOS_GOOGLE_SIGNIN === "1" && !!process.env.GOOGLE_CLIENT_ID && !!process.env.GOOGLE_CLIENT_SECRET;
+}
+
 function build() {
   const secret = process.env.BETTER_AUTH_SECRET;
   if (!secret || secret.length < 32) throw new Error("BETTER_AUTH_SECRET must be at least 32 characters");
@@ -22,6 +33,9 @@ function build() {
     database: getAuthPool(),
     secret,
     baseURL: process.env.BETTER_AUTH_URL,
+    ...(googleSignInEnabled()
+      ? { socialProviders: { google: { clientId: process.env.GOOGLE_CLIENT_ID!, clientSecret: process.env.GOOGLE_CLIENT_SECRET! } } }
+      : {}),
     emailAndPassword: {
       enabled: true,
       minPasswordLength: 12,
@@ -101,4 +115,18 @@ export function getAuth() {
 export async function getSessionUserId(headers: Headers): Promise<string | null> {
   const session = await getAuth().api.getSession({ headers });
   return session?.user.id ?? null;
+}
+
+export interface SessionUser {
+  id: string;
+  name: string;
+  email: string;
+  emailVerified: boolean;
+}
+
+export async function getSessionUser(headers: Headers): Promise<SessionUser | null> {
+  const session = await getAuth().api.getSession({ headers });
+  if (!session) return null;
+  const u = session.user;
+  return { id: u.id, name: u.name ?? "", email: u.email, emailVerified: Boolean(u.emailVerified) };
 }

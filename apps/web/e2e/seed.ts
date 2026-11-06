@@ -1,7 +1,8 @@
 import { closePool } from "@wos/db";
 import { configureEngine, createAgent, createOrg, createTask, inviteMember, loadScoutDemo, MockLedger, mockTools, ModelRouter, operatorSetPlan, runTask, scoutTools, stopBoss, ToolRegistry, UnconfiguredProvider } from "@wos/core";
 import { getAuth } from "../src/server/auth";
-import { resetDb } from "../../../packages/db/test/helpers";
+import { seedMorningBriefing } from "./briefing-seed";
+import { ownerQuery, resetDb } from "../../../packages/db/test/helpers";
 
 const PASSWORD = "e2e-password-12345";
 
@@ -16,6 +17,9 @@ await auth.api.signUpEmail({ body: { name: "Victor Viewer", email: "viewer@e2e.t
 // (whoever asks can't approve their own request while another manager exists).
 await auth.api.signUpEmail({ body: { name: "Omar Owner", email: "owner2@e2e.test", password: PASSWORD } });
 const member = await auth.api.signUpEmail({ body: { name: "Sam Lee", email: "sam@e2e.test", password: PASSWORD } });
+// The operator (Darian's role): creates client workspaces from /admin/clients.
+await auth.api.signUpEmail({ body: { name: "Dana Operator", email: "ops@e2e.test", password: PASSWORD } });
+await ownerQuery("UPDATE users SET email_verified = true WHERE email = 'ops@e2e.test'");
 const userId = ownerUser.user.id;
 const samId = member.user.id;
 
@@ -45,6 +49,8 @@ await inviteMember({ actorUserId: userId, orgId: scout.orgId, email: "sam@e2e.te
 await inviteMember({ actorUserId: userId, orgId: scout.orgId, email: "viewer@e2e.test", role: "viewer" });
 await operatorSetPlan(scout.orgId, "scout_pro", "e2e seed");
 await loadScoutDemo({ actorUserId: userId, orgId: scout.orgId });
+// A real, generated morning briefing for the roofing org (Today leads with it).
+await seedMorningBriefing({ actorUserId: userId, orgId: scout.orgId, timezone: "America/Chicago" });
 await stopBoss();
 await closePool();
 console.log(JSON.stringify({ orgId, scoutOrgId: scout.orgId, emailTaskId: email.taskId, deleteTaskId: del.taskId, password: PASSWORD }));

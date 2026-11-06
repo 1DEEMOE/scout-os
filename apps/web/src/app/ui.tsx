@@ -1,11 +1,12 @@
+/* Controls are at least 44px tall: comfortable on phones, well over the 24px AA minimum. */
 export const inputCls =
-  "w-full rounded-lg border border-line bg-surface px-4 py-3 text-base outline-none focus:border-accent focus:ring-2 focus:ring-accent/20";
+  "min-h-11 w-full rounded-[var(--radius-control)] border border-line bg-surface px-4 py-2.5 text-base text-ink placeholder:text-muted outline-none transition-[border-color,box-shadow] duration-150 focus:border-accent focus:ring-4 focus:ring-accent/15";
 export const buttonCls =
-  "rounded-lg bg-accent px-5 py-2.5 text-base font-medium text-on-accent disabled:opacity-50";
+  "inline-flex min-h-11 items-center justify-center gap-2 rounded-full bg-accent px-5 py-2.5 text-base font-medium text-on-accent transition-[filter,transform] duration-150 hover:brightness-110 active:scale-[0.98] disabled:opacity-50";
 export const quietButtonCls =
-  "rounded-lg border border-line bg-surface px-4 py-2.5 text-base hover:bg-line/40 disabled:opacity-50";
+  "inline-flex min-h-11 items-center justify-center gap-2 rounded-full border border-line bg-surface px-4 py-2.5 text-base text-ink transition-colors duration-150 hover:bg-soft disabled:opacity-50";
 export const dangerButtonCls =
-  "rounded-lg border border-danger/50 px-4 py-2.5 text-base text-danger hover:bg-danger/10 disabled:opacity-50";
+  "inline-flex min-h-11 items-center justify-center gap-2 rounded-full border border-danger/40 bg-surface px-4 py-2.5 text-base text-danger transition-colors duration-150 hover:bg-danger/10 disabled:opacity-50";
 
 export function ErrorText({ message }: { message: string | null }) {
   if (!message) return null;
@@ -16,13 +17,16 @@ export function ErrorText({ message }: { message: string | null }) {
   );
 }
 
-const TIER_STYLE: Record<number, string> = {
+/** Risk colours by tier (0–4). Labels and rules are unchanged; only the colours use the tokens. */
+export const TIER_STYLE: Record<number, string> = {
   0: "border-line text-muted",
   1: "border-line text-muted",
-  2: "border-amber-500/50 text-amber-700 dark:text-amber-300",
-  3: "border-orange-600/50 text-orange-700 dark:text-orange-300",
-  4: "border-danger/60 text-danger",
+  2: "border-warn/40 bg-warn/5 text-warn",
+  3: "border-caution/40 bg-caution/5 text-caution",
+  4: "border-danger/50 bg-danger/5 text-danger",
 };
+/** The coloured rail on approval cards. */
+export const TIER_RAIL: Record<number, string> = { 0: "bg-line", 1: "bg-line", 2: "bg-warn", 3: "bg-caution", 4: "bg-danger" };
 const TIER_NAME = ["read-only", "internal", "external", "financial", "destructive"];
 
 /** Plain-language risk label for list titles. Full tier stays in details. */
@@ -30,7 +34,7 @@ export function NeedOkBadge({ tier }: { tier: number }) {
   const label =
     tier >= 4 ? "Needs two people to OK" : tier >= 2 ? "Needs your OK" : "Low risk";
   return (
-    <span className={`inline-flex items-center rounded-md border px-2 py-0.5 text-sm whitespace-nowrap ${TIER_STYLE[tier] ?? ""}`}>
+    <span className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-sm whitespace-nowrap ${TIER_STYLE[tier] ?? ""}`}>
       {label}
     </span>
   );
@@ -38,7 +42,7 @@ export function NeedOkBadge({ tier }: { tier: number }) {
 
 export function TierBadge({ tier }: { tier: number }) {
   return (
-    <span className={`inline-flex items-center rounded-md border px-2 py-0.5 text-sm whitespace-nowrap ${TIER_STYLE[tier] ?? ""}`}>
+    <span className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-sm whitespace-nowrap ${TIER_STYLE[tier] ?? ""}`}>
       Risk level {tier} · {TIER_NAME[tier]}
     </span>
   );
@@ -47,11 +51,11 @@ export function TierBadge({ tier }: { tier: number }) {
 export function Badge({ children, tone = "muted" }: { children: React.ReactNode; tone?: "muted" | "accent" | "danger" | "warn" }) {
   const cls = {
     muted: "border-line text-muted",
-    accent: "border-accent/50 text-accent",
-    danger: "border-danger/50 text-danger",
-    warn: "border-amber-500/50 text-amber-700 dark:text-amber-300",
+    accent: "border-accent/40 bg-accent-soft text-accent",
+    danger: "border-danger/40 bg-danger/5 text-danger",
+    warn: "border-warn/40 bg-warn/5 text-warn",
   }[tone];
-  return <span className={`inline-flex items-center rounded-md border px-2 py-0.5 text-sm whitespace-nowrap ${cls}`}>{children}</span>;
+  return <span className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-sm whitespace-nowrap ${cls}`}>{children}</span>;
 }
 
 /** Everything produced by a fake provider or model is labelled, per project rules. */
@@ -61,10 +65,10 @@ export function MockBadge() {
 
 export function Card({ title, children, actions }: { title?: React.ReactNode; children: React.ReactNode; actions?: React.ReactNode }) {
   return (
-    <section className="rounded-[var(--radius-card)] border border-line bg-surface p-6 shadow-sm">
+    <section className="rounded-[var(--radius-card)] border border-line bg-surface p-6 sm:p-7">
       {(title || actions) && (
-        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-          {title && <h2 className="text-lg font-semibold tracking-tight">{title}</h2>}
+        <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+          {title && <h2 className="text-xl font-semibold">{title}</h2>}
           {actions}
         </div>
       )}
@@ -75,7 +79,7 @@ export function Card({ title, children, actions }: { title?: React.ReactNode; ch
 
 export function Empty({ children, action }: { children: React.ReactNode; action?: React.ReactNode }) {
   return (
-    <div className="flex flex-col items-start gap-3 rounded-lg border border-dashed border-line bg-paper/60 px-5 py-8">
+    <div className="flex flex-col items-start gap-3 rounded-[var(--radius-card)] border border-dashed border-line bg-paper/60 px-6 py-10">
       <p className="text-base text-muted">{children}</p>
       {action}
     </div>
@@ -84,9 +88,9 @@ export function Empty({ children, action }: { children: React.ReactNode; action?
 
 export function PageTitle({ children, sub }: { children: React.ReactNode; sub?: React.ReactNode }) {
   return (
-    <div className="mb-8">
-      <h1 className="text-3xl font-semibold tracking-tight">{children}</h1>
-      {sub && <p className="mt-2 max-w-2xl text-base text-muted">{sub}</p>}
+    <div className="mb-10">
+      <h1 className="text-display font-semibold">{children}</h1>
+      {sub && <p className="mt-3 max-w-[65ch] text-base text-muted">{sub}</p>}
     </div>
   );
 }

@@ -1,7 +1,9 @@
 import { mkdirSync, writeFileSync } from "node:fs";
+import path from "node:path";
 import { chromium } from "@playwright/test";
+import { evidenceDir } from "./evidence-dir";
 
-const out = process.env.OUT || "/workspace/scout-os/ux/before";
+const out = process.env.OUT ? path.resolve(path.resolve(import.meta.dirname, "../../.."), process.env.OUT) : evidenceDir("ux");
 const base = process.env.BASE || "http://localhost:3700";
 const orgId = process.env.ORG_ID!;
 const scoutOrgId = process.env.SCOUT_ORG_ID!;

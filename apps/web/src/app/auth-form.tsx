@@ -41,7 +41,7 @@ function Form({ mode }: { mode: "sign-in" | "sign-up" }) {
   return (
     <form action={onSubmit} className="mx-auto flex max-w-sm flex-col gap-4">
       <div>
-        <h1 className="text-2xl font-semibold">{mode === "sign-up" ? `Create your ${BRAND.name} account` : `Sign in to ${BRAND.name}`}</h1>
+        <h1 className="text-display font-semibold">{mode === "sign-up" ? `Create your ${BRAND.name} account` : `Sign in to ${BRAND.name}`}</h1>
         <p className="mt-1 text-sm text-muted">{BRAND.tagline}</p>
       </div>
       {mode === "sign-up" && (

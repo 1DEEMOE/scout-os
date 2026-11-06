@@ -1,327 +1,274 @@
 import {
   approvalsForReview,
   findOverdue,
-  latestBriefing,
+  formatRiskFlags,
   latestAiAnswersCheck,
+  latestBriefing,
   listFlaggedDocuments,
   listFlaggedPaymentChanges,
-  formatRiskFlags,
   listPendingFrontDeskBookings,
+  listOpportunities,
   listTasks,
+  planSummary,
   taskLabel,
-  type ApprovalForReview,
   type Briefing,
 } from "@wos/core";
 import { orgContext } from "@/server/org-context";
 import { ActionButton } from "../../actions";
-import { Badge, Card, Empty, money, NeedOkBadge, PageTitle, StateBadge, When } from "../../ui";
+import { Badge, money, StateBadge, When } from "../../ui";
+import { ApprovalCard, Panel, ScoutMessage, Transcript } from "./chat-ui";
+import { Composer } from "./composer";
 import { OnboardingChecklist } from "./onboarding-checklist";
 import { PaymentCallbackForm } from "./payment-callback-form";
-import { fmtIn } from "./routines/parts";
 
 export const dynamic = "force-dynamic";
 
-function ApproveStrip({ item, orgId }: { item: ApprovalForReview; orgId: string }) {
-  const a = item.approval;
-  const r = item.reviewer;
+const SUGGESTIONS = ["Chase overdue invoices", "Follow up with new leads", "What needs my attention today?"];
+/** Approvals shown in full before "show more": enough to act on, not a wall. */
+const APPROVALS_UP_FRONT = 2;
+
+const link = "inline-flex min-h-11 items-center font-medium text-accent underline decoration-accent/40 underline-offset-4 hover:decoration-accent";
+const inlineLink = "inline-flex min-h-6 items-center underline decoration-line underline-offset-4 hover:decoration-accent";
+
+/** A collapsed update inside "Also today": one calm line, details on demand. */
+function Update({ summary, children }: { summary: React.ReactNode; children: React.ReactNode }) {
   return (
-    <li className="flex flex-col gap-4 border-b border-line py-5 last:border-b-0 sm:flex-row sm:items-start sm:justify-between">
-      <div className="min-w-0 flex-1 space-y-2">
-        <div className="flex flex-wrap items-center gap-2">
-          <NeedOkBadge tier={a.tier} />
-          <span className="text-sm text-muted">from {item.requestedByName}</span>
-        </div>
-        <p className="text-lg font-medium leading-snug">{item.headline}</p>
-        <ul className="space-y-1 text-base text-muted">
-          {item.context.slice(0, 4).map((l, i) => (
-            <li key={`${l.label}-${i}`}>
-              <span className="text-muted">{l.label}:</span> <span className="text-ink">{l.value}</span>
-            </li>
-          ))}
-        </ul>
-        <details className="text-base">
-          <summary className="cursor-pointer text-muted hover:text-ink">More details</summary>
-          <dl className="mt-3 grid gap-2 sm:grid-cols-[8rem_1fr]">
-            {item.context.map((l, i) => (
-              <div key={`d-${l.label}-${i}`} className="contents">
-                <dt className="text-muted">{l.label}</dt>
-                <dd className="font-medium">{l.value}</dd>
-              </div>
-            ))}
-            <dt className="text-muted">Task</dt>
-            <dd>
-              <a className="underline" href={`/orgs/${orgId}/tasks/${item.taskId}`}>{item.taskTitle}</a>
-            </dd>
-            <dt className="text-muted">Risk</dt>
-            <dd>Level {a.tier}</dd>
-            <dt className="text-muted">Expires</dt>
-            <dd><When date={a.expiresAt} /></dd>
-          </dl>
-        </details>
-      </div>
-      <div className="flex shrink-0 flex-col gap-2 sm:items-end">
-        {r.kind === "can_approve" && (
-          <div className="flex flex-wrap gap-2">
-            <ActionButton
-              path="approval.decide"
-              input={{ orgId, approvalId: a.id, decision: "approve" }}
-              label={a.tier === 4 ? "OK (needs second person)" : "OK"}
-              variant="primary"
-            />
-            <ActionButton path="approval.decide" input={{ orgId, approvalId: a.id, decision: "reject" }} label="Decline" />
-          </div>
-        )}
-        {r.kind === "can_confirm" && (
-          <ActionButton path="approval.confirm" input={{ orgId, approvalId: a.id }} label="Confirm and run" variant="danger" confirm="This cannot be undone. Confirm?" />
-        )}
-        {r.kind === "read_only" && r.reason && <p className="max-w-xs text-sm text-muted">{r.reason}</p>}
-      </div>
+    <li>
+      <details className="group rounded-2xl border border-line bg-surface">
+        <summary className="flex min-h-14 cursor-pointer list-none items-center justify-between gap-4 px-5 py-3 [&::-webkit-details-marker]:hidden">
+          <span>{summary}</span>
+          <svg aria-hidden viewBox="0 0 20 20" className="h-4 w-4 shrink-0 text-muted transition-transform duration-200 group-open:rotate-180" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+            <path d="m5 8 5 5 5-5" />
+          </svg>
+        </summary>
+        <div className="border-t border-line px-5 py-4">{children}</div>
+      </details>
     </li>
   );
 }
 
-export default async function TodayPage({ params }: { params: Promise<{ orgId: string }> }) {
+/**
+ * Today: a conversation with Scout, in priority order. The morning briefing
+ * leads; then what needs a decision; then safety warnings; everything else is
+ * one calm "Also today" message with collapsed rows.
+ */
+/** Sample opportunities shown right after setup: invented (DEMO) rows only, top three. */
+async function sampleOpportunities(who: { actorUserId: string; orgId: string }, staff: boolean) {
+  if (!staff) return [];
+  const plan = await planSummary(who);
+  if (!plan.plan.features.includes("scout")) return [];
+  const rows = await listOpportunities({ ...who, limit: 3 });
+  return rows.filter((o) => o.demo || o.prospect.demo);
+}
+
+export default async function TodayPage({ params, searchParams }: { params: Promise<{ orgId: string }>; searchParams: Promise<{ welcome?: string }> }) {
   const { orgId } = await params;
+  const justSetUp = (await searchParams).welcome === "1";
   const { userId, org } = await orgContext(orgId);
   const staff = org.role !== "viewer";
-  const [review, tasks, overdue, latest, paymentFlags, frontDesk, flaggedDocs, aiCheck] = await Promise.all([
-    approvalsForReview({ actorUserId: userId, orgId }),
-    listTasks({ actorUserId: userId, orgId, limit: 100 }),
-    findOverdue({ actorUserId: userId, orgId }),
-    latestBriefing({ actorUserId: userId, orgId }),
-    listFlaggedPaymentChanges({ actorUserId: userId, orgId }),
-    listPendingFrontDeskBookings({ actorUserId: userId, orgId }),
-    listFlaggedDocuments({ actorUserId: userId, orgId }),
-    latestAiAnswersCheck({ actorUserId: userId, orgId }),
+  const who = { actorUserId: userId, orgId };
+  const [review, tasks, overdue, latest, paymentFlags, frontDesk, flaggedDocs, aiCheck, samples] = await Promise.all([
+    approvalsForReview(who),
+    listTasks({ ...who, limit: 100 }),
+    findOverdue(who),
+    latestBriefing(who),
+    listFlaggedPaymentChanges(who),
+    listPendingFrontDeskBookings(who),
+    listFlaggedDocuments(who),
+    latestAiAnswersCheck(who),
+    justSetUp ? sampleOpportunities(who, staff) : Promise.resolve([]),
   ]);
   const open = review.open;
   const briefing = latest?.run.output as Briefing | undefined;
+  const sections = briefing?.sections.filter((s) => s.status === "ok" && s.count > 0).slice(0, 4) ?? [];
   const attention = tasks.filter((t) => t.state === "ESCALATED" || t.state === "FAILED").slice(0, 5);
-  const waitingTasks = tasks.filter((t) => t.state === "WAITING_FOR_APPROVAL").slice(0, 3);
   const overdueTotal = overdue.reduce((s, i) => s + i.amountDueCents, 0);
+  // The briefing knows the business's time zone; fall back to the server's.
+  const today = new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", timeZone: briefing?.timezone });
+  const alsoToday = (frontDesk.length > 0 ? 1 : 0) + (flaggedDocs.length > 0 ? 1 : 0) + (overdue.length > 0 ? 1 : 0) + (attention.length > 0 ? 1 : 0) + (aiCheck ? 1 : 0);
 
   return (
-    <div className="flex flex-col gap-10">
-      <PageTitle sub="Your morning picture: what needs a decision, what’s overdue, and what to do next.">
-        Today
-      </PageTitle>
+    <div className="mx-auto flex max-w-3xl flex-col">
+      <header className="mb-10">
+        <p className="text-muted">{today}</p>
+        <h1 className="mt-1 text-display font-semibold">Today</h1>
+        <p className="mt-2 text-lg text-muted">Here&apos;s what Scout has for {org.name}.</p>
+      </header>
 
-      <OnboardingChecklist orgId={orgId} userId={userId} />
+      {staff && <OnboardingChecklist orgId={orgId} userId={userId} />}
 
-      {paymentFlags.length > 0 && (
-        <Card
-          title={
-            <span className="flex flex-wrap items-center gap-2">
-              Bank detail changes <Badge tone="warn">{paymentFlags.length}</Badge>
-            </span>
-          }
-        >
-          <p className="mb-4 text-base text-muted">
-            Someone asked to change how money is paid. Call the number already on file, record the call-back, then approve. Never use a number from the request.
-          </p>
-          <ul className="divide-y divide-line">
-            {paymentFlags.map((c) => (
-              <li key={c.id} className="flex flex-col gap-3 py-4 sm:flex-row sm:items-start sm:justify-between">
-                <div className="space-y-1">
-                  <p className="text-lg font-medium">{c.label}</p>
-                  <p className="text-base text-muted">
-                    {c.kind} · account ···{c.accountLast4} · via {c.source}
-                    {c.callbackVerifiedAt ? " · call-back recorded" : " · call-back needed"}
-                  </p>
+      {staff ? (
+        <div className="mb-14">
+          <Composer orgId={orgId} suggestions={SUGGESTIONS} />
+        </div>
+      ) : (
+        <p className="mb-12 text-muted">You have view-only access, so you can read but not ask Scout to act.</p>
+      )}
+
+      <Transcript label="Today with Scout">
+        {briefing ? (
+          <ScoutMessage id="briefing" at={briefing.generatedAt} title={sections.length ? "Good morning. Here's your briefing." : "Good morning. Your briefing is in, and everything's clear."}>
+            {sections.length > 0 && (
+              <Panel>
+                <div className="flex flex-col gap-7">
+                  {sections.map((s) => (
+                    <section key={s.key}>
+                      <h2 className="mb-2.5 font-semibold">
+                        {s.title} <span className="font-normal text-muted">({s.count})</span>
+                      </h2>
+                      <ul className="flex flex-col gap-2">
+                        {s.items.slice(0, 3).map((it, i) => (
+                          <li key={i} className="leading-relaxed">
+                            {it.href ? <a className={inlineLink} href={it.href}>{it.label}</a> : it.label}
+                            {it.detail && <span className="text-muted"> · {it.detail}</span>}
+                          </li>
+                        ))}
+                      </ul>
+                    </section>
+                  ))}
                 </div>
-                <div className="flex w-full flex-col gap-3 sm:max-w-sm sm:items-stretch">
-                  {!c.callbackVerifiedAt && staff && (
-                    <PaymentCallbackForm orgId={orgId} changeId={c.id} onFilePhoneHint={c.onFilePhoneHint} />
-                  )}
-                  {c.approvalRequestId && (
-                    <a className="text-base font-medium text-accent underline" href={`/orgs/${orgId}/approvals`}>
-                      Open approvals
-                    </a>
-                  )}
-                </div>
-              </li>
-            ))}
-          </ul>
-        </Card>
-      )}
-
-      {frontDesk.length > 0 && (
-        <Card
-          title={
-            <span className="flex flex-wrap items-center gap-2">
-              Front desk bookings <Badge tone="warn">{frontDesk.length}</Badge>
-            </span>
-          }
-          actions={<a className="text-base text-muted underline" href={`/orgs/${orgId}/approvals`}>Review in Approvals</a>}
-        >
-          <p className="mb-4 text-base text-muted">
-            Outside booking requests (people and AI agents) always need your OK before they are confirmed.
-          </p>
-          <ul className="divide-y divide-line">
-            {frontDesk.slice(0, 5).map((b) => (
-              <li key={b.id} className="flex flex-col gap-1 py-4">
-                <p className="text-lg font-medium">{b.customerName}</p>
-                <p className="text-base text-muted">
-                  {b.requesterKind === "ai_agent" ? `AI agent · ${b.agentName ?? "unnamed"}` : "Person"}
-                  {b.agentProvider ? ` · ${b.agentProvider}` : ""} · waiting for OK
-                </p>
-              </li>
-            ))}
-          </ul>
-        </Card>
-      )}
-
-      {flaggedDocs.length > 0 && (
-        <Card
-          title={
-            <span className="flex flex-wrap items-center gap-2">
-              Flagged invoices &amp; estimates <Badge tone="warn">{flaggedDocs.length}</Badge>
-            </span>
-          }
-          actions={<a className="text-base text-muted underline" href={`/orgs/${orgId}/approvals`}>Open approvals</a>}
-        >
-          <p className="mb-4 text-base text-muted">
-            Risk checks found problems. Nothing is paid automatically — review each one.
-          </p>
-          <ul className="divide-y divide-line">
-            {flaggedDocs.slice(0, 5).map((d) => (
-              <li key={d.id} className="py-4">
-                <p className="text-lg font-medium">{d.vendorName} · {d.kind}</p>
-                <p className="text-base text-muted">
-                  {formatRiskFlags((d.riskFlags as string[]) ?? []) || "review"} · score {d.riskScore}
-                </p>
-              </li>
-            ))}
-          </ul>
-        </Card>
-      )}
-
-      {aiCheck && (
-        <Card title="AI answers check">
-          <p className="text-lg font-medium">
-            {aiCheck.recommended ? "Recommended" : "Not clearly recommended"} for {aiCheck.trade} in {aiCheck.zip}
-          </p>
-          <p className="mt-1 text-base text-muted">
-            Score {aiCheck.score}/100 · {aiCheck.period}
-            {aiCheck.trendDelta != null ? ` · trend ${aiCheck.trendDelta >= 0 ? "+" : ""}${aiCheck.trendDelta}` : ""}
-          </p>
-          <ul className="mt-3 list-disc space-y-1 pl-5 text-base text-muted">
-            {(aiCheck.suggestions as string[]).slice(0, 3).map((s) => (
-              <li key={s}>{s}</li>
-            ))}
-          </ul>
-        </Card>
-      )}
-
-      {open.length > 0 && (
-        <Card
-          title={
-            <span className="flex flex-wrap items-center gap-2">
-              Needs your OK <Badge tone="warn">{open.length}</Badge>
-            </span>
-          }
-          actions={<a className="text-base text-muted underline" href={`/orgs/${orgId}/approvals`}>See all</a>}
-        >
-          <ul>
-            {open.slice(0, 5).map((item) => (
-              <ApproveStrip key={item.approval.id} item={item} orgId={orgId} />
-            ))}
-          </ul>
-        </Card>
-      )}
-
-      {open.length === 0 && (
-        <Card title="Needs your OK">
-          <Empty action={<a className="font-medium text-accent underline" href={`/orgs/${orgId}/approvals`}>Open approvals</a>}>
-            Nothing waiting. When an agent wants to send, charge, or change something important, it shows up here.
-          </Empty>
-        </Card>
-      )}
-
-      <div className="grid gap-4 sm:grid-cols-3">
-        <a href={`/orgs/${orgId}/finance`} className="rounded-[var(--radius-card)] border border-line bg-surface p-6 shadow-sm hover:border-accent/40">
-          <div className="text-3xl font-semibold tabular-nums">{overdue.length}</div>
-          <div className="mt-1 text-base text-muted">Overdue invoices · {money(overdueTotal)}</div>
-          {staff && overdue.length > 0 && <div className="mt-3 text-base font-medium text-accent">Review &amp; remind →</div>}
-        </a>
-        <a href={`/orgs/${orgId}/tasks`} className="rounded-[var(--radius-card)] border border-line bg-surface p-6 shadow-sm hover:border-accent/40">
-          <div className="text-3xl font-semibold tabular-nums">{waitingTasks.length || tasks.filter((t) => !["COMPLETED", "FAILED"].includes(t.state)).length}</div>
-          <div className="mt-1 text-base text-muted">{waitingTasks.length ? "Tasks waiting for your OK" : "Tasks in progress"}</div>
-        </a>
-        <a href={`/orgs/${orgId}/routines/briefing`} className="rounded-[var(--radius-card)] border border-line bg-surface p-6 shadow-sm hover:border-accent/40">
-          <div className="text-3xl font-semibold">{briefing ? "Ready" : "—"}</div>
-          <div className="mt-1 text-base text-muted">
-            {briefing ? `Briefing · ${fmtIn(briefing.generatedAt, briefing.timezone)}` : "No morning briefing yet"}
-          </div>
-          <div className="mt-3 text-base font-medium text-accent">{briefing ? "Open briefing →" : "Set up a routine →"}</div>
-        </a>
-      </div>
-
-      <Card
-        title="Morning briefing"
-        actions={
-          <a className="text-base text-muted underline" href={`/orgs/${orgId}/routines/briefing`}>
-            Full view
-          </a>
-        }
-      >
-        {!briefing ? (
-          <Empty
-            action={
-              <a className="rounded-lg bg-accent px-5 py-2.5 text-base font-medium text-on-accent" href={`/orgs/${orgId}/routines`}>
-                Set up Morning Briefing
-              </a>
-            }
-          >
-            Get a daily in-app summary of storm leads, unanswered leads, overdue invoices, and approvals. Nothing is emailed.
-          </Empty>
+                <a href={`/orgs/${orgId}/routines/briefing`} className={`mt-6 ${link}`}>Open the full briefing</a>
+              </Panel>
+            )}
+          </ScoutMessage>
         ) : (
-          <div className="flex flex-col gap-6">
-            {briefing.sections
-              .filter((s) => s.status === "ok" && s.count > 0)
-              .slice(0, 4)
-              .map((s) => (
-                <div key={s.key}>
-                  <h3 className="mb-2 text-base font-semibold">
-                    {s.title} <span className="font-normal text-muted">({s.count})</span>
-                  </h3>
-                  <ul className="space-y-2 text-base">
-                    {s.items.slice(0, 3).map((it, i) => (
-                      <li key={i}>
-                        {it.href ? <a className="underline" href={it.href}>{it.label}</a> : it.label}
-                        {it.detail && <span className="text-muted"> · {it.detail}</span>}
+          <ScoutMessage id="briefing" title="Each morning I can put a short briefing here: storm leads, unanswered leads, overdue invoices and approvals. Nothing is emailed.">
+            {staff && (
+              <a href={`/orgs/${orgId}/routines`} className="inline-flex min-h-11 items-center rounded-full border border-line bg-surface px-5 font-medium transition-colors duration-150 hover:bg-soft">Set up the morning briefing</a>
+            )}
+          </ScoutMessage>
+        )}
+
+        {justSetUp && (
+          <ScoutMessage id="first-win" title={samples.length ? `You're set up. Here ${samples.length === 1 ? "is a sample opportunity" : `are ${samples.length} sample opportunities`} to try first.` : "You're set up. Your briefing will be here every morning."}>
+            {samples.length > 0 && (
+              <Panel>
+                <ul aria-label="Sample opportunities" className="flex flex-col gap-3">
+                  {samples.map((o) => (
+                    <li key={o.id} className="flex flex-wrap items-center justify-between gap-3">
+                      <a className={`${inlineLink} font-medium`} href={`/orgs/${orgId}/scout/opportunities/${o.id}`}>{o.prospect.name}</a>
+                      <span className="text-small text-muted">{o.prospect.city ? `${o.prospect.city} · ` : ""}score {o.score}</span>
+                    </li>
+                  ))}
+                </ul>
+                <p className="mt-4 text-small text-muted">These are invented DEMO records so you can see how Scout works.</p>
+                <div className="mt-3">
+                  <ActionButton path="onboarding.clearDemo" input={{ orgId }} label="Remove sample data" confirm="Remove every DEMO sample record?" />
+                </div>
+              </Panel>
+            )}
+          </ScoutMessage>
+        )}
+
+        {open.length > 0 ? (
+          <ScoutMessage title={open.length === 1 ? "One thing needs your OK before it happens." : `${open.length} things need your OK before they happen.`}>
+            <div className="flex flex-col gap-5">
+              {open.slice(0, APPROVALS_UP_FRONT).map((item) => (
+                <ApprovalCard key={item.approval.id} item={item} orgId={orgId} />
+              ))}
+              {open.length > APPROVALS_UP_FRONT && (
+                <details className="group">
+                  <summary className="inline-flex min-h-11 cursor-pointer list-none items-center gap-2 rounded-full border border-line bg-surface px-5 font-medium transition-colors duration-150 hover:bg-soft [&::-webkit-details-marker]:hidden">
+                    <span className="group-open:hidden">Show {open.length - APPROVALS_UP_FRONT} more</span>
+                    <span className="hidden group-open:inline">Show fewer</span>
+                  </summary>
+                  <div className="mt-5 flex flex-col gap-5">
+                    {open.slice(APPROVALS_UP_FRONT).map((item) => (
+                      <ApprovalCard key={item.approval.id} item={item} orgId={orgId} />
+                    ))}
+                  </div>
+                </details>
+              )}
+            </div>
+          </ScoutMessage>
+        ) : (
+          <ScoutMessage title="Nothing needs your OK right now. When a teammate wants to send, charge or change something important, I'll ask you here first." />
+        )}
+
+        {paymentFlags.length > 0 && (
+          <ScoutMessage title="Someone asked to change how a payment is made. Call the number already on file, record the call-back, then approve. Never use a number from the request.">
+            <Panel>
+              <ul className="flex flex-col divide-y divide-line">
+                {paymentFlags.map((c) => (
+                  <li key={c.id} className="flex flex-col gap-3 py-5 first:pt-0 last:pb-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="font-medium">{c.label}</span>
+                      <Badge tone="warn">{c.callbackVerifiedAt ? "call-back recorded" : "call-back needed"}</Badge>
+                    </div>
+                    <p className="text-muted">{c.kind}, account ending {c.accountLast4}, via {c.source}</p>
+                    {!c.callbackVerifiedAt && staff && <PaymentCallbackForm orgId={orgId} changeId={c.id} onFilePhoneHint={c.onFilePhoneHint} />}
+                  </li>
+                ))}
+              </ul>
+            </Panel>
+          </ScoutMessage>
+        )}
+
+        {alsoToday > 0 && (
+          <ScoutMessage title="Also today, when you have a minute:">
+            <ul aria-label="Also today" className="flex flex-col gap-3">
+              {frontDesk.length > 0 && (
+                <Update summary={`${frontDesk.length === 1 ? "A booking request" : `${frontDesk.length} booking requests`} at your front desk`}>
+                  <ul className="flex flex-col gap-2">
+                    {frontDesk.slice(0, 5).map((b) => (
+                      <li key={b.id} className="flex flex-wrap items-center gap-2">
+                        <span className="font-medium">{b.customerName}</span>
+                        {b.requesterKind === "ai_agent" && <Badge>AI assistant{b.agentName ? `: ${b.agentName}` : ""}</Badge>}
                       </li>
                     ))}
                   </ul>
-                </div>
-              ))}
-            {briefing.sections.every((s) => s.status !== "ok" || s.count === 0) && (
-              <p className="text-base text-muted">All clear in the latest briefing.</p>
-            )}
-          </div>
+                  <p className="mt-3 text-muted">Nothing is confirmed until you OK it.</p>
+                  <a href={`/orgs/${orgId}/settings/front-desk`} className={`mt-2 ${link}`}>Open front desk</a>
+                </Update>
+              )}
+              {overdue.length > 0 && (
+                <Update summary={`${overdue.length === 1 ? "One invoice is" : `${overdue.length} invoices are`} overdue (${money(overdueTotal)})`}>
+                  <a href={`/orgs/${orgId}/finance`} className={link}>Review invoices</a>
+                </Update>
+              )}
+              {flaggedDocs.length > 0 && (
+                <Update summary={`${flaggedDocs.length === 1 ? "An invoice or estimate" : `${flaggedDocs.length} invoices or estimates`} flagged for a closer look`}>
+                  <ul className="flex flex-col gap-2">
+                    {flaggedDocs.slice(0, 5).map((d) => (
+                      <li key={d.id}>
+                        <span className="font-medium">{d.vendorName}</span> <span className="text-muted">({d.kind}): {formatRiskFlags((d.riskFlags as string[]) ?? []) || "review"}, score {d.riskScore}</span>
+                      </li>
+                    ))}
+                  </ul>
+                  <p className="mt-3 text-muted">Nothing is paid automatically.</p>
+                </Update>
+              )}
+              {attention.length > 0 && (
+                <Update summary={`${attention.length === 1 ? "A job" : `${attention.length} jobs`} couldn't finish`}>
+                  <ul className="flex flex-col gap-3">
+                    {attention.map((t) => (
+                      <li key={t.id} className="flex flex-wrap items-center justify-between gap-3">
+                        <a className={`${inlineLink} font-medium`} href={`/orgs/${orgId}/tasks/${t.id}`}>{taskLabel(t)}</a>
+                        <span className="flex items-center gap-2 text-sm text-muted">
+                          <StateBadge state={t.state} />
+                          <When date={t.updatedAt} />
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </Update>
+              )}
+              {aiCheck && (
+                <Update summary={`AI assistants ${aiCheck.recommended ? "recommend you" : "don't clearly recommend you yet"} (${aiCheck.score}/100)`}>
+                  <p className="text-muted">{aiCheck.trade} in {aiCheck.zip}, {aiCheck.period}.</p>
+                  {(aiCheck.suggestions as string[]).length > 0 && (
+                    <ul className="mt-3 list-disc space-y-1.5 pl-5">
+                      {(aiCheck.suggestions as string[]).slice(0, 3).map((s) => (
+                        <li key={s}>{s}</li>
+                      ))}
+                    </ul>
+                  )}
+                </Update>
+              )}
+            </ul>
+          </ScoutMessage>
         )}
-      </Card>
-
-      {attention.length > 0 && (
-        <Card title="Needs a look">
-          <ul className="divide-y divide-line">
-            {attention.map((t) => (
-              <li key={t.id} className="flex flex-wrap items-center justify-between gap-3 py-3">
-                <a className="text-base font-medium underline" href={`/orgs/${orgId}/tasks/${t.id}`}>{taskLabel(t)}</a>
-                <span className="flex items-center gap-2">
-                  <StateBadge state={t.state} />
-                  <When date={t.updatedAt} />
-                </span>
-              </li>
-            ))}
-          </ul>
-        </Card>
-      )}
-
-      {/* Quiet usage link — not a competing KPI wall */}
-      <p className="text-sm text-muted">
-        <a className="underline" href={`/orgs/${orgId}/billing`}>Plan &amp; AI usage</a>
-      </p>
+      </Transcript>
     </div>
   );
 }

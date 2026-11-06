@@ -28,7 +28,7 @@ export default async function BookPage({ params }: { params: Promise<{ token: st
   return (
     <div className="mx-auto flex max-w-xl flex-col gap-6">
       <div>
-        <h1 className="text-2xl font-semibold">Book a time with {data.channel.displayName}</h1>
+        <h1 className="text-display font-semibold">Book a time with {data.channel.displayName}</h1>
         <p className="mt-1 text-sm text-muted">Times shown in {tz.replace(/_/g, " ")}. Someone at {data.channel.displayName} will confirm your request.</p>
       </div>
       {days.size === 0 ? (

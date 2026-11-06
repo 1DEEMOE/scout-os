@@ -104,15 +104,16 @@ test.describe.serial("approval center", () => {
 test.describe.serial("chat and the agent switch", () => {
   test("starting a conversation opens it; a message gets a labelled MOCK reply from the lead bot", async ({ page }) => {
     await signIn(page, "owner@e2e.test");
+    // Chat-first: the first message starts the conversation and names it.
     await page.goto(`/orgs/${seed.orgId}/chat`);
-    await page.getByPlaceholder("e.g. This week's follow-ups").fill("E2E check-in");
-    await page.getByRole("button", { name: "Start" }).click();
+    await page.getByLabel("Ask Scout to do something").fill("E2E check-in");
+    await page.getByRole("button", { name: "Send" }).click();
     await expect(page).toHaveURL(/\/chat\/[0-9a-f-]{36}$/);
     await expect(page.getByRole("heading", { level: 1, name: "E2E check-in" })).toBeVisible();
-    await page.getByPlaceholder(/Chase overdue/).fill("hello there");
-    await page.getByRole("button", { name: "Send" }).click();
-    await expect(page.getByText("You", { exact: true })).toBeVisible();
-    await expect(page.getByText(/^MOCK lead bot: I couldn't tell/)).toBeVisible();
+    await page.getByLabel("Message Scout").fill("hello there");
+    await page.getByLabel("Message Scout").press("Enter");
+    await expect(page.getByText("You", { exact: true }).first()).toBeVisible();
+    await expect(page.getByText(/^MOCK lead bot: I couldn't tell/).first()).toBeVisible();
   });
 
   test("an owner pauses all agents: banner everywhere and the lead bot hands nothing off; then resumes", async ({ page }) => {

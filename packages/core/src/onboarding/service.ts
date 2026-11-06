@@ -464,7 +464,7 @@ export async function skipInvite(input: Actor): Promise<OnboardingState> {
   return getOnboardingState(input);
 }
 
-async function ensureMorningBriefing(input: Actor & { timezone: string }) {
+async function ensureMorningBriefing(input: Actor & { timezone: string; hour?: number }) {
   const existing = await listRoutines(input);
   const found = existing.find((r) => r.kind === "morning_briefing");
   if (found) return found;
@@ -474,7 +474,7 @@ async function ensureMorningBriefing(input: Actor & { timezone: string }) {
     orgId: input.orgId,
     kind: "morning_briefing",
     name: "Morning Briefing",
-    hour: preset.morningBriefingHourLocal,
+    hour: input.hour ?? preset.morningBriefingHourLocal,
     minute: preset.morningBriefingMinuteLocal,
     daysOfWeek: [0, 1, 2, 3, 4, 5, 6],
     timezone: input.timezone,
@@ -485,12 +485,12 @@ async function ensureMorningBriefing(input: Actor & { timezone: string }) {
  * Finishes the wizard: ensures Morning Briefing routine, runs it once inline
  * (no external send), marks onboarding complete. Returns briefing run id.
  */
-export async function finishOnboarding(input: Actor): Promise<{ briefingRunId: string | null; routineId: string }> {
+export async function finishOnboarding(input: Actor & { briefingHour?: number }): Promise<{ briefingRunId: string | null; routineId: string }> {
   const state = await getOnboardingState(input);
   if (!state.industry) throw new AppError("CONFLICT", "Pick an industry first");
   if (!state.timezone) throw new AppError("CONFLICT", "Save business basics (including time zone) first");
 
-  const routine = await ensureMorningBriefing({ ...input, timezone: state.timezone });
+  const routine = await ensureMorningBriefing({ actorUserId: input.actorUserId, orgId: input.orgId, timezone: state.timezone, ...(input.briefingHour !== undefined ? { hour: input.briefingHour } : {}) });
   const clientRef = randomUUID().replace(/-/g, "");
   const outcome = await executeRoutineRun({
     tenantId: input.orgId,
