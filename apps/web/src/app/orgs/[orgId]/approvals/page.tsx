@@ -1,9 +1,12 @@
 import { approvalsForReview, getEngine, type ApprovalForReview } from "@wos/core";
 import { orgContext } from "@/server/org-context";
 import { ActionButton } from "../../../actions";
+import { fieldList } from "../../../field-labels";
 import { Badge, Card, Empty, MockBadge, NeedOkBadge, PageTitle, TierBadge, When } from "../../../ui";
 
 export const dynamic = "force-dynamic";
+
+const capitalize = (t: string) => t.charAt(0).toUpperCase() + t.slice(1);
 
 const STATUS_TONE: Record<string, "muted" | "accent" | "danger" | "warn"> = { consumed: "accent", approved: "warn", rejected: "danger", expired: "muted" };
 
@@ -41,7 +44,7 @@ function OpenCard({ item, orgId, mockTool }: { item: ApprovalForReview; orgId: s
               {item.fromChat && (
                 <>
                   {" "}
-                  via chat in <a className="underline" href={`/orgs/${orgId}/chat/${item.fromChat.threadId}`}>{item.fromChat.title}</a>
+                  via chat in <a className="inline-flex min-h-6 items-center underline underline-offset-4" href={`/orgs/${orgId}/chat/${item.fromChat.threadId}`}>{item.fromChat.title}</a>
                 </>
               )}
             </span>
@@ -50,9 +53,8 @@ function OpenCard({ item, orgId, mockTool }: { item: ApprovalForReview; orgId: s
 
         {item.externalDataFields.length > 0 && (
           <p role="note" className="rounded-xl border border-warn/40 bg-warn/10 px-4 py-3 text-base">
-            <strong>Check the address.</strong> {item.externalDataFields.join(", ")}{" "}
-            {item.externalDataFields.length === 1 ? "was" : "were"} copied from an email or chat message, which anyone can write. That&apos;s why this
-            needs your OK even though the action itself is lower risk.
+            <strong>Check the details.</strong> {capitalize(fieldList(item.externalDataFields))}{" "}
+            {item.externalDataFields.length === 1 ? "was" : "were"} copied from an email or chat message, which anyone can write. That&apos;s why this needs your OK even though the action itself is lower risk.
           </p>
         )}
 
@@ -93,7 +95,7 @@ function OpenCard({ item, orgId, mockTool }: { item: ApprovalForReview; orgId: s
               <span className="text-muted">Expires <When date={a.expiresAt} /></span>
             </div>
             <p>
-              Task: <a className="underline" href={`/orgs/${orgId}/tasks/${item.taskId}`}>{item.taskTitle}</a>
+              Task: <a className="inline-flex min-h-6 items-center underline underline-offset-4" href={`/orgs/${orgId}/tasks/${item.taskId}`}>{item.taskTitle}</a>
             </p>
             {item.decidedByName && a.status === "awaiting_confirmation" && (
               <p>First approval: {item.decidedByName} · <When date={a.decidedAt} /></p>
@@ -124,7 +126,7 @@ export default async function ApprovalsPage({ params }: { params: Promise<{ orgI
         Needs your OK {open.length > 0 && <Badge tone="warn">{open.length} waiting</Badge>}
       </PageTitle>
       {open.length === 0 && (
-        <Empty action={<a className="font-medium text-accent underline" href={`/orgs/${orgId}`}>Back to Today</a>}>
+        <Empty action={<a className="inline-flex min-h-11 items-center font-medium text-accent underline" href={`/orgs/${orgId}`}>Back to Today</a>}>
           Nothing is waiting. You&apos;re clear.
         </Empty>
       )}
