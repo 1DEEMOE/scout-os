@@ -53,11 +53,10 @@ test.describe("chat-first Scout OS", () => {
     await expect(card.getByText(/Needs your OK|Needs two people to OK/).first()).toBeVisible();
     await card.getByText("Exact action and expiry").click();
     await expect(card.getByText("Risk level")).toBeVisible();
-    // The sidebar is quiet and complete.
+    // The sidebar is calm: five primary destinations; the rest waits behind "More".
     const nav = page.getByRole("navigation", { name: "Organization" });
-    for (const name of ["Today", "Conversations", "Inbox", "Customers & deals", "Jobs", "Invoices", "Team & connections", "Front desk"]) {
-      await expect(nav.getByRole("link", { name, exact: true })).toBeVisible();
-    }
+    await expect(nav.getByRole("link")).toHaveCount(5);
+    for (const name of ["Today", "Conversations", "Leads", "Jobs"]) await expect(nav.getByRole("link", { name, exact: true })).toBeVisible();
     // The count is part of the link's accessible name, not just a coloured dot.
     await expect(nav.getByRole("link", { name: /^Needs your OK\s*,\s*\d+ waiting$/ })).toBeVisible();
     await page.screenshot({ path: path.join(shots, "today-desktop-light.png") });
@@ -74,6 +73,116 @@ test.describe("chat-first Scout OS", () => {
     await expect(convo.getByText("MOCK").first()).toBeVisible(); // mock replies stay labelled
     await page.screenshot({ path: path.join(shots, "thread-desktop-light.png") });
     expect(errors).toEqual([]);
+  });
+
+  test("sidebar: five calm items, everything else behind More (remembered), Settings in the footer", async ({ page }) => {
+    test.setTimeout(90_000);
+    await page.setViewportSize({ width: 1366, height: 900 });
+    await signIn(page);
+    await page.goto(base());
+    const nav = page.getByRole("navigation", { name: "Organization" });
+    const more = nav.getByRole("button", { name: "More" });
+    await expect(more).toHaveAttribute("aria-expanded", "false");
+    await expect(nav.getByRole("link", { name: "Invoices" })).toHaveCount(0);
+    // Breathing room: primary items are at least 44px tall and spaced apart.
+    const boxes = await nav.getByRole("link").evaluateAll((els) => els.map((e) => e.getBoundingClientRect()).map((r) => ({ h: r.height, top: r.top, bottom: r.bottom })));
+    for (const b of boxes) expect(b.h).toBeGreaterThanOrEqual(44);
+    for (let i = 1; i < boxes.length; i++) expect(boxes[i]!.top - boxes[i - 1]!.bottom).toBeGreaterThanOrEqual(2);
+    await more.click();
+    await expect(more).toHaveAttribute("aria-expanded", "true");
+    for (const name of ["Customers & deals", "Invoices", "Front desk", "Plan & usage", "Guided setup"]) await expect(nav.getByRole("link", { name, exact: true })).toBeVisible();
+    await page.screenshot({ path: path.join(shots, "sidebar-more-open.png") });
+    await page.reload();
+    await expect(nav.getByRole("button", { name: "More" })).toHaveAttribute("aria-expanded", "true"); // remembered
+    await nav.getByRole("button", { name: "More" }).click();
+    await page.reload();
+    await expect(nav.getByRole("button", { name: "More" })).toHaveAttribute("aria-expanded", "false");
+    // On a page that lives under More, it opens itself so you can see where you are.
+    await page.goto(base() + "/billing");
+    await expect(nav.getByRole("link", { name: "Plan & usage" })).toHaveAttribute("aria-current", "page");
+    // Settings and sign-out sit in the footer, with comfortable targets.
+    const settings = page.getByRole("link", { name: "Settings", exact: true }).first();
+    await expect(settings).toBeVisible();
+    const signOut = page.getByRole("button", { name: "Sign out" });
+    expect((await signOut.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+  });
+
+  test("Today leads with a generated morning briefing; setup is a slim card you can hide", async ({ page }) => {
+    test.setTimeout(90_000);
+    await page.setViewportSize({ width: 1366, height: 900 });
+    await signIn(page);
+    await page.goto(`/orgs/${seed.scoutOrgId}`);
+    const transcript = page.getByRole("list", { name: "Today with Scout" });
+    const first = transcript.locator(":scope > li").first();
+    await expect(first).toHaveAttribute("id", "briefing");
+    await expect(first).toContainText("Here's your briefing.");
+    await expect(first.getByRole("heading", { name: /Storm signals and top prospects \(\d+\)/ })).toBeVisible();
+    await expect(first.getByRole("link", { name: "Open the full briefing" })).toBeVisible();
+    // Setup is a slim card above the composer, not the first message.
+    const setup = page.getByRole("region", { name: "Setup progress" });
+    await expect(setup).toBeVisible();
+    expect((await setup.boundingBox())!.height).toBeLessThanOrEqual(140);
+    await expect(transcript.getByText(/finish setting up/i)).toHaveCount(0);
+    await page.screenshot({ path: path.join(shots, "today-briefing-desktop.png") });
+    await setup.getByRole("button", { name: "Hide" }).click();
+    await expect(setup).toHaveCount(0);
+    await page.reload();
+    await expect(page.getByRole("heading", { level: 1, name: "Today" })).toBeVisible();
+    await expect(page.getByRole("region", { name: "Setup progress" })).toHaveCount(0); // stays hidden in this browser
+  });
+
+  test("phone Today: clear priority, secondary updates collapsed, generous spacing, comfortable targets", async ({ page }) => {
+    test.setTimeout(90_000);
+    await page.setViewportSize({ width: 390, height: 844 });
+    await signIn(page);
+    await page.goto(base());
+    const transcript = page.getByRole("list", { name: "Today with Scout" });
+    // Briefing first; at most two approval cards before "Show N more".
+    await expect(transcript.locator(":scope > li").first()).toHaveAttribute("id", "briefing");
+    const shown = transcript.getByRole("article", { name: /^Approval:/ });
+    const visible = await shown.evaluateAll((els) => els.filter((e) => e.getClientRects().length > 0 && (e as HTMLElement).offsetParent !== null).length);
+    expect(visible).toBeLessThanOrEqual(2);
+    const total = await page.getByRole("navigation", { name: "Primary" }).getByRole("link", { name: /Approvals/ }).textContent();
+    if (await shown.count() > 2) await expect(transcript.getByText(/^Show \d+ more$/)).toBeVisible();
+    expect(total).toBeTruthy();
+    // Secondary updates are collapsed one-liners.
+    const also = page.getByRole("list", { name: "Also today" });
+    if (await also.count()) {
+      const opened = await also.locator("details[open]").count();
+      expect(opened).toBe(0);
+    }
+    // Generous rhythm between Scout's messages.
+    const gap = await transcript.evaluate((el) => parseFloat(getComputedStyle(el).rowGap));
+    expect(gap).toBeGreaterThanOrEqual(32);
+    // Primary actions on the phone are at least 44px tall.
+    for (const loc of [page.getByRole("button", { name: "Send" }), page.getByRole("button", { name: "Menu" }), ...(await transcript.getByRole("button", { name: /^OK/ }).all())]) {
+      if (await loc.isVisible()) expect((await loc.boundingBox())!.height, await loc.textContent() ?? "").toBeGreaterThanOrEqual(44);
+    }
+    await page.screenshot({ path: path.join(shots, "today-phone-priority.png"), fullPage: true });
+  });
+
+  test("every visible target on key screens is at least 24 by 24 px (WCAG 2.5.8)", async ({ page }) => {
+    test.setTimeout(120_000);
+    await signIn(page);
+    const small: string[] = [];
+    for (const vp of [{ width: 1366, height: 900 }, { width: 390, height: 844 }]) {
+      await page.setViewportSize(vp);
+      for (const suffix of ["", "/approvals", "/chat", "/settings/front-desk"]) {
+        await page.goto(base() + suffix);
+        await page.waitForLoadState("networkidle");
+        // Open every collapsed part so its contents are measured too.
+        await page.evaluate(() => document.querySelectorAll("details").forEach((d) => d.setAttribute("open", "")));
+        const found = await page.evaluate(() =>
+          [...document.querySelectorAll<HTMLElement>("a[href], button, summary, input:not([type=hidden]), select, textarea")]
+            .filter((el) => el.getClientRects().length > 0 && getComputedStyle(el).visibility !== "hidden" && !el.closest(".sr-only") && el.offsetParent !== null)
+            .map((el) => ({ el, r: el.getBoundingClientRect() }))
+            .filter(({ el, r }) => (r.height < 24 || r.width < 24) && !(el instanceof HTMLInputElement && (el.type === "checkbox" || el.type === "radio") && r.height >= 16))
+            .map(({ el, r }) => `${el.tagName.toLowerCase()} "${(el.textContent || el.getAttribute("aria-label") || "").trim().slice(0, 40)}" ${Math.round(r.width)}x${Math.round(r.height)}`),
+        );
+        small.push(...found.map((f) => `${vp.width}px ${suffix || "/"}: ${f}`));
+      }
+    }
+    expect(small).toEqual([]);
   });
 
   test("light and dark themes: switchable, remembered, no flash, AA in both (axe)", async ({ page }) => {

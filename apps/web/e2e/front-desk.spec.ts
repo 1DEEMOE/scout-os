@@ -80,6 +80,11 @@ test("front desk: owner creates a link and times, a customer requests one, it wa
   await expect(page.getByText("1 of 1 requested")).toBeVisible();
   await page.goto(`/orgs/${seed.orgId}/approvals`);
   await expect(page.getByText(/Maya Chen/).first()).toBeVisible();
+  // Warnings name fields in plain English, never internal argument names.
+  await expect(page.getByText(/the customer's email, the customer's name and the notes/i).first()).toBeVisible();
+  await expect(page.locator("main")).not.toContainText(/customerEmail|customerName/);
+  await page.goto(`/orgs/${seed.orgId}`);
+  await expect(page.locator("main")).not.toContainText(/customerEmail|customerName/);
 
   // Pausing turns the link off.
   await page.goto(`/orgs/${seed.orgId}/settings/front-desk`);
