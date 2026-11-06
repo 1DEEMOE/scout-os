@@ -2,6 +2,7 @@ import { mkdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Browser, type Page } from "@playwright/test";
+import { evidenceDir } from "./evidence-dir";
 
 /**
  * Sidebar v2: five calm items with icons, everything else behind More,
@@ -9,8 +10,7 @@ import { expect, test, type Browser, type Page } from "@playwright/test";
  * palette, and the workspace/profile footer. Keyboard and WCAG 2.2 AA.
  */
 const seed = JSON.parse(readFileSync(path.resolve(import.meta.dirname, ".seed.json"), "utf8")) as { orgId: string; scoutOrgId: string; password: string };
-const shots = path.resolve(import.meta.dirname, "../../../docs/plans/evidence/sidebar");
-mkdirSync(shots, { recursive: true });
+const shots = evidenceDir("sidebar");
 const states = path.resolve(import.meta.dirname, "../test-results");
 mkdirSync(states, { recursive: true });
 const base = (org = seed.orgId) => `/orgs/${org}`;

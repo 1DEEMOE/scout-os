@@ -1,9 +1,10 @@
-import { mkdirSync, readFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import path from "node:path";
 import { expect, test, type Page } from "@playwright/test";
+import { evidenceDir } from "./evidence-dir";
 
 const seed = JSON.parse(readFileSync(path.resolve(import.meta.dirname, ".seed.json"), "utf8")) as { orgId: string; password: string };
-const shots = path.resolve(import.meta.dirname, "../../../docs/plans/evidence/front-desk");
+const shots = evidenceDir("front-desk");
 
 async function signIn(page: Page, email: string) {
   // Sign-in is rate limited per IP: retry after the window.
@@ -24,7 +25,6 @@ async function signIn(page: Page, email: string) {
 
 test("front desk: owner creates a link and times, a customer requests one, it waits for approval", async ({ page, browser }) => {
   test.setTimeout(150_000);
-  mkdirSync(shots, { recursive: true });
   const errors: string[] = [];
   page.on("pageerror", (e) => errors.push(e.message));
   await signIn(page, "owner@e2e.test");

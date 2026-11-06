@@ -1,10 +1,11 @@
 import { mkdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { expect, test, type Page } from "@playwright/test";
+import { evidenceDir } from "./evidence-dir";
 
 // Independent verification pass: every nav page for each role, plus key flows.
 const seed = JSON.parse(readFileSync(path.resolve(import.meta.dirname, ".seed.json"), "utf8")) as { orgId: string; scoutOrgId: string; password: string };
-const shots = process.env.VERIFY_SHOTS ?? path.resolve(import.meta.dirname, "../../../shots");
+const shots = process.env.VERIFY_SHOTS ? path.resolve(path.resolve(import.meta.dirname, "../../.."), process.env.VERIFY_SHOTS) : evidenceDir("verify");
 const NAV = ["", "/scout", "/scout/signals", "/scout/contacts", "/scout/setup", "/routines", "/routines/briefing", "/chat", "/approvals", "/tasks", "/inbox", "/sales", "/finance", "/analytics", "/agents", "/audit", "/billing", "/settings"];
 
 async function signIn(page: Page, email: string, password = seed.password) {

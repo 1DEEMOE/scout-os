@@ -1,7 +1,8 @@
-import { mkdirSync, readFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import path from "node:path";
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Locator, type Page } from "@playwright/test";
+import { evidenceDir } from "./evidence-dir";
 
 /**
  * Plug and play for selling: the operator creates a client workspace and
@@ -9,8 +10,7 @@ import { expect, test, type Locator, type Page } from "@playwright/test";
  * sample opportunities. Timed end to end, with the client's clicks counted.
  */
 const seed = JSON.parse(readFileSync(path.resolve(import.meta.dirname, ".seed.json"), "utf8")) as { password: string };
-const shots = path.resolve(import.meta.dirname, "../../../docs/plans/evidence/plug-and-play");
-mkdirSync(shots, { recursive: true });
+const shots = evidenceDir("plug-and-play");
 
 const TEN_MINUTES = 10 * 60 * 1000;
 const MAX_CLICKS = 15;

@@ -17,7 +17,7 @@ Peachtree walkthrough fixes in this commit:
 - Claim-packet hashes wrap on a phone (no horizontal overflow at 390px).
 - Morning briefing shows homeowner names and plain source labels.
 
-A local SAMPLE walkthrough (Peachtree Roofing) lives outside this zip at `/workspace/scout-os/demo/` when built on the author's machine. Seed/walkthrough scripts are `apps/web/e2e/peachtree-seed.ts` and `peachtree-walkthrough.ts`.
+A local SAMPLE walkthrough (Peachtree Roofing) is written by `apps/web/e2e/peachtree-seed.ts` and `peachtree-walkthrough.ts`. Screenshots default to `apps/web/test-results/evidence/` (`WOS_EVIDENCE_DIR` or `DEMO_DIR` to put them somewhere else).
 
 ## Non-negotiable rules
 - Never loosen approval tiers; routines run only tier 0–1; anything from email/chat needs approval; tier-4 needs a different owner.
