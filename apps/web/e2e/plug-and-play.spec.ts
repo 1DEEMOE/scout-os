@@ -43,7 +43,7 @@ test("invite to first briefing: pack already chosen, under 10 minutes and at mos
 
   // 1. The operator creates the workspace and copies the link.
   const ops = await (await browser.newContext()).newPage();
-  await signIn(ops, "ops@e2e.test");
+  await signIn(ops, "mock-admin@e2e.test");
   await ops.goto("/admin/clients");
   await expect(ops.getByRole("heading", { level: 1, name: "New client workspace" })).toBeVisible();
   await ops.getByLabel("Business name").fill("Peachtree Roofing");

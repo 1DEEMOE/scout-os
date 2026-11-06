@@ -21,6 +21,7 @@ export default async function ClientWorkspacesPage() {
       <header>
         <p className="text-muted">Operator</p>
         <h1 className="mt-1 text-display font-semibold">New client workspace</h1>
+        <p className="mt-2 text-sm text-muted">Signed in as {user.name}. Only a configured platform operator can open this page.</p>
         <p className="mt-3 text-lg text-muted">
           Creates the workspace already named and set up for their trade, then gives you one link to send. They set a password and see their first briefing in a few minutes.
         </p>

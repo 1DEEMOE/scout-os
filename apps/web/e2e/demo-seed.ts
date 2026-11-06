@@ -9,13 +9,19 @@ import {
   loadScoutDemo, operatorSetPlan, scoutTools,
 } from "@wos/core";
 import { getAuth } from "../src/server/auth";
-import { resetDb } from "../../../packages/db/test/helpers";
+import { ownerQuery, resetDb } from "../../../packages/db/test/helpers";
 
 process.env.DATABASE_URL_OWNER = process.env.E2E_OWNER_DATABASE_URL ?? "postgres://wos_owner:owner_dev_pw@localhost:5432/wos_e2e";
 await resetDb();
 const auth = getAuth();
 const owner = (await auth.api.signUpEmail({ body: { name: "Dana Rivera", email: "owner@e2e.test", password: "e2e-password-12345" } })).user.id;
 await auth.api.signUpEmail({ body: { name: "Sam Lee", email: "sam@e2e.test", password: "e2e-password-12345" } });
+// MOCK platform operator for /admin/clients. Not a member of the demo business,
+// and only created when this process is explicitly in mock mode.
+if (process.env.WOS_MOCK_MODE === "1") {
+  await auth.api.signUpEmail({ body: { name: "MOCK Platform Admin", email: "mock-admin@e2e.test", password: "e2e-password-12345" } });
+  await ownerQuery("UPDATE users SET email_verified = true WHERE email = 'mock-admin@e2e.test'");
+}
 
 const mail = new FakeMailProvider();
 const crm = new FakeCrmProvider();
