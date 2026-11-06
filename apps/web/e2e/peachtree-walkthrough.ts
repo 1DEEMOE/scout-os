@@ -5,7 +5,7 @@
 import { mkdirSync, readFileSync, writeFileSync, copyFileSync, existsSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import path from "node:path";
-import { chromium, type Browser, type BrowserContext, type Page } from "@playwright/test";
+import { chromium, type Browser, type Page } from "@playwright/test";
 
 const OUT = process.env.DEMO_DIR || "/workspace/scout-os/demo";
 const BASE = process.env.BETTER_AUTH_URL || "http://localhost:3800";
