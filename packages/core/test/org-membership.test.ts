@@ -13,10 +13,22 @@ import {
   revokeInvitation,
   setMailSenderForTests,
   setMemberRole,
+  type MailSender,
+  type OutboundMail,
 } from "../src/index";
 import { resetDb, seedUser } from "../../db/test/helpers";
 
-let mail: ConsoleMailSender;
+/** A real-behaving sender for tests: captures instead of delivering, and isn't MOCK. */
+class CapturingSender implements MailSender {
+  readonly name = "capture";
+  readonly mock = false;
+  readonly sent: OutboundMail[] = [];
+  async send(m: OutboundMail) {
+    this.sent.push(m);
+    return { id: `c${this.sent.length}` };
+  }
+}
+let mail: CapturingSender;
 
 async function expectCode(p: Promise<unknown>, code: AppError["code"]) {
   await expect(p).rejects.toSatisfy((e: unknown) => e instanceof AppError && e.code === code);
@@ -27,7 +39,7 @@ beforeEach(async () => {
   await seedUser("owner", "owner@example.test");
   await seedUser("admin", "admin@example.test");
   await seedUser("member", "member@example.test");
-  mail = new ConsoleMailSender();
+  mail = new CapturingSender();
   setMailSenderForTests(mail);
 });
 
@@ -40,12 +52,29 @@ function tokenFrom(url: string): string {
 }
 
 describe("invitations", () => {
+  it("never reports an invitation as emailed when email isn't configured (MOCK sender)", async () => {
+    const mock = new ConsoleMailSender();
+    setMailSenderForTests(mock);
+    const { orgId } = await createOrg({ actorUserId: "owner", name: "Acme" });
+    const r = await inviteMember({ actorUserId: "owner", orgId, email: "new@example.test", role: "member" });
+    if (r.kind !== "invitation") throw new Error("expected an invitation");
+    expect(r).toMatchObject({ emailed: false, emailDelivery: "not_configured" });
+    expect(r.acceptUrl).toContain("/accept-invite?"); // the inviter still gets a link to share
+  });
+
+  it("reports a failed send as failed", async () => {
+    setMailSenderForTests({ name: "broken", mock: false, send: async () => { throw new Error("SMTP 421"); } });
+    const { orgId } = await createOrg({ actorUserId: "owner", name: "Acme" });
+    const r = await inviteMember({ actorUserId: "owner", orgId, email: "new@example.test", role: "member" });
+    expect(r).toMatchObject({ emailed: false, emailDelivery: "failed" });
+  });
+
   it("invites someone without an account: stores only the token hash and emails the link", async () => {
     const { orgId } = await createOrg({ actorUserId: "owner", name: "Acme" });
     const r = await inviteMember({ actorUserId: "owner", orgId, email: "New@Example.test", role: "member" });
     expect(r.kind).toBe("invitation");
     if (r.kind !== "invitation") return;
-    expect(r.emailed).toBe(true);
+    expect(r).toMatchObject({ emailed: true, emailDelivery: "sent" });
     expect(r.acceptUrl).toContain(`/accept-invite?org=${orgId}&token=`);
 
     expect(mail.sent).toHaveLength(1);

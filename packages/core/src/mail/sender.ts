@@ -1,11 +1,14 @@
 import { logger } from "../logger";
+import { SmtpMailSender } from "./smtp";
 
 /**
  * Platform email sender (verification, password reset). This is the SaaS's own
  * mail, not a tenant's mailbox — tenant mail goes through the inbox integration.
  *
- * Always the labelled MOCK console sender in this build: logs the message and
- * keeps it in memory for tests. No real delivery (Law 2 / verification constraint).
+ * SMTP when SMTP_URL and MAIL_FROM are set (see ./smtp.ts); otherwise the
+ * labelled MOCK console sender, which logs and keeps messages in memory and
+ * never delivers. Callers must check `mock` before telling anyone an email
+ * was sent (Law 2).
  */
 
 export interface OutboundMail {
@@ -29,9 +32,9 @@ export class ConsoleMailSender implements MailSender {
 
   async send(mail: OutboundMail): Promise<{ id: string }> {
     this.sent.push(mail);
-    // Log recipient and subject but not the body: the body holds secrets (tokens).
+    // Subject only: the recipient is personal data and the body holds one-time links.
     logger.info(
-      { mail: { to: mail.to, subject: mail.subject, mock: true, ...(process.env.WOS_MAIL_DEBUG_BODY === "1" ? { text: mail.text } : {}) } },
+      { mail: { subject: mail.subject, mock: true, ...(process.env.WOS_MAIL_DEBUG_BODY === "1" ? { to: mail.to, text: mail.text } : {}) } },
       "MOCK email (console sender): not delivered",
     );
     return { id: `console_${this.sent.length}` };
@@ -40,10 +43,15 @@ export class ConsoleMailSender implements MailSender {
 
 let sender: MailSender | undefined;
 
-/** Process-wide sender. Always MOCK in this build. */
+/** Process-wide sender: SMTP if configured (and not in mock mode), else the MOCK console sender. */
 export function getMailSender(): MailSender {
-  sender ??= new ConsoleMailSender();
+  sender ??= (process.env.WOS_MOCK_MODE === "1" ? null : SmtpMailSender.fromEnv()) ?? new ConsoleMailSender();
   return sender;
+}
+
+/** True when platform email really goes out. Screens use it to say what happened. */
+export function platformEmailConfigured(): boolean {
+  return !getMailSender().mock;
 }
 
 /** For tests only. */

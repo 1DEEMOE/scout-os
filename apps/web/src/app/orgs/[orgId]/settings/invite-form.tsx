@@ -24,7 +24,13 @@ export function InviteForm({ orgId, canGrantOwner }: { orgId: string; canGrantOw
       if (r.kind === "member") {
         setDone(`${email} added.`);
       } else {
-        setDone(r.emailed ? `Invitation emailed to ${email}.` : `Invitation created for ${email}, but the email could not be sent — share this link with them directly.`);
+        setDone(
+          r.emailDelivery === "sent"
+            ? `Invitation emailed to ${email}.`
+            : r.emailDelivery === "not_configured"
+              ? `Invitation created for ${email}. Email isn't set up on this server, so nothing was sent: share this link with them.`
+              : `Invitation created for ${email}, but the email could not be sent. Share this link with them directly.`,
+        );
         setAcceptUrl(r.acceptUrl);
       }
       router.refresh();

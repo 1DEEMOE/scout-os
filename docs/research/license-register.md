@@ -64,3 +64,10 @@ From `pnpm licenses list --prod`. Everything else is MIT, ISC, Apache-2.0, BSD, 
 ## Scout OS (Session 6)
 
 No new dependencies were added. The CSV reader (`packages/core/src/scout/csv.ts`) and distance function are written in-house. Data source: NOAA Storm Prediction Center local storm reports — US government work, public domain in the US (see ip-flags #9).
+
+## Platform email (2026-11-05)
+
+| Name | Version | License | Use |
+|---|---|---|---|
+| nodemailer | 10.2.1 | MIT-0 | Platform email over SMTP (password resets, invitations) |
+| @types/nodemailer | 8.0.2 | MIT | Type definitions (dev only) |
