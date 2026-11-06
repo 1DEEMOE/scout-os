@@ -102,3 +102,17 @@ export async function getSessionUserId(headers: Headers): Promise<string | null>
   const session = await getAuth().api.getSession({ headers });
   return session?.user.id ?? null;
 }
+
+export interface SessionUser {
+  id: string;
+  name: string;
+  email: string;
+  emailVerified: boolean;
+}
+
+export async function getSessionUser(headers: Headers): Promise<SessionUser | null> {
+  const session = await getAuth().api.getSession({ headers });
+  if (!session) return null;
+  const u = session.user;
+  return { id: u.id, name: u.name ?? "", email: u.email, emailVerified: Boolean(u.emailVerified) };
+}

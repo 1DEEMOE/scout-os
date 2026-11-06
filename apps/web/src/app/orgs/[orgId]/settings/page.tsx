@@ -52,6 +52,7 @@ export default async function SettingsPage({ params, searchParams }: { params: P
         </Card>
       </section>
 
+      <div id="team" className="scroll-mt-8">
       <Card title="Members">
         <div className="-mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0">
         <table className="w-full text-left text-sm">
@@ -91,6 +92,7 @@ export default async function SettingsPage({ params, searchParams }: { params: P
         </table>
         </div>
       </Card>
+      </div>
       {isManager && <InviteForm orgId={orgId} canGrantOwner={isOwner} />}
       {isManager && invitations.length > 0 && (
         <Card title="Invitations">
@@ -111,6 +113,7 @@ export default async function SettingsPage({ params, searchParams }: { params: P
         </Card>
       )}
 
+      <div id="connections" className="scroll-mt-8">
       <Card title="Connected apps">
         {integrations.length === 0 ? <div className="mb-4"><Empty>Nothing connected yet.</Empty></div> : (
           <ul className="mb-4 divide-y divide-line text-sm">
@@ -161,6 +164,7 @@ export default async function SettingsPage({ params, searchParams }: { params: P
           </div>
         )}
       </Card>
+      </div>
     </div>
   );
 }

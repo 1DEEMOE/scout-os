@@ -1,4 +1,7 @@
-import { approvalsForReview, getPauseState, listAgents, listRoutines, listThreads, planSummary } from "@wos/core";
+import { headers } from "next/headers";
+import { approvalsForReview, getPauseState, listAgents, listMyOrgs, listRoutines, listThreads, planSummary } from "@wos/core";
+import { getSessionUser } from "@/server/auth";
+import { isPlatformAdmin } from "@/server/platform-admin";
 import { orgContext } from "@/server/org-context";
 import { modelStatus } from "@/server/engine";
 import { Shell } from "./nav";
@@ -9,13 +12,15 @@ export default async function OrgLayout({ children, params }: { children: React.
   const { orgId } = await params;
   const { org, isManager, userId } = await orgContext(orgId);
   const who = { actorUserId: userId, orgId };
-  const [pause, plan, agents, routines, threads, approvals] = await Promise.all([
+  const [pause, plan, agents, routines, threads, approvals, orgs, user] = await Promise.all([
     getPauseState(who),
     planSummary(who),
     listAgents(who),
     listRoutines(who),
     listThreads(who),
     approvalsForReview(who),
+    listMyOrgs({ actorUserId: userId }),
+    getSessionUser(await headers()),
   ]);
   const model = modelStatus();
   const banners = (
@@ -51,6 +56,9 @@ export default async function OrgLayout({ children, params }: { children: React.
         teammates: agents.map((a) => ({ id: a.id, name: a.displayName, active: a.status === "active" })),
         routines: routines.slice(0, 6).map((r) => ({ id: r.id, name: r.name, kind: r.kind })),
         threads: threads.slice(0, 5).map((t) => ({ id: t.id, title: t.title })),
+        orgs: orgs.map((o) => ({ orgId: o.orgId, name: o.name, role: o.role })),
+        user: { name: user?.name ?? "", email: user?.email ?? "" },
+        isPlatformAdmin: isPlatformAdmin(user),
       }}
     >
       {children}
