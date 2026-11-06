@@ -11,7 +11,7 @@ export default async function OrgsPage() {
   return (
     <div className="flex flex-col gap-8">
       <section>
-        <div className="mb-4 flex items-center justify-between"><h1 className="text-2xl font-semibold">Your organizations</h1><SignOutButton /></div>
+        <div className="mb-4 flex items-center justify-between"><h1 className="text-display font-semibold">Your organizations</h1><SignOutButton /></div>
         {orgs.length === 0 ? (
           <p className="text-muted">You're not in any organization yet. Create one below.</p>
         ) : (

@@ -33,7 +33,7 @@ export default async function ThreadPage({ params }: { params: Promise<{ orgId: 
     <div className="mx-auto flex max-w-3xl flex-col">
       <header className="mb-10">
         <a href={`/orgs/${orgId}/chat`} className="inline-flex min-h-10 items-center text-muted underline decoration-line underline-offset-4 hover:text-ink">All conversations</a>
-        <h1 className="mt-2 text-[2rem] leading-tight font-semibold">{thread.title}</h1>
+        <h1 className="mt-2 text-display font-semibold">{thread.title}</h1>
       </header>
 
       <Transcript label="Conversation">
@@ -49,7 +49,7 @@ export default async function ThreadPage({ params }: { params: Promise<{ orgId: 
           }
           return (
             <ScoutMessage key={m.id} at={m.createdAt} mock={m.mock}>
-              <div className="text-[1.0625rem] leading-relaxed">{body}</div>
+              <div className="text-message leading-relaxed">{body}</div>
               {steps.length > 0 && (
                 <ul aria-label="Hand-offs" className="mt-4 flex flex-col gap-2">
                   {steps.map((d) => (

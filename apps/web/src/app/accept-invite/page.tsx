@@ -62,7 +62,7 @@ function AcceptInvite() {
 export default function AcceptInvitePage() {
   return (
     <div className="mx-auto flex max-w-md flex-col gap-4">
-      <h1 className="text-2xl font-semibold">You're invited</h1>
+      <h1 className="text-display font-semibold">You're invited</h1>
       <Suspense>
         <AcceptInvite />
       </Suspense>

@@ -59,7 +59,7 @@ export function Composer({ orgId, threadId, suggestions = [], disabledReason }: 
                   setText(s);
                   ref.current?.focus();
                 }}
-                className="min-h-10 rounded-full border border-line bg-surface px-4 text-[0.95rem] text-muted transition-colors duration-150 hover:border-accent/40 hover:text-ink"
+                className="min-h-10 rounded-full border border-line bg-surface px-4 text-small text-muted transition-colors duration-150 hover:border-accent/40 hover:text-ink"
               >
                 {s}
               </button>
@@ -95,7 +95,7 @@ export function Composer({ orgId, threadId, suggestions = [], disabledReason }: 
               void send();
             }
           }}
-          className="max-h-60 min-h-11 flex-1 resize-none bg-transparent py-2.5 text-[1.0625rem] leading-relaxed text-ink outline-none placeholder:text-muted disabled:opacity-60"
+          className="max-h-60 min-h-11 flex-1 resize-none bg-transparent py-2.5 text-message leading-relaxed text-ink outline-none placeholder:text-muted disabled:opacity-60"
         />
         <button
           type="submit"

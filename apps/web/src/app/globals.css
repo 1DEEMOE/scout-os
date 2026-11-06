@@ -23,6 +23,15 @@
 
   --font-sans: "Schibsted Grotesk Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
 
+  /* Type scale: five steps, nothing in between. */
+  --text-small: 0.9375rem;
+  --text-small--line-height: 1.55;
+  --text-message: 1.0625rem;
+  --text-message--line-height: 1.65;
+  --text-display: 2rem;
+  --text-display--line-height: 1.2;
+
+  /* Spacing rhythm (4px base): 12 / 20 / 32 / 40 / 56 between related → unrelated blocks. */
   --spacing-page: 1.5rem;
   --spacing-section: 2.5rem;
   --spacing-card: 1.5rem;

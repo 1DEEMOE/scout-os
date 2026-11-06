@@ -89,7 +89,7 @@ export function Empty({ children, action }: { children: React.ReactNode; action?
 export function PageTitle({ children, sub }: { children: React.ReactNode; sub?: React.ReactNode }) {
   return (
     <div className="mb-10">
-      <h1 className="text-[2rem] leading-tight font-semibold">{children}</h1>
+      <h1 className="text-display font-semibold">{children}</h1>
       {sub && <p className="mt-3 max-w-[65ch] text-base text-muted">{sub}</p>}
     </div>
   );
