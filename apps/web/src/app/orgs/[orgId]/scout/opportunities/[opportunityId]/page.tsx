@@ -1,10 +1,11 @@
 import { notFound } from "next/navigation";
-import { AppError, getOpportunity, listMembers, planSummary } from "@wos/core";
+import { AppError, draftFirstOutreach, getOpportunity, listMembers, planSummary } from "@wos/core";
 import { orgContext } from "@/server/org-context";
 import { ActionButton, ActionForm } from "../../../../../actions";
 import { Badge, Card, inputCls, PageTitle, StateBadge, When } from "../../../../../ui";
 import { actorName, DemoBadge, ScoreTable, ScoutTabs, StageBadge, UpgradeNotice, Utc } from "../../parts";
 import { QualifyForm } from "../../forms";
+import { OutreachCard } from "./outreach-card";
 
 export const dynamic = "force-dynamic";
 
@@ -32,6 +33,7 @@ export default async function OpportunityPage({ params }: { params: Promise<{ or
   const names = new Map((await listMembers({ actorUserId: userId, orgId })).map((m) => [m.userId, m.name]));
   const e = o.explanation as unknown as Explanation;
   const open = o.stage !== "disqualified";
+  const draft = open ? await draftFirstOutreach({ actorUserId: userId, orgId, opportunityId }).catch(() => null) : null;
   const handoffRunning = d.handoff && !["COMPLETED", "FAILED"].includes(d.handoff.state);
 
   return (
@@ -42,6 +44,9 @@ export default async function OpportunityPage({ params }: { params: Promise<{ or
       <ScoutTabs orgId={orgId} active="feed" role={org.role} />
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_22rem]">
         <div className="flex flex-col gap-4">
+          {draft && org.role !== "viewer" && (
+            <OutreachCard orgId={orgId} opportunityId={o.id} to={draft.to} subject={draft.subject} body={draft.body} canRequest={draft.canRequest} blockedReason={draft.blockedReason} canAsk={isManager} />
+          )}
           <Card title="Why Scout picked this">
             <dl className="flex flex-col gap-3 text-sm">
               <div><dt className="text-muted">Why identified</dt><dd>{e.whyIdentified}</dd></div>

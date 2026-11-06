@@ -2,6 +2,7 @@ import { z } from "zod";
 import {
   addSuppression,
   disqualifyOpportunity,
+  draftFirstOutreach,
   getBusinessProfile,
   getOpportunity,
   importProspects,
@@ -13,9 +14,11 @@ import {
   qualifyOpportunity,
   recordPermission,
   requestHandoff,
+  requestOutreachApproval,
   requestScan,
   reviewBusinessProfile,
   revokePermission,
+  runOpportunityFinder,
   saveBusinessProfile,
   scoutAnalytics,
   uploadStormReports,
@@ -29,6 +32,18 @@ const text = (max: number) => z.string().max(max);
 const MAX_CSV = 2_000_000;
 
 export const scoutRouter = router({
+  /** Opportunity finder: public signals (MOCK adapters today) → scored local jobs. Managers. */
+  findOpportunities: protectedProcedure
+    .input(z.object({ orgId }))
+    .mutation(({ ctx, input }) => runOpportunityFinder({ actorUserId: ctx.userId, orgId: input.orgId })),
+  draftOutreach: protectedProcedure
+    .input(z.object({ orgId, opportunityId: id }))
+    .query(({ ctx, input }) => draftFirstOutreach({ actorUserId: ctx.userId, ...input })),
+  /** The exact message becomes a tier-2, owner-only approval. Nothing is sent here. */
+  requestOutreach: protectedProcedure
+    .input(z.object({ orgId, opportunityId: id, subject: text(300), body: text(6000) }))
+    .mutation(({ ctx, input }) => requestOutreachApproval({ actorUserId: ctx.userId, ...input })),
+
   profile: protectedProcedure.input(z.object({ orgId })).query(({ ctx, input }) => getBusinessProfile({ actorUserId: ctx.userId, ...input })),
   saveProfile: protectedProcedure.input(z.object({ orgId, profile: z.unknown() })).mutation(({ ctx, input }) => saveBusinessProfile({ actorUserId: ctx.userId, ...input })),
   reviewProfile: protectedProcedure.input(z.object({ orgId })).mutation(({ ctx, input }) => reviewBusinessProfile({ actorUserId: ctx.userId, ...input })),

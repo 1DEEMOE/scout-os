@@ -87,6 +87,9 @@ const input = () => ({
   confirmEmail: "victim@example.test",
   briefingHour: 7,
   samples: false,
+  // finder outreach
+  subject: "probe subject",
+  body: "probe body probe body probe body",
 });
 
 beforeAll(async () => {

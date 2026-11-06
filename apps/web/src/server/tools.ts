@@ -4,6 +4,7 @@ import {
   registerFrontDeskTools,
   registerInboxTools,
   registerMemoryTools,
+  registerOutreachTools,
   registerScoutTools,
   type CrmResolver,
   type InvoicingResolver,
@@ -18,5 +19,6 @@ export function registerProductTools(registry: ToolRegistry, deps: { mailbox: Ma
   registerFinanceTools(registry, deps.invoicing);
   registerMemoryTools(registry);
   registerScoutTools(registry);
+  registerOutreachTools(registry, deps.mailbox);
   registerFrontDeskTools(registry);
 }
