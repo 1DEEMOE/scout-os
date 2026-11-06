@@ -72,6 +72,13 @@ export * from "./onboarding/zip-to-county";
 export * from "./onboarding/service";
 export * from "./onboarding/quickstart";
 export * from "./platform/admin";
+export { INDUSTRY_PACKS, PACK_VERSION, getPack, listPacks, packsUsing } from "./industries/packs";
+export { approveAllTemplates, ingestLead, listTemplates, recordSmsConsent, speedSummary, stagePackTemplates } from "./speed/service";
+export { bookVisit, dueForRebook, setVisitStatus } from "./speed/appointments";
+export { collectSignals, seasonalHits } from "./signals/sources";
+export { NWS_USER_AGENT, fetchNwsAlerts, parseNwsPayload, resetNwsCache } from "./speed/nws";
+export { isStopKeyword, normalizePhone, resetMockSms } from "./speed/sms";
+export { smsWindowOpen } from "./speed/hours";
 
 export * from "./front-desk/service";
 export * from "./ai-answers/provider";

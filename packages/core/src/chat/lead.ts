@@ -50,6 +50,14 @@ export function mockLeadBotPlan(req: ModelRequest): Partial<ModelResponse> {
   const raw = [...req.messages].reverse().find((m) => m.role === "user")?.content ?? "";
   const marker = "Request from the business user:\n";
   const last = raw.includes(marker) ? raw.slice(raw.lastIndexOf(marker) + marker.length) : raw;
+  const asking = /\b(what|how many|status|across|waiting|attention|overview|summarize)\b/i.test(last);
+  const acting = /\b(send|reply|chase|draft|pay|remind|create|follow)\b/i.test(last);
+  if (asking && !acting) {
+    return {
+      text: "MOCK lead bot: Here's a read-only look across leads, jobs, inbox, invoices and approvals. I can't change any of it from here.",
+      toolCalls: [{ name: "read.workspace", input: {} }],
+    };
+  }
   const kinds = DELEGABLE_KINDS.filter((k) => KEYWORDS[k].test(last));
   if (!kinds.length) return { text: "MOCK lead bot: I couldn't tell which employee should handle that. Could you say whether it's about email, sales or invoices?" };
   return {

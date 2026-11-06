@@ -303,7 +303,7 @@ describe("external values are tainted (G7, TC-10)", () => {
     await say("and the other one", "owner", threadId);
     const last = h.model.calls.filter((c) => c.purpose === "lead.plan").at(-1)!;
     expect(last.messages[0]!.content).toMatch(/<external_data[^>]*chat_history/);
-    expect(last.tools?.map((t) => t.name)).toEqual(["delegate"]);
+    expect(last.tools?.map((t) => t.name)).toEqual(["delegate", "read.workspace"]);
   });
 });
 

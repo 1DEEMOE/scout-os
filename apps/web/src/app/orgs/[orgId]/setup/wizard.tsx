@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { errorMessage, trpc } from "@/lib/trpc";
 import { Badge, buttonCls, ErrorText, inputCls, quietButtonCls } from "../../../ui";
 
-type Industry = "roofing" | "general";
+type Industry = string;
 type LeadField = "fullName" | "email" | "phone" | "addressLine1" | "city" | "state" | "postalCode" | "county" | "notes" | "ignore";
 
 type State = {

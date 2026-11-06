@@ -31,7 +31,7 @@ export const onboardingRouter = router({
   provisionWorkspace: protectedProcedure
     .input(z.object({
       name: z.string().max(200),
-      industry: z.enum(["roofing", "general"]),
+      industry: z.string().max(40),
       clientEmail: z.string().max(254),
       confirmEmail: z.string().max(254),
       zip: z.string().max(16).optional(),
@@ -40,7 +40,7 @@ export const onboardingRouter = router({
     .mutation(({ ctx, input }) => provisionClientWorkspace({ actorUserId: ctx.userId, ...input })),
 
   quickstartBusiness: protectedProcedure
-    .input(z.object({ orgId, name: z.string().max(200), industry: z.enum(["roofing", "general"]), timezone: tz, zip: z.string().max(16).optional() }))
+    .input(z.object({ orgId, name: z.string().max(200), industry: z.string().max(40), timezone: tz, zip: z.string().max(16).optional() }))
     .mutation(({ ctx, input }) => quickstartBusiness({ actorUserId: ctx.userId, ...input })),
 
   quickstartSkipConnect: protectedProcedure
@@ -48,7 +48,7 @@ export const onboardingRouter = router({
     .mutation(({ ctx, input }) => quickstartSkipConnect({ actorUserId: ctx.userId, orgId: input.orgId })),
 
   finishQuickstart: protectedProcedure
-    .input(z.object({ orgId, briefingHour: z.number().int(), samples: z.boolean(), timezone: tz }))
+    .input(z.object({ orgId, briefingHour: z.number().int(), samples: z.boolean(), timezone: tz, approveTemplates: z.boolean().optional() }))
     .mutation(({ ctx, input }) => finishQuickstart({ actorUserId: ctx.userId, ...input })),
 
   state: protectedProcedure
@@ -56,7 +56,7 @@ export const onboardingRouter = router({
     .query(({ ctx, input }) => getOnboardingState({ actorUserId: ctx.userId, orgId: input.orgId })),
 
   chooseIndustry: protectedProcedure
-    .input(z.object({ orgId, industry: z.enum(["roofing", "general"]) }))
+    .input(z.object({ orgId, industry: z.string().max(40) }))
     .mutation(({ ctx, input }) => chooseIndustry({ actorUserId: ctx.userId, ...input })),
 
   saveBasics: protectedProcedure

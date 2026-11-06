@@ -7,6 +7,7 @@ import {
   listFlaggedDocuments,
   listFlaggedPaymentChanges,
   listPendingFrontDeskBookings,
+  speedSummary,
   listOpportunities,
   listTasks,
   planSummary,
@@ -67,7 +68,7 @@ export default async function TodayPage({ params, searchParams }: { params: Prom
   const { userId, org } = await orgContext(orgId);
   const staff = org.role !== "viewer";
   const who = { actorUserId: userId, orgId };
-  const [review, tasks, overdue, latest, paymentFlags, frontDesk, flaggedDocs, aiCheck, samples] = await Promise.all([
+  const [review, tasks, overdue, latest, paymentFlags, frontDesk, flaggedDocs, aiCheck, samples, pace] = await Promise.all([
     approvalsForReview(who),
     listTasks({ ...who, limit: 100 }),
     findOverdue(who),
@@ -77,6 +78,7 @@ export default async function TodayPage({ params, searchParams }: { params: Prom
     listFlaggedDocuments(who),
     latestAiAnswersCheck(who),
     justSetUp ? sampleOpportunities(who, staff) : Promise.resolve([]),
+    speedSummary(who).catch(() => ({ leads: 0, within60: 0, label: "respond-in-60s" as const })),
   ]);
   const open = review.open;
   const briefing = latest?.run.output as Briefing | undefined;
@@ -138,6 +140,15 @@ export default async function TodayPage({ params, searchParams }: { params: Prom
             )}
           </ScoutMessage>
         )}
+
+        <ScoutMessage id="pace" title="Respond in 60 seconds">
+          <p className="text-lg leading-relaxed">
+            {pace.leads === 0
+              ? "No new leads timed yet. When one arrives, the first reply is measured from that moment."
+              : `${pace.within60} of ${pace.leads} first replies went out within a minute.`}
+          </p>
+          <p className="mt-3 text-small text-muted">Texts need a recorded yes, honor STOP, and stay between 8am and 9pm in the recipient&apos;s time zone. A pre-approved template is the human OK. Anything else waits in Approvals. Nothing is paid automatically.</p>
+        </ScoutMessage>
 
         {justSetUp && (
           <ScoutMessage id="first-win" title={samples.length ? `You're set up. Here ${samples.length === 1 ? "is a sample opportunity" : `are ${samples.length} sample opportunities`} to try first.` : "You're set up. Your briefing will be here every morning."}>

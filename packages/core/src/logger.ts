@@ -12,7 +12,7 @@ export const REDACT_PATHS = [
 ];
 
 /** Field names that carry message content or counterparties (G8): redacted wherever they appear. */
-const PII_FIELDS = new Set(["body", "content", "text", "subject", "to", "from", "sender", "recipients", "email", "address", "html", "raw"]);
+const PII_FIELDS = new Set(["body", "content", "text", "subject", "to", "from", "sender", "recipients", "email", "address", "html", "raw", "phone", "customerPhone"]);
 
 const EMAIL_RE = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g;
 
