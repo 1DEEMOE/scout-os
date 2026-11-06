@@ -1,0 +1,10 @@
+packages:
+  - "apps/*"
+  - "packages/*"
+onlyBuiltDependencies:
+  - argon2
+  - esbuild
+  - sharp
+  - unrs-resolver
+overrides:
+  "@opentelemetry/api": 1.9.1

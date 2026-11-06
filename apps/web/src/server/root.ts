@@ -1,0 +1,19 @@
+import { auditRouter } from "./routers/audit";
+import { billingRouter } from "./routers/billing";
+import { scoutRouter } from "./routers/scout";
+import { routinesRouter } from "./routers/routines";
+import { gaps2Router } from "./routers/gaps2";
+import { chatRouter } from "./routers/chat";
+import { crmRouter } from "./routers/crm";
+import { financeRouter } from "./routers/finance";
+import { inboxRouter } from "./routers/inbox";
+import { integrationRouter } from "./routers/integration";
+import { memoryRouter } from "./routers/memory";
+import { orgRouter } from "./routers/org";
+import { onboardingRouter } from "./routers/onboarding";
+import { agentRouter, approvalRouter, taskRouter } from "./routers/work";
+import { createCallerFactory, router } from "./trpc";
+
+export const appRouter = router({ org: orgRouter, onboarding: onboardingRouter, agent: agentRouter, task: taskRouter, approval: approvalRouter, inbox: inboxRouter, integration: integrationRouter, crm: crmRouter, finance: financeRouter, audit: auditRouter, memory: memoryRouter, billing: billingRouter, chat: chatRouter, scout: scoutRouter, routines: routinesRouter, gaps2: gaps2Router });
+export type AppRouter = typeof appRouter;
+export const createCaller = createCallerFactory(appRouter);

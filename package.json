@@ -1,0 +1,26 @@
+{
+  "name": "workforce-os",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.28.0",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "db:migrate": "pnpm --filter @wos/db migrate",
+    "lint": "eslint .",
+    "typecheck": "pnpm -r typecheck",
+    "test": "pnpm --filter @wos/db migrate:test && vitest run",
+    "test:isolation": "pnpm --filter @wos/db migrate:test && vitest run packages/db/test/isolation.test.ts --reporter=verbose",
+    "build": "pnpm --filter @wos/web build",
+    "test:e2e": "pnpm --filter @wos/web test:e2e"
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "@types/node": "26.6.6",
+    "eslint": "10.14.0",
+    "typescript": "6.0.3",
+    "typescript-eslint": "8.72.1",
+    "vitest": "5.1.0"
+  }
+}
