@@ -36,6 +36,16 @@ describe("design token contrast (WCAG 2.2 AA)", () => {
         });
       }
     }
+    it(`${name}: body ink on paper >= 7:1`, () => {
+      expect(ratio(t.ink!, t.paper!)).toBeGreaterThanOrEqual(7);
+    });
+    it(`${name}: chrome ink on the bar >= 7:1`, () => {
+      expect(ratio(t["chrome-ink"]!, t.chrome!)).toBeGreaterThanOrEqual(7);
+    });
+    it(`${name}: chrome secondary text on the bar >= 4.5:1`, () => {
+      expect(ratio(t["chrome-muted"]!, t.chrome!)).toBeGreaterThanOrEqual(4.5);
+      expect(ratio(t["chrome-accent"]!, t.chrome!)).toBeGreaterThanOrEqual(4.5);
+    });
     it(`${name}: text on the accent button >= 4.5:1`, () => {
       expect(ratio(t["on-accent"]!, t.accent!)).toBeGreaterThanOrEqual(4.5);
     });
