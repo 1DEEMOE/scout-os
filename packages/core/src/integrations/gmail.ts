@@ -123,10 +123,20 @@ export class GmailProvider implements MailProvider {
     return { draftId: res.data.id ?? draftId };
   }
 
-  async findDraft(messageId: string): Promise<{ draftId: string } | undefined> {
+  async findDraft(messageId: string): Promise<{ draftId: string; to?: string[]; subject?: string; body?: string } | undefined> {
     const res = await this.api.users.drafts.list({ userId: "me", q: `rfc822msgid:${messageId}`, maxResults: 1 });
     const id = res.data.drafts?.[0]?.id;
-    return id ? { draftId: id } : undefined;
+    if (!id) return undefined;
+    const got = await this.api.users.drafts.get({ userId: "me", id, format: "full" });
+    const message = got.data.message;
+    if (!message) return { draftId: id };
+    const to = header(message, "To").split(",").map((s) => s.trim()).filter(Boolean);
+    return {
+      draftId: id,
+      ...(to.length ? { to } : {}),
+      subject: header(message, "Subject"),
+      body: plainText(message.payload) ?? message.snippet ?? "",
+    };
   }
 
   async sendDraft(draftId: string): Promise<{ externalId: string }> {

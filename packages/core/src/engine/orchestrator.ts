@@ -6,7 +6,7 @@ import { withSpan } from "../tracing";
 import { loadAgent } from "./agents";
 import { memoryBlock, recallMemory } from "../memory/service";
 import { actionDigest } from "./digest";
-import { delegationOf, executeStep, type Plan, type PlanStep } from "./executor";
+import { delegationOf, executeStep, StepAlreadyDone, type Plan, type PlanStep } from "./executor";
 import { evaluatePolicy, intersectGrant, LEAD_BOT_MAX_TIER, ROLE_TIER_CEILING, taintedArgs } from "./policy";
 import { enforcePaymentDetailTier, linkPaymentChangeToApproval, PAYMENT_DETAIL_MIN_TIER, PAYMENT_DETAIL_TOOLS } from "../finance/payment-guard";
 import { roleOf } from "../org/access";
@@ -14,6 +14,7 @@ import { agentsPaused } from "../org/pause";
 import { enqueueTaskRun } from "./queue";
 import { getEngine, now } from "./runtime";
 import { TERMINAL, transition, TransitionConflictError, type TaskRow } from "./tasks";
+import { bindSendDraftArgs } from "../tools/inbox";
 import { ToolError } from "./tools";
 import { approvalExpiryMs } from "../kimi/cards";
 import { taskHeld } from "../kimi/round1";
@@ -208,15 +209,25 @@ async function plan(task: TaskRow): Promise<boolean> {
       );
       return true;
     }
-    const tainted = taintedArgs(parsed.data, externalText);
+    let args: unknown = parsed.data;
+    if (tool.name === "inbox.send_draft") {
+      const proposed = parsed.data as { conversationId: string; to?: string[]; subject?: string; body?: string; draftExternalId?: string; draftMessageId?: string };
+      const bound = await bindSendDraftArgs(task.tenantId, proposed);
+      if ((proposed.draftExternalId || proposed.draftMessageId) && !bound) {
+        await withTenant(task.tenantId, (tx) => transition(tx, task, "FAILED", fail("The draft to send does not match the mailbox draft", "DRAFT_MISMATCH")));
+        return true;
+      }
+      if (bound) args = bound;
+    }
+    const tainted = taintedArgs(args, externalText);
     steps.push({
       index,
       ...(tainted.length ? { tainted } : {}),
       tool: tool.name,
-      args: parsed.data,
+      args,
       tier: tool.tier,
-      summary: tool.summarize(parsed.data).slice(0, 500),
-      digest: actionDigest({ tenantId: task.tenantId, taskId: task.id, agentId: agent.agent.id, step: index, tool: tool.name, args: parsed.data, ...(chainId ? { chainId } : {}) }),
+      summary: tool.summarize(args as never).slice(0, 500),
+      digest: actionDigest({ tenantId: task.tenantId, taskId: task.id, agentId: agent.agent.id, step: index, tool: tool.name, args, ...(chainId ? { chainId } : {}) }),
       decision: "allow",
     });
   }
@@ -363,6 +374,7 @@ async function execute(task: TaskRow): Promise<boolean> {
     try {
       outputs.push(await executeStep(task, s));
     } catch (err) {
+      if (err instanceof StepAlreadyDone) return false;
       const message = err instanceof Error ? err.message : String(err);
       const retryable = err instanceof ToolError ? err.retryable : true;
       return withTenant(task.tenantId, async (tx) => {

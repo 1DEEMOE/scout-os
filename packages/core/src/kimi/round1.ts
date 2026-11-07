@@ -18,7 +18,7 @@ import { createRoutine } from "../routines/service";
 import { messageIdFor } from "../integrations/mail";
 import { requestSendDraft } from "../inbox/service";
 import { ingestLead } from "../speed/service";
-import { replyRecipients, replySubject } from "../tools/inbox";
+import { replyRecipients, replySubject, sendContentHash } from "../tools/inbox";
 import { seasonalHits, type SignalHit } from "../signals/sources";
 import { approvalCard, approvalExpiryMs, type ApprovalCardView } from "./cards";
 
@@ -206,6 +206,14 @@ async function rebindPlan(tx: Tx, orgId: string, task: { id: string; tenantId: s
       args.body = canonical.body;
       args.draftExternalId = canonical.draftExternalId;
       args.draftMessageId = canonical.draftMessageId;
+      args.contentHash = sendContentHash({
+        conversationId: canonical.conversationId,
+        draftExternalId: canonical.draftExternalId,
+        draftMessageId: canonical.draftMessageId,
+        to: canonical.to,
+        subject: canonical.subject,
+        body: canonical.body,
+      });
       changed = true;
     } else {
       for (const key of Object.keys(args)) {
@@ -257,11 +265,9 @@ async function writeAuthoritativeDraft(tx: Tx, orgId: string, conversationId: st
     draftExternalId = created.draftId;
   }
   const stillLatest = !conv.draftExternalId || conv.draftExternalId === previousId;
-  await tx.update(conversations).set({
-    draftBody: body,
-    ...(stillLatest ? { draftExternalId, draftMessageId } : {}),
-    updatedAt: new Date(),
-  }).where(eq(conversations.id, conv.id));
+  if (stillLatest) {
+    await tx.update(conversations).set({ draftBody: body, draftExternalId, draftMessageId, updatedAt: new Date() }).where(eq(conversations.id, conv.id));
+  }
   return { conversationId: conv.id, to, subject, body, draftExternalId: draftExternalId!, draftMessageId: draftMessageId! };
 }
 

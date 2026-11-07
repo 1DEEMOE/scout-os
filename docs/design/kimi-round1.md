@@ -12,7 +12,7 @@ Notification quiet hours, the daily cap, and batching decide which approvals Tod
 
 The money digest counts invoices created in the last 7 days. Amounts are cents in storage and dollars on screen. The weekly cap is entered in dollars and stored as cents. Auto-pay stays off.
 
-Each follow-up gets its own mailbox draft. A send checks that draft is still in the mailbox, and a task is not completed from an older sent message. Editing a draft after it was approved, but before it was sent, expires that approval and raises a new one. Nothing is sent before the new approval.
+Each follow-up gets its own mailbox draft. A send approval stores a hash of the provider draft: recipients, subject, body, draft id, conversation id, and message id. At send time the draft is read back from the mailbox and the send is refused unless every field matches that hash. Editing one draft generation does not rewrite a newer generation's conversation row. A second run that finds the send already claimed records an audit skip and leaves the task completed by the run that sent. Editing a draft after it was approved, but before it was sent, expires that approval and raises a new one. Nothing is sent before the new approval.
 
 Background practice approvals (`requestedBy` starting with `system:` or `routine:`) expire in 30–60 minutes. `WOS_BACKGROUND_APPROVAL_MINUTES` sets the window and is clamped to that range. The default is 45. A person who asked in chat still waits the normal approval window.
 

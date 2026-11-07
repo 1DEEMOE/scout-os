@@ -31,7 +31,7 @@ export interface MailProvider {
   /** Replaces the body of a draft the mailbox already holds. The id stays the same. */
   updateDraft(draftId: string, draft: OutboundDraft): Promise<{ draftId: string }>;
   /** Looks for an existing draft carrying this Message-ID. */
-  findDraft(messageId: string): Promise<{ draftId: string; body?: string } | undefined>;
+  findDraft(messageId: string): Promise<{ draftId: string; to?: string[]; subject?: string; body?: string } | undefined>;
   sendDraft(draftId: string): Promise<{ externalId: string }>;
   /** Looks for a sent message carrying this Message-ID. */
   findSent(messageId: string): Promise<{ externalId: string } | undefined>;
@@ -101,7 +101,7 @@ export class FakeMailProvider implements MailProvider {
   }
 
   async findDraft(messageId: string) {
-    for (const [draftId, d] of this.drafts) if (d.messageId === messageId) return { draftId, body: d.body };
+    for (const [draftId, d] of this.drafts) if (d.messageId === messageId) return { draftId, to: d.to, subject: d.subject, body: d.body };
     return undefined;
   }
 
