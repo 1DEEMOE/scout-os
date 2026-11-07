@@ -5,7 +5,7 @@ import { CONVERSATION_CATEGORIES, conversations, messages, withTenant } from "@w
 import { canonicalJson } from "../engine/digest";
 import { getEngine } from "../engine/runtime";
 import { objectResult, ToolError, type ToolContext, type ToolDefinition, type ToolRegistry } from "../engine/tools";
-import { messageIdFor } from "../integrations/mail";
+import { messageIdFor, type MailAttachment, type MailDraft } from "../integrations/mail";
 import type { MailboxResolver } from "../inbox/mailbox";
 import { produceIntegration } from "../events/produce";
 import { checkEmailAllowed, recordOutreach } from "../scout/consent";
@@ -35,23 +35,76 @@ export function replyRecipients(lastInbound: { sender: string } | undefined): st
 
 export const replySubject = (subject: string) => (/^re:/i.test(subject) ? subject : `Re: ${subject}`);
 
+export interface SendDraftSnapshot {
+  conversationId: string;
+  draftExternalId: string;
+  draftMessageId: string;
+  to: string[];
+  cc: string[];
+  bcc: string[];
+  replyTo: string[];
+  subject: string;
+  body: string;
+  attachments: MailAttachment[];
+}
+
+function addressKey(value: string): string {
+  const wrapped = value.match(/<([^>]+)>/);
+  return (wrapped?.[1] ?? value).trim().toLowerCase();
+}
+
+function addressKeys(list: string[] | undefined): string[] {
+  return [...(list ?? [])].map(addressKey).filter(Boolean).sort();
+}
+
+function attachmentKeys(list: MailAttachment[] | undefined): MailAttachment[] {
+  return [...(list ?? [])]
+    .map((a) => ({ filename: a.filename, contentType: a.contentType, sha256: a.sha256, size: a.size }))
+    .sort((a, b) => a.sha256.localeCompare(b.sha256) || a.filename.localeCompare(b.filename) || a.size - b.size);
+}
+
+/** The provider draft, normalized so a later read can be compared byte for byte. */
+export function snapshotFromDraft(conversationId: string, draftMessageId: string, live: MailDraft): SendDraftSnapshot | null {
+  if (!live.to?.length || live.subject === undefined || live.body === undefined) return null;
+  return {
+    conversationId,
+    draftExternalId: live.draftId,
+    draftMessageId,
+    to: addressKeys(live.to),
+    cc: addressKeys(live.cc),
+    bcc: addressKeys(live.bcc),
+    replyTo: addressKeys(live.replyTo),
+    subject: live.subject,
+    body: live.body,
+    attachments: attachmentKeys(live.attachments),
+  };
+}
+
 /** Hash of the exact mailbox action a person approves. Execution must recompute this from the provider. */
-export function sendContentHash(action: { conversationId: string; draftExternalId: string; draftMessageId: string; to: string[]; subject: string; body: string }): string {
+export function sendContentHash(action: SendDraftSnapshot): string {
   return createHash("sha256").update(canonicalJson({
     conversationId: action.conversationId,
     draftExternalId: action.draftExternalId,
     draftMessageId: action.draftMessageId,
-    to: [...action.to].map((t) => t.toLowerCase()).sort(),
+    to: action.to,
+    cc: action.cc,
+    bcc: action.bcc,
+    replyTo: action.replyTo,
     subject: action.subject,
     body: action.body,
+    attachments: action.attachments,
   })).digest("hex");
+}
+
+function sameAddresses(left: string[] | undefined, right: string[]): boolean {
+  return left === undefined || addressKeys(left).join("\n") === addressKeys(right).join("\n");
 }
 
 /**
  * The draft the mailbox will actually send, not the model's claimed recipient.
  * Returns null when that draft cannot be read.
  */
-export async function bindSendDraftArgs(tenantId: string, proposed: { conversationId: string; to?: string[]; subject?: string; body?: string; draftExternalId?: string; draftMessageId?: string }): Promise<{ conversationId: string; to: string[]; subject: string; body: string; draftExternalId: string; draftMessageId: string; contentHash: string } | null> {
+export async function bindSendDraftArgs(tenantId: string, proposed: { conversationId: string; to?: string[]; cc?: string[]; bcc?: string[]; replyTo?: string[]; subject?: string; body?: string; draftExternalId?: string; draftMessageId?: string; attachments?: MailAttachment[] }): Promise<(SendDraftSnapshot & { contentHash: string }) | null> {
   const box = await getEngine().mailbox?.(tenantId);
   if (!box) return null;
   let conv;
@@ -65,18 +118,20 @@ export async function bindSendDraftArgs(tenantId: string, proposed: { conversati
   const draftExternalId = proposed.draftExternalId ?? conv.draftExternalId ?? undefined;
   if (!draftMessageId || !draftExternalId) return null;
   const live = await box.provider.findDraft(draftMessageId);
-  if (!live || live.draftId !== draftExternalId || !live.to?.length || live.subject === undefined || live.body === undefined) return null;
-  const resolved = {
-    conversationId: conv.id,
-    to: live.to.map((t) => t.toLowerCase()),
-    subject: live.subject,
-    body: live.body,
-    draftExternalId: live.draftId,
-    draftMessageId,
-  };
+  if (!live || live.draftId !== draftExternalId) return null;
+  const resolved = snapshotFromDraft(conv.id, draftMessageId, live);
+  if (!resolved) return null;
   if (!replyRecipients(lastInbound).length) return null;
-  const same = (left: string[] | undefined, right: string[]) => !left?.length || [...left].map((t) => t.toLowerCase()).sort().join(",") === [...right].sort().join(",");
-  if (!same(proposed.to, resolved.to) || (proposed.subject !== undefined && proposed.subject !== resolved.subject) || (proposed.body !== undefined && proposed.body !== resolved.body)) return null;
+  const sameFiles = proposed.attachments === undefined || canonicalJson(attachmentKeys(proposed.attachments)) === canonicalJson(resolved.attachments);
+  if (
+    !sameAddresses(proposed.to, resolved.to) ||
+    !sameAddresses(proposed.cc, resolved.cc) ||
+    !sameAddresses(proposed.bcc, resolved.bcc) ||
+    !sameAddresses(proposed.replyTo, resolved.replyTo) ||
+    (proposed.subject !== undefined && proposed.subject !== resolved.subject) ||
+    (proposed.body !== undefined && proposed.body !== resolved.body) ||
+    !sameFiles
+  ) return null;
   return { ...resolved, contentHash: sendContentHash(resolved) };
 }
 
@@ -140,7 +195,7 @@ export function inboxTools(mailbox: MailboxResolver): ToolDefinition[] {
     // createDraft already looks the draft up by Message-ID first, so re-running is safe.
   };
 
-  const sendDraft: ToolDefinition<{ conversationId: string; to: string[]; subject: string; body: string; draftExternalId?: string; draftMessageId?: string; contentHash?: string }> = {
+  const sendDraft: ToolDefinition<{ conversationId: string; to: string[]; cc?: string[]; bcc?: string[]; replyTo?: string[]; subject: string; body: string; draftExternalId?: string; draftMessageId?: string; contentHash?: string; attachments?: MailAttachment[] }> = {
     name: "inbox.send_draft",
     description: "Send the drafted reply in a conversation. The approval shows exactly what goes out.",
     tier: 2,
@@ -149,13 +204,31 @@ export function inboxTools(mailbox: MailboxResolver): ToolDefinition[] {
     args: z.object({
       conversationId,
       to: z.array(z.email()).min(1).max(20),
+      cc: z.array(z.email()).max(20).optional(),
+      bcc: z.array(z.email()).max(20).optional(),
+      replyTo: z.array(z.email()).max(20).optional(),
       subject: z.string().max(500),
       body: z.string().max(20000),
       draftExternalId: z.string().min(1).max(200).optional(),
       draftMessageId: z.string().min(1).max(300).optional(),
       contentHash: z.string().length(64).optional(),
+      attachments: z.array(z.object({
+        filename: z.string().max(300),
+        contentType: z.string().max(200),
+        sha256: z.string().length(64),
+        size: z.number().int().nonnegative(),
+      })).max(20).optional(),
     }),
-    summarize: (a) => `Send email to ${a.to.join(", ")}: "${a.subject}"`,
+    summarize: (a) => {
+      const copies = [
+        a.cc?.length ? `cc ${a.cc.join(", ")}` : "",
+        a.bcc?.length ? `bcc ${a.bcc.join(", ")}` : "",
+        a.replyTo?.length ? `reply-to ${a.replyTo.join(", ")}` : "",
+        a.attachments?.length ? `${a.attachments.length} attachment${a.attachments.length === 1 ? "" : "s"}` : "",
+      ].filter(Boolean);
+      const extra = copies.length ? ` (${copies.join("; ")})` : "";
+      return `Send email to ${a.to.join(", ")}${extra}: "${a.subject}"`;
+    },
     async execute(ctx, a) {
       const box = await mailbox(ctx.tenantId);
       if (!box) throw new ToolError("No mailbox is connected", false, "NO_MAILBOX");
@@ -167,28 +240,27 @@ export function inboxTools(mailbox: MailboxResolver): ToolDefinition[] {
       const pinnedId = a.draftExternalId ?? conv.draftExternalId;
       const pinnedMessageId = a.draftMessageId ?? conv.draftMessageId;
       const live = pinnedMessageId ? await box.provider.findDraft(pinnedMessageId) : undefined;
-      if (!pinnedId || !pinnedMessageId || !live || live.draftId !== pinnedId || !live.to || live.subject === undefined || live.body === undefined) {
+      const resolved = live && live.draftId === pinnedId && pinnedMessageId ? snapshotFromDraft(conv.id, pinnedMessageId, live) : null;
+      if (!pinnedId || !pinnedMessageId || !resolved || resolved.draftExternalId !== pinnedId) {
         throw new ToolError("The mailbox draft is gone. Request a new approval.", false, "DRAFT_MISSING");
       }
-      const resolved = {
-        conversationId: conv.id,
-        to: live.to.map((t) => t.toLowerCase()),
-        subject: live.subject,
-        body: live.body,
-        draftExternalId: live.draftId,
-        draftMessageId: pinnedMessageId,
+      const approved = {
+        to: addressKeys(a.to),
+        cc: addressKeys(a.cc),
+        bcc: addressKeys(a.bcc),
+        replyTo: addressKeys(a.replyTo),
+        attachments: attachmentKeys(a.attachments),
       };
-      const approvedTo = [...a.to].map((t) => t.toLowerCase()).sort();
-      const liveTo = [...resolved.to].sort();
       const hash = sendContentHash(resolved);
+      const threadTo = addressKeys(expectedTo);
       if (
         (a.contentHash !== undefined && a.contentHash !== hash) ||
-        liveTo.join(",") !== approvedTo.join(",") ||
+        canonicalJson(approved) !== canonicalJson({ to: resolved.to, cc: resolved.cc, bcc: resolved.bcc, replyTo: resolved.replyTo, attachments: resolved.attachments }) ||
         resolved.subject !== a.subject ||
         resolved.body !== a.body ||
         resolved.draftExternalId !== pinnedId ||
         resolved.conversationId !== a.conversationId ||
-        [...expectedTo].sort().join(",") !== approvedTo.join(",")
+        threadTo.join("\n") !== approved.to.join("\n")
       ) {
         throw new ToolError("The draft changed after it was approved. Request a new approval.", false, "DRAFT_CHANGED");
       }

@@ -18,7 +18,7 @@ import { createRoutine } from "../routines/service";
 import { messageIdFor } from "../integrations/mail";
 import { requestSendDraft } from "../inbox/service";
 import { ingestLead } from "../speed/service";
-import { replyRecipients, replySubject, sendContentHash } from "../tools/inbox";
+import { replyRecipients, replySubject, sendContentHash, snapshotFromDraft } from "../tools/inbox";
 import { seasonalHits, type SignalHit } from "../signals/sources";
 import { approvalCard, approvalExpiryMs, type ApprovalCardView } from "./cards";
 
@@ -202,18 +202,15 @@ async function rebindPlan(tx: Tx, orgId: string, task: { id: string; tenantId: s
       });
       args.conversationId = canonical.conversationId;
       args.to = canonical.to;
+      args.cc = canonical.cc;
+      args.bcc = canonical.bcc;
+      args.replyTo = canonical.replyTo;
       args.subject = canonical.subject;
       args.body = canonical.body;
+      args.attachments = canonical.attachments;
       args.draftExternalId = canonical.draftExternalId;
       args.draftMessageId = canonical.draftMessageId;
-      args.contentHash = sendContentHash({
-        conversationId: canonical.conversationId,
-        draftExternalId: canonical.draftExternalId,
-        draftMessageId: canonical.draftMessageId,
-        to: canonical.to,
-        subject: canonical.subject,
-        body: canonical.body,
-      });
+      args.contentHash = sendContentHash(canonical);
       changed = true;
     } else {
       for (const key of Object.keys(args)) {
@@ -268,7 +265,10 @@ async function writeAuthoritativeDraft(tx: Tx, orgId: string, conversationId: st
   if (stillLatest) {
     await tx.update(conversations).set({ draftBody: body, draftExternalId, draftMessageId, updatedAt: new Date() }).where(eq(conversations.id, conv.id));
   }
-  return { conversationId: conv.id, to, subject, body, draftExternalId: draftExternalId!, draftMessageId: draftMessageId! };
+  const written = draftMessageId ? await box.provider.findDraft(draftMessageId) : undefined;
+  const snap = written ? snapshotFromDraft(conv.id, draftMessageId!, written) : null;
+  if (!snap || snap.draftExternalId !== draftExternalId) throw new AppError("CONFLICT", "The mailbox draft is not there.");
+  return snap;
 }
 
 async function reraiseApproval(tx: Tx, approvalId: string, next: { digest: string; summary: string; payload: Record<string, unknown>; requestedBy: string }) {

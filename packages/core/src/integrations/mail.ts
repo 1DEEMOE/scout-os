@@ -12,14 +12,38 @@ export interface InboundMessage {
   direction: "inbound" | "outbound";
 }
 
+/** A file on a draft. The sha256 is of the raw bytes, so a swapped file changes the approval. */
+export interface MailAttachment {
+  filename: string;
+  contentType: string;
+  sha256: string;
+  size: number;
+}
+
 export interface OutboundDraft {
   threadId?: string;
   to: string[];
+  cc?: string[];
+  bcc?: string[];
+  replyTo?: string[];
   subject: string;
   body: string;
   inReplyTo?: string;
+  attachments?: MailAttachment[];
   /** Deterministic RFC 822 Message-ID; how a retried call finds the earlier one. */
   messageId: string;
+}
+
+/** The provider draft a send approval is bound to. */
+export interface MailDraft {
+  draftId: string;
+  to?: string[];
+  cc?: string[];
+  bcc?: string[];
+  replyTo?: string[];
+  subject?: string;
+  body?: string;
+  attachments?: MailAttachment[];
 }
 
 /** What the inbox agent needs from a mailbox. Gmail is one implementation. */
@@ -30,8 +54,8 @@ export interface MailProvider {
   createDraft(draft: OutboundDraft): Promise<{ draftId: string }>;
   /** Replaces the body of a draft the mailbox already holds. The id stays the same. */
   updateDraft(draftId: string, draft: OutboundDraft): Promise<{ draftId: string }>;
-  /** Looks for an existing draft carrying this Message-ID. */
-  findDraft(messageId: string): Promise<{ draftId: string; to?: string[]; subject?: string; body?: string } | undefined>;
+  /** Looks for an existing draft carrying this Message-ID, including every recipient header and attachment. */
+  findDraft(messageId: string): Promise<MailDraft | undefined>;
   sendDraft(draftId: string): Promise<{ externalId: string }>;
   /** Looks for a sent message carrying this Message-ID. */
   findSent(messageId: string): Promise<{ externalId: string } | undefined>;
@@ -52,6 +76,9 @@ export function buildRfc822(d: OutboundDraft & { from?: string }): string {
   const lines = [
     ...(d.from ? [`From: ${header(d.from)}`] : []),
     `To: ${d.to.map(header).join(", ")}`,
+    ...(d.cc?.length ? [`Cc: ${d.cc.map(header).join(", ")}`] : []),
+    ...(d.bcc?.length ? [`Bcc: ${d.bcc.map(header).join(", ")}`] : []),
+    ...(d.replyTo?.length ? [`Reply-To: ${d.replyTo.map(header).join(", ")}`] : []),
     `Subject: ${header(d.subject)}`,
     `Message-ID: ${header(d.messageId)}`,
     ...(d.inReplyTo ? [`In-Reply-To: ${header(d.inReplyTo)}`, `References: ${header(d.inReplyTo)}`] : []),
@@ -78,6 +105,10 @@ export class FakeMailProvider implements MailProvider {
   private nextSent = 0;
   /** Simulates the provider sending, then the connection dropping. */
   dropAfterSend = 0;
+  /** While set, the in-flight send waits here so another run can observe it. */
+  sendGate: Promise<void> | null = null;
+  /** Throw after the gate, before anything is delivered. */
+  rejectSend = false;
 
   async listRecent(opts: { cursor?: string | null; max?: number }) {
     const start = opts.cursor ? Number(opts.cursor) : 0;
@@ -100,13 +131,35 @@ export class FakeMailProvider implements MailProvider {
     return { draftId };
   }
 
-  async findDraft(messageId: string) {
-    for (const [draftId, d] of this.drafts) if (d.messageId === messageId) return { draftId, to: d.to, subject: d.subject, body: d.body };
+  async findDraft(messageId: string): Promise<MailDraft | undefined> {
+    for (const [draftId, d] of this.drafts) {
+      if (d.messageId === messageId) {
+        return {
+          draftId,
+          to: d.to,
+          cc: d.cc,
+          bcc: d.bcc,
+          replyTo: d.replyTo,
+          subject: d.subject,
+          body: d.body,
+          attachments: d.attachments,
+        };
+      }
+    }
     return undefined;
   }
 
   async sendDraft(draftId: string) {
     this.sendCalls++;
+    const gate = this.sendGate;
+    if (gate) {
+      this.sendGate = null;
+      await gate;
+    }
+    if (this.rejectSend) {
+      this.rejectSend = false;
+      throw new Error("MOCK provider rejected the send");
+    }
     const d = this.drafts.get(draftId);
     if (!d) throw new Error(`MOCK: draft ${draftId} not found`);
     const externalId = `sent_${++this.nextSent}`;

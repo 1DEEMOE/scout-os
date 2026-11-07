@@ -211,7 +211,7 @@ async function plan(task: TaskRow): Promise<boolean> {
     }
     let args: unknown = parsed.data;
     if (tool.name === "inbox.send_draft") {
-      const proposed = parsed.data as { conversationId: string; to?: string[]; subject?: string; body?: string; draftExternalId?: string; draftMessageId?: string };
+      const proposed = parsed.data as { conversationId: string; to?: string[]; cc?: string[]; bcc?: string[]; replyTo?: string[]; subject?: string; body?: string; draftExternalId?: string; draftMessageId?: string; attachments?: { filename: string; contentType: string; sha256: string; size: number }[] };
       const bound = await bindSendDraftArgs(task.tenantId, proposed);
       if ((proposed.draftExternalId || proposed.draftMessageId) && !bound) {
         await withTenant(task.tenantId, (tx) => transition(tx, task, "FAILED", fail("The draft to send does not match the mailbox draft", "DRAFT_MISMATCH")));

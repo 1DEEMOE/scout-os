@@ -481,7 +481,70 @@ describe("owner draft and follow-up chip on the real inbox tools", () => {
       tx.select({ metadata: auditEvents.metadata, outcome: auditEvents.outcome }).from(auditEvents).where(eq(auditEvents.action, "task.step.skipped")),
     );
     expect(skipped.length).toBeGreaterThan(0);
-    expect(skipped.every((row) => row.outcome === "success" && (row.metadata as { reason?: string }).reason === "already_completed")).toBe(true);
+    const reasons = skipped.map((row) => (row.metadata as { reason?: string }).reason);
+    expect(reasons.every((reason) => reason === "in_flight" || reason === "deferred" || reason === "already_completed")).toBe(true);
+  });
+
+  it("a cc or bcc added on the provider draft after approval is not sent", async () => {
+    const conv = await syncedConversation();
+    await triageAndDraft(conv.id);
+    const [ident] = await withTenant(orgId, (tx) => tx.select().from(emailIdentities));
+    await setMailboxMode({ actorUserId: "owner", orgId, identityId: ident!.id, mode: "send_with_approval" });
+    const legitimate = [...mail.drafts.entries()][0]!;
+    plan = {
+      toolCalls: [{
+        name: "inbox.send_draft",
+        input: {
+          conversationId: conv.id,
+          to: ["client@customer.test"],
+          subject: "Re: Invoice question",
+          body: legitimate[1].body,
+          draftExternalId: legitimate[0],
+          draftMessageId: legitimate[1].messageId,
+        },
+      }],
+    };
+    const { taskId } = await createTask({ actorUserId: "member", orgId, intent: "Send the drafted reply", input: { agentKind: "inbox", conversationId: conv.id } });
+    expect(await runTask(orgId, taskId)).toBe("WAITING_FOR_APPROVAL");
+    const [approved] = await approvalsFor(orgId, taskId);
+    const pinned = (approved!.payload as { args: { draftExternalId: string; draftMessageId: string; subject: string; body: string; to: string[] } }).args;
+    await mail.updateDraft(pinned.draftExternalId, {
+      threadId: "thr-A",
+      to: pinned.to,
+      cc: ["copy@hidden.test"],
+      bcc: ["blind@hidden.test"],
+      subject: pinned.subject,
+      body: pinned.body,
+      messageId: pinned.draftMessageId,
+    });
+    await decideApproval({ actorUserId: "owner", orgId, approvalId: approved!.id, decision: "approve" });
+    expect(await runTask(orgId, taskId)).toBe("FAILED");
+    expect((await taskRow(orgId, taskId)).error).toMatchObject({ code: "DRAFT_CHANGED" });
+    expect(mail.sendCalls).toBe(0);
+    expect(mail.sent.size).toBe(0);
+  });
+
+  it("an in-flight send that fails does not record already_completed", async () => {
+    const { taskId } = await draftedSend();
+    const [approval] = await approvalsFor(orgId, taskId);
+    await decideApproval({ actorUserId: "owner", orgId, approvalId: approval!.id, decision: "approve" });
+    let releaseSend!: () => void;
+    mail.sendGate = new Promise((resolve) => { releaseSend = resolve; });
+    mail.rejectSend = true;
+    const winner = runTask(orgId, taskId);
+    for (let i = 0; i < 50 && mail.sendCalls < 1; i++) await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(mail.sendCalls).toBe(1);
+    const peers = await Promise.all([runTask(orgId, taskId), runTask(orgId, taskId)]);
+    releaseSend();
+    expect(await winner).toBe("RETRY_SCHEDULED");
+    expect(peers).not.toContain("FAILED");
+    expect(mail.sent.size).toBe(0);
+    const skipped = await withTenant(orgId, (tx) =>
+      tx.select({ metadata: auditEvents.metadata }).from(auditEvents).where(eq(auditEvents.action, "task.step.skipped")),
+    );
+    const reasons = skipped.map((row) => (row.metadata as { reason?: string }).reason);
+    expect(reasons).not.toContain("already_completed");
+    expect(reasons.filter((reason) => reason === "in_flight").length).toBeGreaterThan(0);
   });
 });
 
@@ -564,6 +627,50 @@ describe("Gmail adapter request shape (no network)", () => {
     };
     const g = new GmailProvider({} as never, "office@acme.test", api as never);
     expect(await g.findDraft("<wos-1@workforce-os.invalid>")).toEqual({ draftId: "r-1", to: ["a@b.test"], subject: "Hi", body: "Body" });
+  });
+
+  it("reads cc, bcc, reply-to, and attachments from the provider draft", async () => {
+    const { createHash } = await import("node:crypto");
+    const file = Buffer.from("secret");
+    const api = {
+      users: {
+        drafts: {
+          list: async () => ({ data: { drafts: [{ id: "r-2" }] } }),
+          get: async () => ({
+            data: {
+              id: "r-2",
+              message: {
+                payload: {
+                  mimeType: "multipart/mixed",
+                  headers: [
+                    { name: "To", value: "A Person <a@b.test>" },
+                    { name: "Cc", value: "cc@b.test" },
+                    { name: "Bcc", value: "Hidden <bcc@b.test>" },
+                    { name: "Reply-To", value: "reply@b.test" },
+                    { name: "Subject", value: "Hi" },
+                  ],
+                  parts: [
+                    { mimeType: "text/plain", body: { data: Buffer.from("Body").toString("base64url") } },
+                    { filename: "note.txt", mimeType: "text/plain", body: { data: file.toString("base64url") } },
+                  ],
+                },
+              },
+            },
+          }),
+        },
+      },
+    };
+    const g = new GmailProvider({} as never, "office@acme.test", api as never);
+    expect(await g.findDraft("<wos-2@workforce-os.invalid>")).toEqual({
+      draftId: "r-2",
+      to: ["a@b.test"],
+      cc: ["cc@b.test"],
+      bcc: ["bcc@b.test"],
+      replyTo: ["reply@b.test"],
+      subject: "Hi",
+      body: "Body",
+      attachments: [{ filename: "note.txt", contentType: "text/plain", sha256: createHash("sha256").update(file).digest("hex"), size: file.length }],
+    });
   });
 
   it("builds a valid plain-text message", () => {

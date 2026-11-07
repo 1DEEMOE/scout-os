@@ -1,5 +1,5 @@
 import { and, desc, eq, gt, sql } from "drizzle-orm";
-import { approvalRequests, usageEvents, withTenant, workflowExecutions } from "@wos/db";
+import { approvalRequests, tasks, usageEvents, withTenant, workflowExecutions } from "@wos/db";
 import { recordAudit } from "../audit";
 import { logger } from "../logger";
 import { withSpan } from "../tracing";
@@ -40,7 +40,7 @@ export interface Plan {
  *    ask the tool to reconcile by idempotency key before calling it again.
  * 3. In a transaction: record the output and the audit entry.
  */
-async function recordStepSkipped(tx: Parameters<typeof recordAudit>[0], tenantId: string, taskId: string, agentId: string, step: PlanStep) {
+async function recordStepSkipped(tx: Parameters<typeof recordAudit>[0], tenantId: string, taskId: string, agentId: string, step: PlanStep, reason: "already_completed" | "in_flight" | "deferred") {
   await recordAudit(tx, {
     tenantId,
     actorType: "system",
@@ -49,7 +49,7 @@ async function recordStepSkipped(tx: Parameters<typeof recordAudit>[0], tenantId
     target: `task:${taskId}`,
     tier: 0,
     outcome: "success",
-    metadata: { reason: "already_completed", step: step.index, tool: step.tool },
+    metadata: { reason, step: step.index, tool: step.tool },
   });
 }
 
@@ -108,11 +108,14 @@ export async function executeStep(task: { id: string; tenantId: string; assigned
           .orderBy(desc(workflowExecutions.attempt));
         const succeeded = prior.find((p) => p.status === "succeeded");
         if (succeeded) {
-          await recordStepSkipped(tx, task.tenantId, task.id, agentId, step);
+          const [row] = await tx.select({ state: tasks.state }).from(tasks).where(eq(tasks.id, task.id));
+          // The step row can succeed before the task is completed. That is not a finished send.
+          const reason = row?.state === "COMPLETED" ? "already_completed" : "deferred";
+          await recordStepSkipped(tx, task.tenantId, task.id, agentId, step, reason);
           return { kind: "done" as const, output: succeeded.output };
         }
         if (prior.some((p) => p.status === "running")) {
-          await recordStepSkipped(tx, task.tenantId, task.id, agentId, step);
+          await recordStepSkipped(tx, task.tenantId, task.id, agentId, step, "in_flight");
           return { kind: "skipped" as const };
         }
         // Consumed with no execution is a replay, not a race. Failed attempts fall
