@@ -2,13 +2,13 @@ import { desc, eq } from "drizzle-orm";
 import { z } from "zod";
 import { conversations, emailIdentities, isUuid, messages } from "@wos/db";
 import { recordAudit } from "../audit";
-import { checkEmailAllowed } from "../scout/consent";
+import { getEngine } from "../engine/runtime";
 import { createTask } from "../engine/tasks";
 import { AppError } from "../errors";
 import { upsertConnection } from "../integrations/connections";
 import type { GoogleTokens } from "../integrations/gmail";
 import { ANY_ROLE, inOrg, MANAGERS, requireRole, STAFF } from "../org/access";
-import { replyRecipients, replySubject } from "../tools/inbox";
+import { gateOutboundMail, outboundRecipients, replyRecipients, replySubject, snapshotFromDraft } from "../tools/inbox";
 import { enqueueInboxSync, pullMailbox } from "./sync";
 
 /** Stores a Google mailbox after OAuth. Owners and admins only; starts in draft-only mode. */
@@ -95,9 +95,20 @@ export async function requestSendDraft(input: { actorUserId: string; orgId: stri
   const { conversation, messages: msgs } = await getConversation(input);
   if (!conversation.draftExternalId || !conversation.draftBody) throw new AppError("CONFLICT", "There is no draft to send");
   const lastInbound = [...msgs].reverse().find((m) => m.direction === "inbound");
-  const args = { conversationId: conversation.id, to: replyRecipients(lastInbound), subject: replySubject(conversation.subject), body: conversation.draftBody };
-  // Say so now rather than after someone approves it. The send tool checks again at send time.
-  const gate = await inOrg(input.orgId, (tx) => checkEmailAllowed(tx, args.to));
+  const args = {
+    conversationId: conversation.id,
+    to: replyRecipients(lastInbound),
+    subject: replySubject(conversation.subject),
+    body: conversation.draftBody,
+    draftExternalId: conversation.draftExternalId,
+    draftMessageId: conversation.draftMessageId,
+  };
+  // Say so now rather than after someone approves it. The send tool checks the provider draft again at send time.
+  const box = await getEngine().mailbox?.(input.orgId);
+  const live = box && conversation.draftMessageId ? await box.provider.findDraft(conversation.draftMessageId) : undefined;
+  const snap = live && conversation.draftMessageId && live.draftId === conversation.draftExternalId ? snapshotFromDraft(conversation.id, conversation.draftMessageId, live) : null;
+  const recipients = snap ? outboundRecipients(snap) : args.to;
+  const gate = await inOrg(input.orgId, (tx) => gateOutboundMail(tx, { tenantId: input.orgId, actorType: "user", actorId: input.actorUserId, target: `conversation:${conversation.id}`, recipients }));
   if (!gate.allowed) throw new AppError("CONFLICT", gate.message);
   return createTask({
     actorUserId: input.actorUserId,

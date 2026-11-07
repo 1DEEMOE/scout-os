@@ -8,6 +8,7 @@ import { logger } from "../logger";
 import { ANY_ROLE, MANAGERS, inOrg, requireRole, STAFF } from "../org/access";
 import { getPack, type OutreachPurpose, type PackTemplate } from "../industries/packs";
 import { readPackId } from "../industries/store";
+import { approvalExpiryMs } from "../kimi/cards";
 import { smsWindowOpen } from "./hours";
 import { isStopKeyword, mockSmsPort, normalizePhone, type SmsPort } from "./sms";
 
@@ -182,7 +183,7 @@ async function queueCustom(tx: Tx, tenantId: string, userId: string, lead: LeadR
     actionDigest: createHash("sha256").update(`${tenantId}|${lead.id}|${lead.purpose}`).digest("hex"),
     payload: { leadId: lead.id, purpose: lead.purpose, channel: lead.phone ? "sms" : "email" },
     summary: lead.purpose === "first_response" ? "Send a first reply that isn't a pre-approved template" : "Send a follow-up that isn't a pre-approved template",
-    expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+    expiresAt: new Date(Date.now() + approvalExpiryMs("system:speed-to-lead", Number(process.env.WOS_BACKGROUND_APPROVAL_MINUTES ?? 45))),
   });
   const next: LeadRecord = { ...lead, outcome: "queued", approvalId };
   await put(tx, tenantId, userId, scopeLead(lead.externalKey), next);

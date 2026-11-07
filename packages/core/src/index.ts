@@ -73,6 +73,7 @@ export * from "./onboarding/service";
 export * from "./onboarding/quickstart";
 export * from "./platform/admin";
 export { INDUSTRY_PACKS, PACK_VERSION, getPack, listPacks, packsUsing } from "./industries/packs";
+export { readPackId } from "./industries/store";
 export { approveAllTemplates, ingestLead, listTemplates, recordSmsConsent, speedSummary, stagePackTemplates } from "./speed/service";
 export { bookVisit, dueForRebook, setVisitStatus } from "./speed/appointments";
 export { collectSignals, seasonalHits } from "./signals/sources";
@@ -92,6 +93,8 @@ export { sameOrigin } from "./security/origin";
 export { secretFindings } from "./security/secrets";
 export { checkToolOutput, resetToolRates, takeToolRate } from "./engine/tool-guard";
 export { smsWindowOpen } from "./speed/hours";
+export * from "./kimi/cards";
+export * from "./kimi/round1";
 
 export * from "./front-desk/service";
 export * from "./ai-answers/provider";

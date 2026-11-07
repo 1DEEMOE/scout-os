@@ -1,4 +1,5 @@
 import { auditRouter } from "./routers/audit";
+import { kimiRouter } from "./routers/kimi";
 import { billingRouter } from "./routers/billing";
 import { scoutRouter } from "./routers/scout";
 import { routinesRouter } from "./routers/routines";
@@ -14,6 +15,6 @@ import { onboardingRouter } from "./routers/onboarding";
 import { agentRouter, approvalRouter, taskRouter } from "./routers/work";
 import { createCallerFactory, router } from "./trpc";
 
-export const appRouter = router({ org: orgRouter, onboarding: onboardingRouter, agent: agentRouter, task: taskRouter, approval: approvalRouter, inbox: inboxRouter, integration: integrationRouter, crm: crmRouter, finance: financeRouter, audit: auditRouter, memory: memoryRouter, billing: billingRouter, chat: chatRouter, scout: scoutRouter, routines: routinesRouter, gaps2: gaps2Router });
+export const appRouter = router({ org: orgRouter, onboarding: onboardingRouter, agent: agentRouter, task: taskRouter, approval: approvalRouter, inbox: inboxRouter, integration: integrationRouter, crm: crmRouter, finance: financeRouter, audit: auditRouter, memory: memoryRouter, billing: billingRouter, chat: chatRouter, scout: scoutRouter, routines: routinesRouter, gaps2: gaps2Router, kimi: kimiRouter });
 export type AppRouter = typeof appRouter;
 export const createCaller = createCallerFactory(appRouter);

@@ -84,6 +84,13 @@ export function financeTools(resolve: InvoicingResolver): ToolDefinition[] {
         tenantId: ctx.tenantId,
         integration: "payments",
         idempotencyKey: `pay:${ctx.idempotencyKey}`,
+        mock: p.mock,
+        retry: p.mock
+          ? async () => {
+              const again = await p.createInvoice({ ...a, currency: "usd" }, ctx.idempotencyKey);
+              return { externalId: again.externalId, mock: true };
+            }
+          : undefined,
         effect: (fx) => fx.once(() => p.createInvoice({ ...a, currency: "usd" }, ctx.idempotencyKey)),
       });
       const invoiceId = await storeInvoice(ctx.tenantId, p.name, created);

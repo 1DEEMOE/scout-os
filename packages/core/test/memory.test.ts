@@ -1,6 +1,6 @@
-import { sql } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
-import { closePool, withTenant } from "@wos/db";
+import { auditEvents, closePool, withTenant } from "@wos/db";
 import {
   AppError,
   configureEngine,
@@ -79,8 +79,10 @@ describe("org memory", () => {
     await forgetMemory({ actorUserId: "owner", orgId, memoryId: fact.id });
     await task("Explain our invoice terms to a client");
     expect(planPrompt()).not.toContain("net 30");
-    const audit = await withTenant(orgId, (tx) => tx.execute(sql`SELECT metadata FROM audit_events WHERE action = 'memory.delete'`));
-    expect(audit.rows[0]).toMatchObject({ metadata: { content: "Our invoice terms are net 30." } });
+    const audit = await withTenant(orgId, (tx) => tx.select({ metadata: auditEvents.metadata, outcome: auditEvents.outcome }).from(auditEvents).where(eq(auditEvents.action, "memory.delete")).orderBy(auditEvents.seq));
+    const deleted = audit.filter((row) => row.outcome === "success");
+    expect(deleted).toHaveLength(1);
+    expect(deleted[0]).toMatchObject({ metadata: { content: "Our invoice terms are net 30." } });
   });
 
   it("viewers can't add memory; other orgs can't read or delete it", async () => {

@@ -95,9 +95,12 @@ const inflight = new Map<string, Promise<EventResult>>();
 
 /** Successful effects, shared by every runEvent in this process. A replay of an applied key does not run the effect again. */
 const appliedEffects = new Map<string, Promise<unknown>>();
+/** In-flight effects. A replay that arrives before the first attempt finishes waits on this instead of starting another. */
+const inflightEffects = new Map<string, Promise<unknown>>();
 
 export function resetAppliedEffects(): void {
   appliedEffects.clear();
+  inflightEffects.clear();
 }
 
 export function effectWasApplied(tenantId: string, key: string): boolean {
@@ -194,16 +197,26 @@ function effectContext(tenantId: string, key: string, signal: AbortSignal): Effe
     once: (fn) => {
       const prior = appliedEffects.get(id);
       if (prior) return prior as Promise<Awaited<ReturnType<typeof fn>>>;
+      const running = inflightEffects.get(id);
+      if (running) return running as Promise<Awaited<ReturnType<typeof fn>>>;
       if (signal.aborted) return Promise.reject(abortError());
       const pending = Promise.resolve()
         .then(() => {
           if (signal.aborted) throw abortError();
           return fn();
         })
-        .then((value) => {
-          appliedEffects.set(id, Promise.resolve(value));
-          return value;
-        });
+        .then(
+          (value) => {
+            appliedEffects.set(id, Promise.resolve(value));
+            inflightEffects.delete(id);
+            return value;
+          },
+          (err) => {
+            inflightEffects.delete(id);
+            throw err;
+          },
+        );
+      inflightEffects.set(id, pending);
       return pending;
     },
   };

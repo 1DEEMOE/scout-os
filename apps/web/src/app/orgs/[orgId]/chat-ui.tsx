@@ -107,8 +107,8 @@ export function ApprovalCard({ item, orgId }: { item: ApprovalForReview; orgId: 
         <div className="flex flex-wrap items-center gap-2 border-t border-line pt-4">
           {r.kind === "can_approve" && (
             <>
-              <ActionButton path="approval.decide" input={{ orgId, approvalId: a.id, decision: "approve" }} label={a.tier === 4 ? "OK (needs second person)" : "OK"} variant="primary" />
-              <ActionButton path="approval.decide" input={{ orgId, approvalId: a.id, decision: "reject" }} label="Decline" />
+              <ActionButton path="approval.decide" input={{ orgId, approvalId: a.id, decision: "approve" }} label={a.tier === 4 ? "Approve once (needs a second owner)" : "Approve once"} variant="primary" />
+              <ActionButton path="approval.decide" input={{ orgId, approvalId: a.id, decision: "reject" }} label="Not now" />
             </>
           )}
           {r.kind === "can_confirm" && (

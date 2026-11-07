@@ -1,6 +1,7 @@
+import { createHash } from "node:crypto";
 import { gmail, type gmail_v1 } from "@googleapis/gmail";
 import { OAuth2Client, type Credentials } from "google-auth-library";
-import { buildRfc822, type InboundMessage, type MailProvider, type OutboundDraft } from "./mail";
+import { buildRfc822, type InboundMessage, type MailAttachment, type MailDraft, type MailProvider, type OutboundDraft } from "./mail";
 
 /**
  * Gmail adapter. UNVERIFIED against a live mailbox: no Google OAuth client has
@@ -31,10 +32,46 @@ function header(msg: gmail_v1.Schema$Message, name: string): string {
   return msg.payload?.headers?.find((h) => h.name?.toLowerCase() === name.toLowerCase())?.value ?? "";
 }
 
-/** Plain-text body: the first text/plain part, else the snippet. */
+function addressList(message: gmail_v1.Schema$Message, name: string): string[] {
+  return header(message, name)
+    .split(",")
+    .map((part) => {
+      const wrapped = part.match(/<([^>]+)>/);
+      return (wrapped?.[1] ?? part).trim().toLowerCase();
+    })
+    .filter(Boolean);
+}
+
+function isAttachment(part: gmail_v1.Schema$MessagePart): boolean {
+  if (part.filename) return true;
+  const disposition = part.headers?.find((h) => h.name?.toLowerCase() === "content-disposition")?.value ?? "";
+  return /attachment/i.test(disposition);
+}
+
+function attachmentBytes(part: gmail_v1.Schema$MessagePart): Buffer | undefined {
+  if (!part.body?.data) return undefined;
+  return Buffer.from(part.body.data, "base64url");
+}
+
+/** Files on the draft. A part we cannot read is still listed so a hidden file changes the snapshot. */
+function collectAttachments(part: gmail_v1.Schema$MessagePart | undefined, out: MailAttachment[]): void {
+  if (!part) return;
+  if (isAttachment(part)) {
+    const bytes = attachmentBytes(part);
+    out.push({
+      filename: part.filename || "attachment",
+      contentType: part.mimeType || "application/octet-stream",
+      sha256: bytes ? createHash("sha256").update(bytes).digest("hex") : `unreadable:${part.body?.attachmentId ?? part.filename ?? "part"}`,
+      size: bytes ? bytes.length : (part.body?.size ?? 0),
+    });
+  }
+  for (const child of part.parts ?? []) collectAttachments(child, out);
+}
+
+/** Plain-text body: the first text/plain part that is not a file, else the snippet. */
 function plainText(part: gmail_v1.Schema$MessagePart | undefined): string | undefined {
   if (!part) return undefined;
-  if (part.mimeType === "text/plain" && part.body?.data) return Buffer.from(part.body.data, "base64url").toString("utf8");
+  if (!isAttachment(part) && part.mimeType === "text/plain" && part.body?.data) return Buffer.from(part.body.data, "base64url").toString("utf8");
   for (const p of part.parts ?? []) {
     const t = plainText(p);
     if (t) return t;
@@ -114,10 +151,38 @@ export class GmailProvider implements MailProvider {
     return { draftId: res.data.id! };
   }
 
-  async findDraft(messageId: string): Promise<{ draftId: string } | undefined> {
+  async updateDraft(draftId: string, d: OutboundDraft): Promise<{ draftId: string }> {
+    const res = await this.api.users.drafts.update({
+      userId: "me",
+      id: draftId,
+      requestBody: { id: draftId, message: { raw: buildRfc822({ ...d, from: this.address }), threadId: d.threadId } },
+    });
+    return { draftId: res.data.id ?? draftId };
+  }
+
+  async findDraft(messageId: string): Promise<MailDraft | undefined> {
     const res = await this.api.users.drafts.list({ userId: "me", q: `rfc822msgid:${messageId}`, maxResults: 1 });
     const id = res.data.drafts?.[0]?.id;
-    return id ? { draftId: id } : undefined;
+    if (!id) return undefined;
+    const got = await this.api.users.drafts.get({ userId: "me", id, format: "full" });
+    const message = got.data.message;
+    if (!message) return { draftId: id };
+    const to = addressList(message, "To");
+    const cc = addressList(message, "Cc");
+    const bcc = addressList(message, "Bcc");
+    const replyTo = addressList(message, "Reply-To");
+    const attachments: MailAttachment[] = [];
+    collectAttachments(message.payload, attachments);
+    return {
+      draftId: id,
+      ...(to.length ? { to } : {}),
+      ...(cc.length ? { cc } : {}),
+      ...(bcc.length ? { bcc } : {}),
+      ...(replyTo.length ? { replyTo } : {}),
+      subject: header(message, "Subject"),
+      body: plainText(message.payload) ?? message.snippet ?? "",
+      ...(attachments.length ? { attachments } : {}),
+    };
   }
 
   async sendDraft(draftId: string): Promise<{ externalId: string }> {

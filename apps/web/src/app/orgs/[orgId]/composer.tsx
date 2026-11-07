@@ -105,7 +105,7 @@ export function Composer({ orgId, threadId, suggestions = [], disabledReason }: 
           {busy ? "Sending…" : "Send"}
         </button>
       </form>
-      <p className="mt-2 px-2 text-sm text-muted">Scout hands work to your teammates. Anything that sends, charges or changes something waits for your OK.</p>
+      <p className="mt-2 px-2 text-sm text-muted">Scout hands work to your teammates. Say “remember …” or “forget …” to change what Scout knows. “Every Friday …” schedules a read-only routine. Anything that sends, charges or changes something waits for your OK.</p>
       <div className="mt-2"><ErrorText message={error} /></div>
     </div>
   );

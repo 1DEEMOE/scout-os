@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { MemoryJournal, runEvent, type EffectContext, type EventJournal } from "./bus";
+import { rememberMockRetry } from "./retry";
 
 export type IntegrationName = "nws" | "mail" | "crm" | "payments" | "model";
 
@@ -28,6 +29,10 @@ export function produceIntegration<T>(opts: {
   effect: (ctx: EffectContext) => Promise<T>;
   journal?: EventJournal;
   timeoutMs?: number;
+  /** Idempotent mock retry. Stored only when `mock` is true and mock mode is on. */
+  retry?: () => Promise<Record<string, unknown>>;
+  /** True only when the provider itself is a mock. Live providers must pass false. */
+  mock?: boolean;
 }): Promise<T> {
   const id = `${opts.tenantId}:${opts.idempotencyKey}`;
   const existing = inflightProduce.get(id);
@@ -44,7 +49,10 @@ async function runProduce<T>(opts: {
   effect: (ctx: EffectContext) => Promise<T>;
   journal?: EventJournal;
   timeoutMs?: number;
+  retry?: () => Promise<Record<string, unknown>>;
+  mock?: boolean;
 }): Promise<T> {
+  if (opts.retry) rememberMockRetry(opts.tenantId, opts.idempotencyKey, opts.retry, opts.mock === true);
   let value: T | undefined;
   let failure: unknown;
   const inner = opts.journal ?? integrationJournal();
