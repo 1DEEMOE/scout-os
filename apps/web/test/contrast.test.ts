@@ -102,6 +102,32 @@ describe("design token contrast (WCAG 2.2 AA)", () => {
     }
   });
 
+  it("focus rings clear 3:1 on the ink bar and on the paper for every industry accent", () => {
+    const start = css.indexOf(":focus-visible {");
+    const body = css.slice(css.indexOf("{", start) + 1, css.indexOf("}", start));
+    const outline = body.match(/outline:[^;]*var\(--color-([a-z-]+)\)/);
+    const shadow = body.match(/box-shadow:[^;]*var\(--color-([a-z-]+)\)/);
+    const outlineKey = outline?.[1];
+    const shadowKey = shadow?.[1];
+    expect(outlineKey, "outer focus ring").toBeTruthy();
+    expect(shadowKey, "inner focus ring").toBeTruthy();
+    const cases: [string, Record<string, string>][] = [
+      ["light", themes.light],
+      ["dark", themes.dark],
+    ];
+    const overlay = (base: Record<string, string>, extra: string) => ({
+      ...base,
+      ...Object.fromEntries([...extra.matchAll(/--color-([a-z-]+):\s*(#[0-9a-f]{6})/gi)].map((m) => [m[1]!, m[2]!])),
+    });
+    for (const match of css.matchAll(/html\[data-accent="([a-z]+)"\] \{([^}]+)\}/g)) cases.push([`light ${match[1]}`, overlay(themes.light, match[2]!)]);
+    for (const match of css.matchAll(/:root\[data-theme="dark"\]\[data-accent="([a-z]+)"\] \{([^}]+)\}/g)) cases.push([`dark ${match[1]}`, overlay(themes.dark, match[2]!)]);
+    expect(cases.length).toBeGreaterThan(2);
+    for (const [name, t] of cases) {
+      expect(ratio(t[outlineKey!]!, t.chrome!), `${name}: focus outline on the ink bar`).toBeGreaterThanOrEqual(3);
+      expect(ratio(t[shadowKey!]!, t.paper!), `${name}: focus ring on the paper`).toBeGreaterThanOrEqual(3);
+    }
+  });
+
   it("the gradient is only the primary fill, not every accent surface", () => {
     expect(css).toMatch(/\.accent-fill\s*\{[^}]*linear-gradient/);
     expect(css).not.toMatch(/\.bg-accent\s*\{[^}]*linear-gradient/);
