@@ -28,6 +28,8 @@ export interface MailProvider {
   readonly mock: boolean;
   listRecent(opts: { cursor?: string | null; max?: number }): Promise<{ messages: InboundMessage[]; cursor: string | null }>;
   createDraft(draft: OutboundDraft): Promise<{ draftId: string }>;
+  /** Replaces the body of a draft the mailbox already holds. The id stays the same. */
+  updateDraft(draftId: string, draft: OutboundDraft): Promise<{ draftId: string }>;
   /** Looks for an existing draft carrying this Message-ID. */
   findDraft(messageId: string): Promise<{ draftId: string } | undefined>;
   sendDraft(draftId: string): Promise<{ externalId: string }>;
@@ -86,6 +88,13 @@ export class FakeMailProvider implements MailProvider {
     if (existing) return existing;
     const draftId = `draft_${this.drafts.size + 1}`;
     this.drafts.set(draftId, draft);
+    return { draftId };
+  }
+
+  async updateDraft(draftId: string, draft: OutboundDraft) {
+    const current = this.drafts.get(draftId);
+    if (!current) throw new Error(`MOCK: draft ${draftId} not found`);
+    this.drafts.set(draftId, { ...draft, messageId: current.messageId });
     return { draftId };
   }
 

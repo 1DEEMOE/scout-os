@@ -114,6 +114,15 @@ export class GmailProvider implements MailProvider {
     return { draftId: res.data.id! };
   }
 
+  async updateDraft(draftId: string, d: OutboundDraft): Promise<{ draftId: string }> {
+    const res = await this.api.users.drafts.update({
+      userId: "me",
+      id: draftId,
+      requestBody: { id: draftId, message: { raw: buildRfc822({ ...d, from: this.address }), threadId: d.threadId } },
+    });
+    return { draftId: res.data.id ?? draftId };
+  }
+
   async findDraft(messageId: string): Promise<{ draftId: string } | undefined> {
     const res = await this.api.users.drafts.list({ userId: "me", q: `rfc822msgid:${messageId}`, maxResults: 1 });
     const id = res.data.drafts?.[0]?.id;

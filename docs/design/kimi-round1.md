@@ -12,7 +12,7 @@ Notification quiet hours, the daily cap, and batching decide which approvals Tod
 
 The money digest counts invoices created in the last 7 days. Amounts are cents in storage and dollars on screen. The weekly cap is entered in dollars and stored as cents. Auto-pay stays off.
 
-A suggested chip starts a task whose tool is tier 2 or higher in the registry, so it stops in Approvals. Handing a draft back writes it onto the task. The resumed run uses that text and still does not send it.
+A suggested follow-up chip is shown only when the job already has a conversation and a sender. It uses that thread. Handing a draft back writes the owner's text onto the mailbox draft and raises a new approval for that exact text. Approving it sends that text once. Nothing is sent before the approval.
 
 Background practice approvals (`requestedBy` starting with `system:` or `routine:`) expire in 30–60 minutes. `WOS_BACKGROUND_APPROVAL_MINUTES` sets the window and is clamped to that range. The default is 45. A person who asked in chat still waits the normal approval window.
 

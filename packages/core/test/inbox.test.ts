@@ -7,13 +7,16 @@ import {
   buildRfc822,
   configureEngine,
   connectGoogleMailbox,
+  chipsForTask,
   createAgent,
+  createTask,
   decideApproval,
   decryptSecret,
   encryptSecret,
   FakeMailProvider,
   getConversation,
   GmailProvider,
+  handBack,
   inboxTools,
   listConnectionsSafe,
   makeLogger,
@@ -22,8 +25,10 @@ import {
   requestSendDraft,
   runTask,
   setMailboxMode,
+  startChipAction,
   stopBoss,
   syncInbox,
+  takeOverDraft,
   ToolRegistry,
   triageConversation,
   type MailboxResolver,
@@ -260,6 +265,65 @@ describe("sending", () => {
     expect(await runTask(orgId, taskId, { retry: true })).toBe("COMPLETED");
     expect(mail.sendCalls).toBe(1);
     expect(mail.sent.size).toBe(1);
+  });
+});
+
+describe("owner draft and follow-up chip on the real inbox tools", () => {
+  const ownerText = "Here is the invoice, as I rewrote it. Nothing went out before this approval.";
+
+  async function draftedSend() {
+    const conv = await syncedConversation();
+    await triageAndDraft(conv.id);
+    const [ident] = await withTenant(orgId, (tx) => tx.select().from(emailIdentities));
+    await setMailboxMode({ actorUserId: "owner", orgId, identityId: ident!.id, mode: "send_with_approval" });
+    const { taskId } = await requestSendDraft({ actorUserId: "member", orgId, conversationId: conv.id });
+    expect(await runTask(orgId, taskId)).toBe("WAITING_FOR_APPROVAL");
+    return { conv, taskId };
+  }
+
+  it("hand-back updates the mailbox draft and a new approval sends that text once", async () => {
+    const { conv, taskId } = await draftedSend();
+    const [old] = await approvalsFor(orgId, taskId);
+    await takeOverDraft({ actorUserId: "owner", orgId, taskId, text: ownerText });
+    const back = await handBack({ actorUserId: "owner", orgId, taskId });
+    expect(back).toMatchObject({ sent: false, bound: true });
+    const { conversation } = await getConversation({ actorUserId: "owner", orgId, conversationId: conv.id });
+    expect(conversation.draftBody).toBe(ownerText);
+    expect([...mail.drafts.values()][0]?.body).toBe(ownerText);
+    await expect(decideApproval({ actorUserId: "owner", orgId, approvalId: old!.id, decision: "approve" })).rejects.toMatchObject({ code: "CONFLICT" });
+    const rows = await approvalsFor(orgId, taskId);
+    expect(rows.find((row) => row.id === old!.id)?.status).toBe("expired");
+    const fresh = rows.find((row) => row.status === "pending");
+    expect(fresh!.payload).toMatchObject({ args: { body: ownerText, to: ["client@customer.test"], conversationId: conv.id } });
+    await decideApproval({ actorUserId: "owner", orgId, approvalId: fresh!.id, decision: "approve" });
+    expect(await runTask(orgId, taskId)).toBe("COMPLETED");
+    expect(mail.sendCalls).toBe(1);
+    expect([...mail.sent.values()][0]?.body).toBe(ownerText);
+    expect([...mail.sent.values()][0]?.to).toEqual(["client@customer.test"]);
+  });
+
+  it("hides the follow-up chip without a conversation and sends the real thread after approval", async () => {
+    const conv = await syncedConversation();
+    const [ident] = await withTenant(orgId, (tx) => tx.select().from(emailIdentities));
+    await setMailboxMode({ actorUserId: "owner", orgId, identityId: ident!.id, mode: "send_with_approval" });
+    const bare = await createTask({ actorUserId: "owner", orgId, intent: "Say hello" });
+    expect(await chipsForTask({ actorUserId: "owner", orgId, taskId: bare.taskId })).toEqual([]);
+    await expect(startChipAction({ actorUserId: "owner", orgId, taskId: bare.taskId, kind: "follow_up" })).rejects.toMatchObject({ code: "CONFLICT" });
+
+    const { taskId: sourceId } = await triageConversation({ actorUserId: "member", orgId, conversationId: conv.id });
+    const chips = await chipsForTask({ actorUserId: "owner", orgId, taskId: sourceId });
+    expect(chips.map((chip) => chip.kind)).toContain("follow_up");
+    expect(chips.find((chip) => chip.kind === "follow_up")?.label).not.toMatch(/drafts@example\.test|00000000-0000-4000-8000/);
+    const started = await startChipAction({ actorUserId: "member", orgId, taskId: sourceId, kind: "follow_up" });
+    expect(started).toMatchObject({ tool: "inbox.send_draft", tier: 2 });
+    expect(await runTask(orgId, started.taskId)).toBe("WAITING_FOR_APPROVAL");
+    const [approval] = await approvalsFor(orgId, started.taskId);
+    expect(approval!.payload).toMatchObject({ args: { conversationId: conv.id, to: ["client@customer.test"] } });
+    expect(approval!.payload).not.toMatchObject({ args: { conversationId: "00000000-0000-4000-8000-000000000000" } });
+    await decideApproval({ actorUserId: "owner", orgId, approvalId: approval!.id, decision: "approve" });
+    expect(await runTask(orgId, started.taskId)).toBe("COMPLETED");
+    expect(mail.sendCalls).toBe(1);
+    expect([...mail.sent.values()][0]?.to).toEqual(["client@customer.test"]);
   });
 });
 

@@ -44,6 +44,7 @@ import {
   saveMoneyCap,
   saveNotifyPrefs,
   saveSuggestedRule,
+  chipsForTask,
   startChipAction,
   takeOverDraft,
   setIntegrationJournal,
@@ -210,16 +211,11 @@ describe("rules, routines, opportunities, notifications", () => {
     expect(again.brief.map((item) => item.id).sort()).toEqual(["b", "c"]);
   });
 
-  it("starts a suggested chip as an approval-gated task", async () => {
+  it("does not start a follow-up chip without a real conversation", async () => {
     const { orgId } = await createOrg({ actorUserId: "owner", name: "Chip Co" });
-    await createAgent({ actorUserId: "owner", orgId, spec: { kind: "inbox", displayName: "Inbox", instructions: "x", tools: [{ name: "mock.send_email", maxTier: 2 }, { name: "memory.propose_fact", maxTier: 2 }] } });
-    const started = await startChipAction({ actorUserId: "owner", orgId, kind: "follow_up", label: "Draft a follow-up for client@example.test" });
-    expect(started.tier).toBeGreaterThanOrEqual(2);
-    expect(started.tool).toBe("mock.send_email");
-    expect(await runTask(orgId, started.taskId)).toBe("WAITING_FOR_APPROVAL");
-    const [approval] = await withTenant(orgId, (tx) => tx.select().from(approvalRequests));
-    expect(approval).toMatchObject({ tier: 2, toolName: "mock.send_email", status: "pending" });
-    expect(JSON.stringify(approval)).not.toMatch(/client@example\.test|sk-ant/);
+    const { taskId } = await createTask({ actorUserId: "owner", orgId, intent: "Reply to the customer" });
+    expect(await chipsForTask({ actorUserId: "owner", orgId, taskId })).toEqual([]);
+    await expect(startChipAction({ actorUserId: "owner", orgId, taskId, kind: "follow_up" })).rejects.toMatchObject({ code: "CONFLICT" });
   });
 
   it("binds a takeover draft into the run that resumes", async () => {

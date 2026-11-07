@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { AppError, finishedWithoutActions, getEngine, getTask, nextActionChips, taskLabel, TERMINAL, verifyJobPhotoChain, watchTask, type Plan } from "@wos/core";
+import { AppError, chipsForTask, finishedWithoutActions, getEngine, getTask, taskLabel, TERMINAL, verifyJobPhotoChain, watchTask, type Plan } from "@wos/core";
 import { ActionButton, ActionForm } from "../../../../actions";
 import { orgContext } from "@/server/org-context";
 import { Badge, Card, Empty, inputCls, MockBadge, PageTitle, StateBadge, TaskStatus, TierBadge, When } from "../../../../ui";
@@ -22,6 +22,7 @@ export default async function TaskPage({ params }: { params: Promise<{ orgId: st
   const err = task.error as { message: string; code?: string } | null;
   const photoVerify = await verifyJobPhotoChain({ actorUserId: userId, orgId, jobId: taskId });
   const watch = await watchTask({ actorUserId: userId, orgId, taskId }).catch(() => null);
+  const chips = await chipsForTask({ actorUserId: userId, orgId, taskId }).catch(() => []);
 
   return (
     <div className="flex flex-col gap-6">
@@ -52,13 +53,15 @@ export default async function TaskPage({ params }: { params: Promise<{ orgId: st
               {isManager && !watch.paused && <ActionButton path="kimi.pause" input={{ orgId, taskId }} label="Pause" />}
               {isManager && watch.paused && <ActionButton path="kimi.handBack" input={{ orgId, taskId }} label="Hand back" />}
             </div>
-            <ul aria-label="Suggested next steps" className="flex flex-col gap-2">
-              {nextActionChips(taskLabel(task)).map((chip) => (
-                <li key={chip.kind}>
-                  <ActionButton path="kimi.chip" input={{ orgId, taskId, kind: chip.kind, label: chip.label }} label={chip.label} variant="quiet" redirectToTask={{ orgId }} />
-                </li>
-              ))}
-            </ul>
+            {chips.length > 0 && (
+              <ul aria-label="Suggested next steps" className="flex flex-col gap-2">
+                {chips.map((chip) => (
+                  <li key={chip.kind}>
+                    <ActionButton path="kimi.chip" input={{ orgId, taskId, kind: chip.kind, label: chip.label }} label={chip.label} variant="quiet" redirectToTask={{ orgId }} />
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
         </Card>
       )}

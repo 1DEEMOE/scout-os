@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { and, desc, eq, gte, sql } from "drizzle-orm";
-import { agents, approvalRequests, invoices, memoryRecords, organizations, tasks, workflowExecutions, withTenant, type Tx } from "@wos/db";
+import { agents, approvalRequests, conversations, invoices, isUuid, memoryRecords, messages, organizations, tasks, workflowExecutions, withTenant, type Tx } from "@wos/db";
 import { recordAudit } from "../audit";
 import { listAuditEvents } from "../audit-log/service";
 import { AppError } from "../errors";
@@ -15,9 +15,11 @@ import { createTask } from "../engine/tasks";
 import { delegationOf, type PlanStep } from "../engine/executor";
 import { forgetMemory, rememberFact } from "../memory/service";
 import { createRoutine } from "../routines/service";
+import { requestSendDraft } from "../inbox/service";
 import { ingestLead } from "../speed/service";
+import { replyRecipients, replySubject } from "../tools/inbox";
 import { seasonalHits, type SignalHit } from "../signals/sources";
-import { approvalCard, type ApprovalCardView } from "./cards";
+import { approvalCard, approvalExpiryMs, type ApprovalCardView } from "./cards";
 
 const RULE = "kimi:rule:";
 const PAUSE = "kimi:pause:";
@@ -146,7 +148,7 @@ export async function takeOverDraft(input: { actorUserId: string; orgId: string;
   });
 }
 
-/** Hands the draft back. The draft is what the resumed run uses. Nothing is sent here. */
+/** Hands the draft back. The mailbox draft and a new approval match the owner's text. Nothing is sent here. */
 export async function handBack(input: { actorUserId: string; orgId: string; taskId: string }) {
   return inOrg(input.orgId, async (tx) => {
     await requireRole(tx, input.orgId, input.actorUserId, MANAGERS, "kimi.handback");
@@ -157,13 +159,8 @@ export async function handBack(input: { actorUserId: string; orgId: string; task
     const inputJson = (task.input ?? {}) as Record<string, unknown>;
     const nextInput = draft ? { ...inputJson, ownerDraft: draft } : inputJson;
     const nextIntent = draft ? bindIntent(task.intent, draft) : task.intent;
-    const rebound = draft && task.assignedAgentId ? rebindPlan(task, draft) : null;
-    await tx.update(tasks).set({ input: nextInput, intent: nextIntent, ...(rebound ? { plan: rebound.plan } : {}), updatedAt: new Date() }).where(eq(tasks.id, task.id));
-    if (rebound) {
-      for (const ap of rebound.approvals) {
-        await tx.update(approvalRequests).set({ actionDigest: ap.digest, summary: ap.summary, payload: ap.payload }).where(and(eq(approvalRequests.id, ap.id), eq(approvalRequests.status, "pending")));
-      }
-    }
+    const plan = draft && task.assignedAgentId ? await rebindPlan(tx, input.orgId, task, draft) : null;
+    await tx.update(tasks).set({ input: nextInput, intent: nextIntent, ...(plan ? { plan } : {}), updatedAt: new Date() }).where(eq(tasks.id, task.id));
     await tx.delete(memoryRecords).where(eq(memoryRecords.scopeRef, `${PAUSE}${input.taskId}`));
     await enqueueTaskRun(tx, { tenantId: input.orgId, taskId: input.taskId });
     await recordAudit(tx, { tenantId: input.orgId, actorType: "user", actorId: input.actorUserId, action: "kimi.handback", target: `task:${input.taskId}`, tier: 1, outcome: "success", metadata: { sent: false, bound: !!draft } });
@@ -179,28 +176,79 @@ function bindIntent(intent: string, draft: string): string {
 
 const DRAFT_FIELDS = new Set(["body", "content", "text"]);
 
-function rebindPlan(task: { id: string; tenantId: string; assignedAgentId: string | null; input: unknown; plan: unknown }, draft: string): { plan: unknown; approvals: { id: string; digest: string; summary: string; payload: Record<string, unknown> }[] } | null {
+async function rebindPlan(tx: Tx, orgId: string, task: { id: string; tenantId: string; assignedAgentId: string | null; requestedBy: string; input: unknown; plan: unknown }, draft: string) {
   const plan = task.plan as { steps?: PlanStep[]; direct?: unknown; note?: string; model?: unknown } | null;
   if (!plan?.steps?.length || !task.assignedAgentId) return null;
   const chainId = delegationOf((task.input ?? undefined) as Record<string, unknown> | undefined)?.chainId;
-  const approvals: { id: string; digest: string; summary: string; payload: Record<string, unknown> }[] = [];
-  const steps = plan.steps.map((step) => {
-    if (!step.args || typeof step.args !== "object" || Array.isArray(step.args)) return step;
+  const steps: PlanStep[] = [];
+  for (const step of plan.steps) {
+    if (!step.args || typeof step.args !== "object" || Array.isArray(step.args)) {
+      steps.push(step);
+      continue;
+    }
     const args = { ...(step.args as Record<string, unknown>) };
     let changed = false;
-    for (const key of Object.keys(args)) {
-      if (DRAFT_FIELDS.has(key) && typeof args[key] === "string") {
-        args[key] = draft;
-        changed = true;
+    if (step.tool === "inbox.send_draft" && typeof args.conversationId === "string") {
+      const canonical = await writeAuthoritativeDraft(tx, orgId, args.conversationId, draft);
+      args.conversationId = canonical.conversationId;
+      args.to = canonical.to;
+      args.subject = canonical.subject;
+      args.body = canonical.body;
+      changed = true;
+    } else {
+      for (const key of Object.keys(args)) {
+        if (DRAFT_FIELDS.has(key) && typeof args[key] === "string" && args[key] !== draft) {
+          args[key] = draft;
+          changed = true;
+        }
       }
     }
-    if (!changed) return step;
-    const digest = actionDigest({ tenantId: task.tenantId, taskId: task.id, agentId: task.assignedAgentId!, step: step.index, tool: step.tool, args, ...(chainId ? { chainId } : {}) });
-    const summary = `Use the owner's draft: ${draft.slice(0, 160)}`;
-    if (step.approvalId) approvals.push({ id: step.approvalId, digest, summary, payload: { tool: step.tool, args, step: step.index, ownerDraft: true } });
-    return { ...step, args, digest, summary };
-  });
-  return { plan: { ...plan, steps }, approvals };
+    if (!changed) {
+      steps.push(step);
+      continue;
+    }
+    const digest = actionDigest({ tenantId: task.tenantId, taskId: task.id, agentId: task.assignedAgentId, step: step.index, tool: step.tool, args, ...(chainId ? { chainId } : {}) });
+    const tool = getEngine().tools.get(step.tool);
+    const summary = (tool ? tool.summarize(args) : `Use the owner's draft: ${draft}`).slice(0, 500);
+    const approvalId = step.approvalId ? await reraiseApproval(tx, step.approvalId, { digest, summary, payload: { tool: step.tool, args, step: step.index, ownerDraft: true }, requestedBy: task.requestedBy }) : step.approvalId;
+    steps.push({ ...step, args, digest, summary, ...(approvalId ? { approvalId } : {}) });
+  }
+  return { ...plan, steps };
+}
+
+/** Writes the owner's text onto the conversation row and the mailbox draft the send tool will use. */
+async function writeAuthoritativeDraft(tx: Tx, orgId: string, conversationId: string, body: string) {
+  const [conv] = isUuid(conversationId) ? await tx.select().from(conversations).where(eq(conversations.id, conversationId)) : [];
+  if (!conv?.draftExternalId || !conv.draftMessageId) throw new AppError("CONFLICT", "There is no mailbox draft to update.");
+  const [lastInbound] = await tx.select().from(messages).where(and(eq(messages.conversationId, conv.id), eq(messages.direction, "inbound"))).orderBy(desc(messages.sentAt)).limit(1);
+  const to = replyRecipients(lastInbound);
+  if (!to.length) throw new AppError("CONFLICT", "This conversation has no sender to reply to.");
+  const subject = replySubject(conv.subject);
+  const box = await getEngine().mailbox?.(orgId);
+  if (!box) throw new AppError("CONFLICT", "No mailbox is connected, so the draft can't be updated.");
+  await box.provider.updateDraft(conv.draftExternalId, { threadId: conv.externalThreadId, to, subject, body, messageId: conv.draftMessageId, inReplyTo: lastInbound?.rfc822MessageId ?? undefined });
+  await tx.update(conversations).set({ draftBody: body, updatedAt: new Date() }).where(eq(conversations.id, conv.id));
+  return { conversationId: conv.id, to, subject, body };
+}
+
+async function reraiseApproval(tx: Tx, approvalId: string, next: { digest: string; summary: string; payload: Record<string, unknown>; requestedBy: string }) {
+  const [old] = await tx.select().from(approvalRequests).where(eq(approvalRequests.id, approvalId));
+  if (!old || (old.status !== "pending" && old.status !== "awaiting_confirmation")) return approvalId;
+  await tx.update(approvalRequests).set({ status: "expired" }).where(eq(approvalRequests.id, old.id));
+  const minutes = Number(process.env.WOS_BACKGROUND_APPROVAL_MINUTES ?? 45);
+  const [created] = await tx.insert(approvalRequests).values({
+    tenantId: old.tenantId,
+    taskId: old.taskId,
+    agentId: old.agentId,
+    toolName: old.toolName,
+    tier: old.tier,
+    actionDigest: next.digest,
+    payload: next.payload,
+    summary: next.summary,
+    status: "pending",
+    expiresAt: new Date(Date.now() + approvalExpiryMs(next.requestedBy, minutes)),
+  }).returning({ id: approvalRequests.id });
+  return created!.id;
 }
 
 export async function watchTask(input: { actorUserId: string; orgId: string; taskId: string }) {
@@ -575,56 +623,105 @@ export function laneOf(action: string): "Inbox" | "Schedule" | "Follow-ups" | "R
   return "Inbox";
 }
 
-export function nextActionChips(job: string): { kind: "follow_up" | "note"; label: string }[] {
-  const safe = redactForDisplay(job).slice(0, 80) || "this job";
-  return [
-    { kind: "follow_up", label: `Draft a follow-up for ${safe}` },
-    { kind: "note", label: "Add a note to the customer record" },
-  ];
+export interface ChipContext {
+  conversationId: string;
+  customerEmail: string;
+  hasDraft: boolean;
+}
+
+/** A follow-up chip exists only when this job already has a real conversation and sender. */
+export async function chipsForTask(input: { actorUserId: string; orgId: string; taskId: string }): Promise<{ kind: "follow_up" | "note"; label: string }[]> {
+  return inOrg(input.orgId, async (tx) => {
+    await requireRole(tx, input.orgId, input.actorUserId, ANY_ROLE, "kimi.chip");
+    const ctx = await chipContext(tx, input.taskId);
+    if (!ctx) return [];
+    const who = redactForDisplay(ctx.customerEmail) || "the customer";
+    const chips: { kind: "follow_up" | "note"; label: string }[] = [];
+    if (await agentCanRun(tx, "inbox.send_draft")) chips.push({ kind: "follow_up", label: `Draft a follow-up to ${who}` });
+    if (await agentCanRun(tx, "memory.propose_fact")) chips.push({ kind: "note", label: `Add a note for ${who}` });
+    return chips;
+  });
 }
 
 /**
- * Starts a real task for a suggested chip. The tool and its tier come from the
- * registry and from an agent that is allowed to use it. Tier 2+ stops in
- * Approvals. Nothing is sent or saved before that.
+ * Starts a real task for a suggested chip. A follow-up uses the job's
+ * conversation and the thread's sender. There is no chip without that context.
+ * Tier 2+ stops in Approvals. Nothing is sent before that.
  */
 export async function startChipAction(input: { actorUserId: string; orgId: string; taskId?: string; kind?: "follow_up" | "note"; label?: string }): Promise<{ taskId: string; tool: string; tier: number }> {
   const kind = input.kind ?? "follow_up";
-  const label = redactForDisplay(input.label || (kind === "follow_up" ? "Draft a follow-up" : "Add a note to the customer record")).slice(0, 200);
-  const choice = await inOrg(input.orgId, async (tx) => {
+  const prepared = await inOrg(input.orgId, async (tx) => {
     await requireRole(tx, input.orgId, input.actorUserId, STAFF, "kimi.chip");
-    const names = kind === "follow_up" ? ["inbox.send_draft", "mock.send_email"] : ["memory.propose_fact"];
-    const rows = await tx.select({ id: agents.id }).from(agents).where(eq(agents.status, "active"));
-    for (const name of names) {
-      const tool = getEngine().tools.get(name);
-      if (!tool || tool.tier < 2) continue;
-      for (const row of rows) {
-        const loaded = await loadAgent(tx, { id: row.id });
-        const max = loaded?.grant.maxTier.get(tool.name);
-        if (loaded && loaded.grant.allowlist.includes(tool.name) && max !== undefined && max >= tool.tier) {
-          return { tool: tool.name, tier: tool.tier, agentKind: loaded.agent.kind, args: chipArgs(tool.name, label) };
-        }
-      }
+    const ctx = input.taskId ? await chipContext(tx, input.taskId) : null;
+    if (!ctx) throw new AppError("CONFLICT", "This job has no conversation to act on.");
+    if (kind === "follow_up") {
+      const allowed = await agentCanRun(tx, "inbox.send_draft");
+      if (!allowed) throw new AppError("CONFLICT", "No approval-gated follow-up is available for that conversation.");
+      return { kind, ctx, agentId: allowed.agentId };
     }
-    throw new AppError("CONFLICT", "No approval-gated action is available for that step.");
+    const allowed = await agentCanRun(tx, "memory.propose_fact");
+    if (!allowed) throw new AppError("CONFLICT", "No approval-gated note is available for that customer.");
+    return { kind, ctx, agentId: allowed.agentId, agentKind: allowed.agentKind };
   });
-  const { taskId } = await createTask({
-    actorUserId: input.actorUserId,
-    orgId: input.orgId,
-    title: label,
-    intent: `${label}. Wait for approval. Do not send or save this until a person OKs it.`,
-    input: input.taskId ? { sourceTaskId: input.taskId } : {},
-    direct: { agentKind: choice.agentKind, steps: [{ tool: choice.tool, args: choice.args }] },
-  });
-  return { taskId, tool: choice.tool, tier: choice.tier };
+  if (prepared.kind === "note") {
+    const { taskId } = await createTask({
+      actorUserId: input.actorUserId,
+      orgId: input.orgId,
+      title: `Note for ${prepared.ctx.customerEmail}`,
+      intent: `Remember a note about ${prepared.ctx.customerEmail}. Nothing is saved until a person approves it.`,
+      input: { sourceTaskId: input.taskId, conversationId: prepared.ctx.conversationId },
+      direct: { agentKind: prepared.agentKind!, steps: [{ tool: "memory.propose_fact", args: { content: `Note about ${prepared.ctx.customerEmail}`, reason: "Suggested from this job. Nothing is saved until you approve." } }] },
+    });
+    return { taskId, tool: "memory.propose_fact", tier: 2 };
+  }
+  if (!prepared.ctx.hasDraft) {
+    const tool = getEngine().tools.get("inbox.create_draft");
+    if (!tool) throw new AppError("CONFLICT", "No mailbox draft tool is available.");
+    await tool.execute(
+      { tenantId: input.orgId, taskId: input.taskId!, agentId: prepared.agentId, idempotencyKey: `chip-draft:${prepared.ctx.conversationId}` },
+      { conversationId: prepared.ctx.conversationId, body: "Thanks for your note. I'll follow up from here." },
+    );
+  }
+  const { taskId } = await requestSendDraft({ actorUserId: input.actorUserId, orgId: input.orgId, conversationId: prepared.ctx.conversationId });
+  return { taskId, tool: "inbox.send_draft", tier: 2 };
 }
 
-function chipArgs(tool: string, label: string): Record<string, unknown> {
-  if (tool === "inbox.send_draft") {
-    return { conversationId: "00000000-0000-4000-8000-000000000000", to: ["drafts@example.test"], subject: label.slice(0, 80), body: `${label}\n\nNot sent until you approve.` };
+async function chipContext(tx: Tx, taskId: string): Promise<ChipContext | null> {
+  if (!isUuid(taskId)) return null;
+  const [task] = await tx.select().from(tasks).where(eq(tasks.id, taskId));
+  if (!task) return null;
+  const conversationId = conversationIdOf(task);
+  if (!conversationId || !isUuid(conversationId)) return null;
+  const [conv] = await tx.select().from(conversations).where(eq(conversations.id, conversationId));
+  if (!conv) return null;
+  const [lastInbound] = await tx.select().from(messages).where(and(eq(messages.conversationId, conv.id), eq(messages.direction, "inbound"))).orderBy(desc(messages.sentAt)).limit(1);
+  const to = replyRecipients(lastInbound);
+  if (!to[0]) return null;
+  return { conversationId: conv.id, customerEmail: to[0], hasDraft: !!(conv.draftExternalId && conv.draftBody) };
+}
+
+function conversationIdOf(task: { input: unknown; plan: unknown }): string | null {
+  const input = (task.input ?? {}) as Record<string, unknown>;
+  if (typeof input.conversationId === "string") return input.conversationId;
+  const steps = (task.plan as { steps?: { args?: { conversationId?: unknown } }[] } | null)?.steps ?? [];
+  for (const step of steps) {
+    if (typeof step.args?.conversationId === "string") return step.args.conversationId;
   }
-  if (tool === "mock.send_email") return { to: "drafts@example.test", subject: label.slice(0, 80), body: `${label}\n\nNot sent until you approve.` };
-  return { content: label, reason: "Suggested from this job. Nothing is saved until you approve." };
+  return null;
+}
+
+async function agentCanRun(tx: Tx, toolName: string): Promise<{ agentId: string; agentKind: string } | null> {
+  const tool = getEngine().tools.get(toolName);
+  if (!tool || tool.tier < 2) return null;
+  const rows = await tx.select({ id: agents.id }).from(agents).where(eq(agents.status, "active"));
+  for (const row of rows) {
+    const loaded = await loadAgent(tx, { id: row.id });
+    const max = loaded?.grant.maxTier.get(tool.name);
+    if (loaded && loaded.grant.allowlist.includes(tool.name) && max !== undefined && max >= tool.tier) {
+      return { agentId: loaded.agent.id, agentKind: loaded.agent.kind };
+    }
+  }
+  return null;
 }
 
 export interface Artifact {
