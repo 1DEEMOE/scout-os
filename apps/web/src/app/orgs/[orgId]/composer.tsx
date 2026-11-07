@@ -59,7 +59,7 @@ export function Composer({ orgId, threadId, suggestions = [], disabledReason }: 
                   setText(s);
                   ref.current?.focus();
                 }}
-                className="min-h-10 rounded-full border border-line bg-surface px-4 text-small text-muted transition-colors duration-150 hover:border-accent/40 hover:text-ink"
+                className="min-h-11 rounded-full border border-line bg-surface px-4 text-small text-muted transition-colors duration-150 hover:border-accent/40 hover:text-ink"
               >
                 {s}
               </button>
@@ -100,7 +100,7 @@ export function Composer({ orgId, threadId, suggestions = [], disabledReason }: 
         <button
           type="submit"
           disabled={busy || !text.trim() || !!disabledReason}
-          className="inline-flex min-h-11 min-w-11 items-center justify-center gap-2 rounded-full bg-accent px-5 font-medium text-on-accent transition-[filter,opacity] duration-150 hover:brightness-110 disabled:opacity-40"
+          className="accent-fill inline-flex min-h-11 min-w-11 items-center justify-center gap-2 rounded-full bg-accent px-5 font-medium text-on-accent transition-[filter,opacity] duration-150 hover:brightness-110 disabled:opacity-40"
         >
           {busy ? "Sending…" : "Send"}
         </button>

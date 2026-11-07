@@ -36,11 +36,25 @@ describe("design token contrast (WCAG 2.2 AA)", () => {
         });
       }
     }
+    it(`${name}: body ink on paper >= 7:1`, () => {
+      expect(ratio(t.ink!, t.paper!)).toBeGreaterThanOrEqual(7);
+    });
+    it(`${name}: chrome ink on the bar >= 7:1`, () => {
+      expect(ratio(t["chrome-ink"]!, t.chrome!)).toBeGreaterThanOrEqual(7);
+    });
+    it(`${name}: chrome secondary text on the bar >= 4.5:1`, () => {
+      expect(ratio(t["chrome-muted"]!, t.chrome!)).toBeGreaterThanOrEqual(4.5);
+      expect(ratio(t["chrome-accent"]!, t.chrome!)).toBeGreaterThanOrEqual(4.5);
+    });
     it(`${name}: text on the accent button >= 4.5:1`, () => {
       expect(ratio(t["on-accent"]!, t.accent!)).toBeGreaterThanOrEqual(4.5);
     });
     it(`${name}: accent text on its soft tint >= 4.5:1`, () => {
       expect(ratio(t.accent!, t["accent-soft"]!)).toBeGreaterThanOrEqual(4.5);
+    });
+    it(`${name}: gradient stops keep primary-button text`, () => {
+      expect(ratio(t["on-accent"]!, t["accent-from"]!)).toBeGreaterThanOrEqual(4.5);
+      expect(ratio(t["on-accent"]!, t["accent-to"]!)).toBeGreaterThanOrEqual(4.5);
     });
   }
 
@@ -59,6 +73,64 @@ describe("design token contrast (WCAG 2.2 AA)", () => {
       }
       expect(css.slice(start, end + 1), name).not.toMatch(/opacity/);
     }
+  });
+
+  it("industry accents stay at least AA on every surface", () => {
+    const lightPaper = themes.light.paper!;
+    const lightSurface = themes.light.surface!;
+    const lightSoft = themes.light.soft!;
+    const darkPaper = themes.dark.paper!;
+    const darkSurface = themes.dark.surface!;
+    const darkSoft = themes.dark.soft!;
+    for (const match of css.matchAll(/html\[data-accent="([a-z]+)"\] \{([^}]+)\}/g)) {
+      const colors = Object.fromEntries([...match[2]!.matchAll(/--color-([a-z-]+):\s*(#[0-9a-f]{6})/gi)].map((m) => [m[1]!, m[2]!]));
+      for (const bg of [lightPaper, lightSurface, lightSoft]) expect(ratio(colors.accent!, bg)).toBeGreaterThanOrEqual(4.5);
+      expect(ratio(colors["on-accent"]!, colors.accent!)).toBeGreaterThanOrEqual(4.5);
+      expect(ratio(colors.accent!, colors["accent-soft"]!)).toBeGreaterThanOrEqual(4.5);
+      expect(ratio(colors["on-accent"]!, colors["accent-from"]!)).toBeGreaterThanOrEqual(4.5);
+      expect(ratio(colors["on-accent"]!, colors["accent-to"]!)).toBeGreaterThanOrEqual(4.5);
+      expect(ratio(themes.light.ink!, colors["accent-soft"]!)).toBeGreaterThanOrEqual(4.5);
+    }
+    for (const match of css.matchAll(/:root\[data-theme="dark"\]\[data-accent="([a-z]+)"\] \{([^}]+)\}/g)) {
+      const colors = Object.fromEntries([...match[2]!.matchAll(/--color-([a-z-]+):\s*(#[0-9a-f]{6})/gi)].map((m) => [m[1]!, m[2]!]));
+      for (const bg of [darkPaper, darkSurface, darkSoft]) expect(ratio(colors.accent!, bg)).toBeGreaterThanOrEqual(4.5);
+      expect(ratio(colors["on-accent"]!, colors.accent!)).toBeGreaterThanOrEqual(4.5);
+      expect(ratio(colors.accent!, colors["accent-soft"]!)).toBeGreaterThanOrEqual(4.5);
+      expect(ratio(colors["on-accent"]!, colors["accent-from"]!)).toBeGreaterThanOrEqual(4.5);
+      expect(ratio(colors["on-accent"]!, colors["accent-to"]!)).toBeGreaterThanOrEqual(4.5);
+      expect(ratio(themes.dark.ink!, colors["accent-soft"]!)).toBeGreaterThanOrEqual(4.5);
+    }
+  });
+
+  it("focus rings clear 3:1 on the ink bar and on the paper for every industry accent", () => {
+    const start = css.indexOf(":focus-visible {");
+    const body = css.slice(css.indexOf("{", start) + 1, css.indexOf("}", start));
+    const outline = body.match(/outline:[^;]*var\(--color-([a-z-]+)\)/);
+    const shadow = body.match(/box-shadow:[^;]*var\(--color-([a-z-]+)\)/);
+    const outlineKey = outline?.[1];
+    const shadowKey = shadow?.[1];
+    expect(outlineKey, "outer focus ring").toBeTruthy();
+    expect(shadowKey, "inner focus ring").toBeTruthy();
+    const cases: [string, Record<string, string>][] = [
+      ["light", themes.light],
+      ["dark", themes.dark],
+    ];
+    const overlay = (base: Record<string, string>, extra: string) => ({
+      ...base,
+      ...Object.fromEntries([...extra.matchAll(/--color-([a-z-]+):\s*(#[0-9a-f]{6})/gi)].map((m) => [m[1]!, m[2]!])),
+    });
+    for (const match of css.matchAll(/html\[data-accent="([a-z]+)"\] \{([^}]+)\}/g)) cases.push([`light ${match[1]}`, overlay(themes.light, match[2]!)]);
+    for (const match of css.matchAll(/:root\[data-theme="dark"\]\[data-accent="([a-z]+)"\] \{([^}]+)\}/g)) cases.push([`dark ${match[1]}`, overlay(themes.dark, match[2]!)]);
+    expect(cases.length).toBeGreaterThan(2);
+    for (const [name, t] of cases) {
+      expect(ratio(t[outlineKey!]!, t.chrome!), `${name}: focus outline on the ink bar`).toBeGreaterThanOrEqual(3);
+      expect(ratio(t[shadowKey!]!, t.paper!), `${name}: focus ring on the paper`).toBeGreaterThanOrEqual(3);
+    }
+  });
+
+  it("the gradient is only the primary fill, not every accent surface", () => {
+    expect(css).toMatch(/\.accent-fill\s*\{[^}]*linear-gradient/);
+    expect(css).not.toMatch(/\.bg-accent\s*\{[^}]*linear-gradient/);
   });
 
   it("the system-dark block matches the explicit dark theme", () => {

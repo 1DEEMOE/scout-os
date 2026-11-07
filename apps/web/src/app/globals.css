@@ -11,93 +11,166 @@
 }
 
 /*
- * Scout OS design tokens. One accent (lagoon teal), cool neutral surfaces.
- * Every text/background pair is >= 4.5:1 in both themes (checked by
- * apps/web/test/contrast.test.ts). Theme: data-theme="light" | "dark" on
- * <html>, or follow the system when unset.
+ * Scout OS design tokens. Signature palette: Nova.
+ * Cool paper, an ink navigation bar, and a violet accent.
+ * The violet-to-coral gradient is only for primary fills (.accent-fill).
+ * Body text, badges, meters, and charts stay solid. Body ink on paper is >= 7:1.
+ * Checked by apps/web/test/contrast.test.ts.
+ * Theme: data-theme="light" | "dark" on <html>, or follow the system when unset.
+ * Reading size: data-text="large" | "larger" (default is 18px).
+ * Industry: data-accent shifts only the accent. Status still has words.
  */
 @theme {
-  --color-paper: #f5f6f8;
+  --color-paper: #f7f6f8;
   --color-surface: #ffffff;
-  --color-soft: #eef1f4;
-  --color-ink: #15181e;
-  --color-muted: #575e6b;
-  --color-line: #e2e5ea;
-  --color-accent: #17616a;
-  --color-accent-soft: #e3f0f1;
+  --color-soft: #ece7f1;
+  --color-ink: #16141c;
+  --color-muted: #4a4458;
+  --color-line: #ddd6e6;
+  --color-accent: #6d28d9;
+  --color-accent-soft: #f3e9ff;
   --color-on-accent: #ffffff;
-  --color-danger: #b3261e;
-  --color-warn: #8a5a00;
-  --color-caution: #9a4a12;
+  --color-accent-from: #6d28d9;
+  --color-accent-to: #e11d48;
+  --color-danger: #b42318;
+  --color-warn: #8a4b00;
+  --color-caution: #9a3412;
+  --color-chrome: #14121a;
+  --color-chrome-ink: #f7f4fb;
+  --color-chrome-muted: #d4cce0;
+  --color-chrome-accent: #e879f9;
+  --color-chrome-soft: #2a2434;
+  --color-chrome-line: #3a3348;
 
   --font-sans: "Schibsted Grotesk Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
 
-  /* Type scale: five steps, nothing in between. */
-  --text-small: 0.9375rem;
-  --text-small--line-height: 1.55;
-  --text-message: 1.0625rem;
-  --text-message--line-height: 1.65;
-  --text-display: 2rem;
-  --text-display--line-height: 1.2;
+  /* Type scale. Body is the root (18px+). Small never drops under 16px. */
+  --text-xs: 1rem;
+  --text-xs--line-height: 1.45;
+  --text-sm: 1rem;
+  --text-sm--line-height: 1.5;
+  --text-small: 1rem;
+  --text-small--line-height: 1.5;
+  --text-message: 1.125rem;
+  --text-message--line-height: 1.6;
+  --text-display: 2.25rem;
+  --text-display--line-height: 1.15;
 
-  /* Spacing rhythm (4px base): 12 / 20 / 32 / 40 / 56 between related → unrelated blocks. */
-  --spacing-page: 1.5rem;
-  --spacing-section: 2.5rem;
-  --spacing-card: 1.5rem;
-  --radius-card: 1.25rem;
-  --radius-control: 0.75rem;
+  /* Spacing rhythm: generous gaps, chat-first, not compact. */
+  --spacing-page: 1.75rem;
+  --spacing-section: 3rem;
+  --spacing-card: 1.75rem;
+  --radius-card: 1.5rem;
+  --radius-control: 0.875rem;
 
-  --shadow-raised: 0 1px 2px rgb(21 24 30 / 0.04), 0 8px 24px -12px rgb(21 24 30 / 0.12);
+  --shadow-raised: 0 1px 2px rgb(22 20 28 / 0.06), 0 12px 28px -14px rgb(22 20 28 / 0.16);
 
   --ease-calm: cubic-bezier(0.2, 0.7, 0.2, 1);
+  --motion-rise: 220ms;
 }
 
 :root[data-theme="dark"] {
-  --color-paper: #0f1216;
-  --color-surface: #161a20;
-  --color-soft: #1c2128;
-  --color-ink: #e7e9ec;
-  --color-muted: #a1a8b3;
-  --color-line: #262b33;
-  --color-accent: #73c7ce;
-  --color-accent-soft: #15302f;
-  --color-on-accent: #0b2326;
-  --color-danger: #f2a099;
-  --color-warn: #e6b85c;
-  --color-caution: #f0a873;
-  --shadow-raised: 0 1px 2px rgb(0 0 0 / 0.3), 0 10px 28px -14px rgb(0 0 0 / 0.6);
+  --color-paper: #100e14;
+  --color-surface: #1a1622;
+  --color-soft: #2a2436;
+  --color-ink: #f6f3fb;
+  --color-muted: #d0c6de;
+  --color-line: #3a3348;
+  --color-accent: #c4b5fd;
+  --color-accent-soft: #342848;
+  --color-on-accent: #1a0a14;
+  --color-accent-from: #c4b5fd;
+  --color-accent-to: #fda4af;
+  --color-danger: #ffb4a8;
+  --color-warn: #f0c36a;
+  --color-caution: #f5b48a;
+  --color-chrome: #100e14;
+  --color-chrome-ink: #f6f3fb;
+  --color-chrome-muted: #d0c6de;
+  --color-chrome-accent: #e879f9;
+  --color-chrome-soft: #2a2436;
+  --color-chrome-line: #3a3348;
+  --shadow-raised: 0 1px 2px rgb(0 0 0 / 0.4), 0 16px 36px -16px rgb(0 0 0 / 0.7);
   color-scheme: dark;
 }
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --color-paper: #0f1216;
-    --color-surface: #161a20;
-    --color-soft: #1c2128;
-    --color-ink: #e7e9ec;
-    --color-muted: #a1a8b3;
-    --color-line: #262b33;
-    --color-accent: #73c7ce;
-    --color-accent-soft: #15302f;
-    --color-on-accent: #0b2326;
-    --color-danger: #f2a099;
-    --color-warn: #e6b85c;
-    --color-caution: #f0a873;
-    --shadow-raised: 0 1px 2px rgb(0 0 0 / 0.3), 0 10px 28px -14px rgb(0 0 0 / 0.6);
+    --color-paper: #100e14;
+    --color-surface: #1a1622;
+    --color-soft: #2a2436;
+    --color-ink: #f6f3fb;
+    --color-muted: #d0c6de;
+    --color-line: #3a3348;
+    --color-accent: #c4b5fd;
+    --color-accent-soft: #342848;
+    --color-on-accent: #1a0a14;
+    --color-accent-from: #c4b5fd;
+    --color-accent-to: #fda4af;
+    --color-danger: #ffb4a8;
+    --color-warn: #f0c36a;
+    --color-caution: #f5b48a;
+    --color-chrome: #100e14;
+    --color-chrome-ink: #f6f3fb;
+    --color-chrome-muted: #d0c6de;
+    --color-chrome-accent: #e879f9;
+    --color-chrome-soft: #2a2436;
+    --color-chrome-line: #3a3348;
+    --shadow-raised: 0 1px 2px rgb(0 0 0 / 0.4), 0 16px 36px -16px rgb(0 0 0 / 0.7);
     color-scheme: dark;
   }
+  :root:not([data-theme="light"])[data-accent="home"] { --color-accent: #7ddec0; --color-accent-soft: #143028; --color-on-accent: #1a0a14; --color-accent-from: #7ddec0; --color-accent-to: #fda4af; }
+  :root:not([data-theme="light"])[data-accent="shops"] { --color-accent: #ffb086; --color-accent-soft: #3a2418; --color-on-accent: #1a0a14; --color-accent-from: #ffb086; --color-accent-to: #fda4af; }
+  :root:not([data-theme="light"])[data-accent="beauty"] { --color-accent: #ffb0cc; --color-accent-soft: #3a1828; --color-on-accent: #1a0a14; --color-accent-from: #ffb0cc; --color-accent-to: #fda4af; }
+  :root:not([data-theme="light"])[data-accent="health"] { --color-accent: #7ee0d6; --color-accent-soft: #12302c; --color-on-accent: #1a0a14; --color-accent-from: #7ee0d6; --color-accent-to: #fda4af; }
+  :root:not([data-theme="light"])[data-accent="pets"] { --color-accent: #f0c36a; --color-accent-soft: #3a2c12; --color-on-accent: #1a0a14; --color-accent-from: #f0c36a; --color-accent-to: #fda4af; }
+  :root:not([data-theme="light"])[data-accent="food"] { --color-accent: #ffb0a4; --color-accent-soft: #3a1c18; --color-on-accent: #1a0a14; --color-accent-from: #ffb0a4; --color-accent-to: #fda4af; }
+  :root:not([data-theme="light"])[data-accent="retail"] { --color-accent: #c6e07a; --color-accent-soft: #243014; --color-on-accent: #1a0a14; --color-accent-from: #c6e07a; --color-accent-to: #fda4af; }
+  :root:not([data-theme="light"])[data-accent="professional"] { --color-accent: #a8c4ff; --color-accent-soft: #1a2444; --color-on-accent: #1a0a14; --color-accent-from: #a8c4ff; --color-accent-to: #fda4af; }
+  :root:not([data-theme="light"])[data-accent="education"] { --color-accent: #d2b4ff; --color-accent-soft: #2a1844; --color-on-accent: #1a0a14; --color-accent-from: #d2b4ff; --color-accent-to: #fda4af; }
+  :root:not([data-theme="light"])[data-accent="events"] { --color-accent: #f0a0e8; --color-accent-soft: #3a1840; --color-on-accent: #1a0a14; --color-accent-from: #f0a0e8; --color-accent-to: #fda4af; }
+}
+
+/* Industry accents. Words still name the status. Only the accent hue moves. */
+html[data-accent="home"] { --color-accent: #0b6a3c; --color-accent-soft: #d8f3e4; --color-on-accent: #ffffff; --color-accent-from: #0b6a3c; --color-accent-to: #e11d48; }
+html[data-accent="shops"] { --color-accent: #a83208; --color-accent-soft: #ffe8dc; --color-on-accent: #ffffff; --color-accent-from: #a83208; --color-accent-to: #e11d48; }
+html[data-accent="beauty"] { --color-accent: #a81450; --color-accent-soft: #fde4f0; --color-on-accent: #ffffff; --color-accent-from: #a81450; --color-accent-to: #e11d48; }
+html[data-accent="health"] { --color-accent: #0c6860; --color-accent-soft: #d4f4f0; --color-on-accent: #ffffff; --color-accent-from: #0c6860; --color-accent-to: #e11d48; }
+html[data-accent="pets"] { --color-accent: #8a4e04; --color-accent-soft: #feefd0; --color-on-accent: #ffffff; --color-accent-from: #8a4e04; --color-accent-to: #e11d48; }
+html[data-accent="food"] { --color-accent: #b01c14; --color-accent-soft: #fde4de; --color-on-accent: #ffffff; --color-accent-from: #b01c14; --color-accent-to: #e11d48; }
+html[data-accent="retail"] { --color-accent: #3f6a0c; --color-accent-soft: #e8f5cc; --color-on-accent: #ffffff; --color-accent-from: #3f6a0c; --color-accent-to: #e11d48; }
+html[data-accent="professional"] { --color-accent: #1d4ed8; --color-accent-soft: #dce8ff; --color-on-accent: #ffffff; --color-accent-from: #1d4ed8; --color-accent-to: #e11d48; }
+html[data-accent="education"] { --color-accent: #6d28d9; --color-accent-soft: #f0e6ff; --color-on-accent: #ffffff; --color-accent-from: #6d28d9; --color-accent-to: #e11d48; }
+html[data-accent="events"] { --color-accent: #8e1898; --color-accent-soft: #f8e4ff; --color-on-accent: #ffffff; --color-accent-from: #8e1898; --color-accent-to: #e11d48; }
+
+:root[data-theme="dark"][data-accent="home"] { --color-accent: #7ddec0; --color-accent-soft: #143028; --color-on-accent: #1a0a14; --color-accent-from: #7ddec0; --color-accent-to: #fda4af; }
+:root[data-theme="dark"][data-accent="shops"] { --color-accent: #ffb086; --color-accent-soft: #3a2418; --color-on-accent: #1a0a14; --color-accent-from: #ffb086; --color-accent-to: #fda4af; }
+:root[data-theme="dark"][data-accent="beauty"] { --color-accent: #ffb0cc; --color-accent-soft: #3a1828; --color-on-accent: #1a0a14; --color-accent-from: #ffb0cc; --color-accent-to: #fda4af; }
+:root[data-theme="dark"][data-accent="health"] { --color-accent: #7ee0d6; --color-accent-soft: #12302c; --color-on-accent: #1a0a14; --color-accent-from: #7ee0d6; --color-accent-to: #fda4af; }
+:root[data-theme="dark"][data-accent="pets"] { --color-accent: #f0c36a; --color-accent-soft: #3a2c12; --color-on-accent: #1a0a14; --color-accent-from: #f0c36a; --color-accent-to: #fda4af; }
+:root[data-theme="dark"][data-accent="food"] { --color-accent: #ffb0a4; --color-accent-soft: #3a1c18; --color-on-accent: #1a0a14; --color-accent-from: #ffb0a4; --color-accent-to: #fda4af; }
+:root[data-theme="dark"][data-accent="retail"] { --color-accent: #c6e07a; --color-accent-soft: #243014; --color-on-accent: #1a0a14; --color-accent-from: #c6e07a; --color-accent-to: #fda4af; }
+:root[data-theme="dark"][data-accent="professional"] { --color-accent: #a8c4ff; --color-accent-soft: #1a2444; --color-on-accent: #1a0a14; --color-accent-from: #a8c4ff; --color-accent-to: #fda4af; }
+:root[data-theme="dark"][data-accent="education"] { --color-accent: #d2b4ff; --color-accent-soft: #2a1844; --color-on-accent: #1a0a14; --color-accent-from: #d2b4ff; --color-accent-to: #fda4af; }
+:root[data-theme="dark"][data-accent="events"] { --color-accent: #f0a0e8; --color-accent-soft: #3a1840; --color-on-accent: #1a0a14; --color-accent-from: #f0a0e8; --color-accent-to: #fda4af; }
+
+/* Primary buttons and links only. Badges, meters, and charts stay a flat accent. */
+.accent-fill {
+  background-image: linear-gradient(105deg, var(--color-accent-from), var(--color-accent-to));
 }
 
 html {
   font-size: 16px;
   -webkit-text-size-adjust: 100%;
 }
+html[data-text="large"] { font-size: 18px; }
+html[data-text="larger"] { font-size: 20px; }
 
 body {
   background: var(--color-paper);
   color: var(--color-ink);
   line-height: 1.6;
-  font-size: 1rem;
+  font-size: 1.125rem;
   font-feature-settings: "ss01", "tnum" 0;
 }
 
@@ -112,10 +185,15 @@ p {
   text-wrap: pretty;
 }
 
-/* Visible keyboard focus (WCAG 2.4.7 / 2.4.11). */
+/* Visible keyboard focus (WCAG 2.4.7 / 2.4.11 / 1.4.11).
+   A single accent color cannot clear 3:1 on both the ink bar and the paper.
+   The inner ink ring is what shows on the paper. A gap of the page color
+   separates it from the outer light ring, which is what shows on the bar.
+   Industry accents do not repaint these two rings. */
 :focus-visible {
-  outline: 2px solid var(--color-accent);
-  outline-offset: 2px;
+  outline: 2px solid var(--color-chrome-ink);
+  outline-offset: 4px;
+  box-shadow: 0 0 0 2px var(--color-ink);
   border-radius: 6px;
 }
 

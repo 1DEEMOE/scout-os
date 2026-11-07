@@ -23,7 +23,7 @@ export default async function InboxPage({ params }: { params: Promise<{ orgId: s
         Inbox {draftReady > 0 && <Badge tone="accent">{draftReady} draft{draftReady === 1 ? "" : "s"} ready</Badge>}
       </PageTitle>
       {!box ? (
-        <Empty action={<a className="rounded-lg bg-accent px-5 py-2.5 text-base font-medium text-on-accent" href={`/orgs/${orgId}/settings`}>Connect mailbox</a>}>
+        <Empty action={<a className="accent-fill rounded-lg bg-accent px-5 py-2.5 text-base font-medium text-on-accent" href={`/orgs/${orgId}/settings`}>Connect mailbox</a>}>
           Connect Gmail in Settings to sort email and draft replies.
         </Empty>
       ) : (
