@@ -14,7 +14,7 @@ import { agentsPaused } from "../org/pause";
 import { enqueueTaskRun } from "./queue";
 import { getEngine, now } from "./runtime";
 import { TERMINAL, transition, TransitionConflictError, type TaskRow } from "./tasks";
-import { bindSendDraftArgs } from "../tools/inbox";
+import { bindSendDraftArgs, gateOutboundMail, outboundRecipients } from "../tools/inbox";
 import { ToolError } from "./tools";
 import { approvalExpiryMs } from "../kimi/cards";
 import { taskHeld } from "../kimi/round1";
@@ -217,7 +217,18 @@ async function plan(task: TaskRow): Promise<boolean> {
         await withTenant(task.tenantId, (tx) => transition(tx, task, "FAILED", fail("The draft to send does not match the mailbox draft", "DRAFT_MISMATCH")));
         return true;
       }
-      if (bound) args = bound;
+      if (bound) {
+        const blocked = await withTenant(task.tenantId, async (tx) => {
+          const gate = await gateOutboundMail(tx, { tenantId: task.tenantId, actorType: "agent", actorId: agent.agent.id, target: `task:${task.id}`, recipients: outboundRecipients(bound) });
+          if (!gate.allowed) {
+            await transition(tx, task, "FAILED", fail(gate.message, gate.reason === "suppressed" ? "SUPPRESSED" : "NO_PERMISSION"));
+            return true;
+          }
+          return false;
+        });
+        if (blocked) return true;
+        args = bound;
+      }
     }
     const tainted = taintedArgs(args, externalText);
     steps.push({

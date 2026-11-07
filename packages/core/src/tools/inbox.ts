@@ -2,13 +2,15 @@ import { createHash } from "node:crypto";
 import { and, desc, eq } from "drizzle-orm";
 import { z } from "zod";
 import { CONVERSATION_CATEGORIES, conversations, messages, withTenant } from "@wos/db";
+import { recordAudit } from "../audit";
 import { canonicalJson } from "../engine/digest";
 import { getEngine } from "../engine/runtime";
 import { objectResult, ToolError, type ToolContext, type ToolDefinition, type ToolRegistry } from "../engine/tools";
 import { messageIdFor, type MailAttachment, type MailDraft } from "../integrations/mail";
 import type { MailboxResolver } from "../inbox/mailbox";
 import { produceIntegration } from "../events/produce";
-import { checkEmailAllowed, recordOutreach } from "../scout/consent";
+import { checkEmailAllowed, normalizeAddress, recordOutreach, type SendCheck } from "../scout/consent";
+import type { Tx } from "@wos/db";
 
 const conversationId = z.uuid();
 
@@ -98,6 +100,34 @@ export function sendContentHash(action: SendDraftSnapshot): string {
 
 function sameAddresses(left: string[] | undefined, right: string[]): boolean {
   return left === undefined || addressKeys(left).join("\n") === addressKeys(right).join("\n");
+}
+
+/** Every address this draft would contact. Reply-To is included: it names who should be written back. */
+export function outboundRecipients(action: { to: string[]; cc?: string[]; bcc?: string[]; replyTo?: string[] }): string[] {
+  return [...new Set([...addressKeys(action.to), ...addressKeys(action.cc), ...addressKeys(action.bcc), ...addressKeys(action.replyTo)])];
+}
+
+/**
+ * Do-not-contact and Scout permission for every recipient on the draft.
+ * One blocked address refuses the whole send. Each block is audited.
+ * SMS quiet hours are not an email-header check; speed-to-lead email is a single address and uses the same permission check.
+ */
+export async function gateOutboundMail(tx: Tx, input: { tenantId: string; actorType: "user" | "agent" | "system"; actorId: string; target: string; recipients: string[] }): Promise<SendCheck> {
+  const recipients = [...new Set(input.recipients.map(normalizeAddress).filter(Boolean))];
+  let denied: Extract<SendCheck, { allowed: false }> | null = null;
+  const opportunityIds = new Map<string, string>();
+  for (const recipient of recipients) {
+    const gate = await checkEmailAllowed(tx, [recipient]);
+    if (!gate.allowed) {
+      denied ??= gate;
+      await recordOutreach(tx, { tenantId: input.tenantId, opportunityId: gate.opportunityId, recipient: gate.recipient, kind: "blocked", reason: gate.reason, actor: { type: input.actorType, id: input.actorId }, ref: input.target });
+      await recordAudit(tx, { tenantId: input.tenantId, actorType: input.actorType, actorId: input.actorId, action: "inbox.send.blocked", target: input.target, tier: 2, outcome: "denied", metadata: { recipient: gate.recipient, reason: gate.reason, recipients } });
+    } else {
+      for (const [email, opp] of gate.opportunityIds) opportunityIds.set(email, opp);
+    }
+  }
+  if (denied) return denied;
+  return { allowed: true, opportunityIds };
 }
 
 /**
@@ -264,12 +294,14 @@ export function inboxTools(mailbox: MailboxResolver): ToolDefinition[] {
       ) {
         throw new ToolError("The draft changed after it was approved. Request a new approval.", false, "DRAFT_CHANGED");
       }
-      // Do-not-contact and Scout consent, checked at send time (after approval).
-      const gate = await withTenant(ctx.tenantId, async (tx) => {
-        const g = await checkEmailAllowed(tx, a.to);
-        if (!g.allowed) await recordOutreach(tx, { tenantId: ctx.tenantId, opportunityId: g.opportunityId, recipient: g.recipient, kind: "blocked", reason: g.reason, actor: { type: "agent", id: ctx.agentId }, ref: `task:${ctx.taskId}` });
-        return g;
-      });
+      // Do-not-contact and Scout consent, checked against the provider draft after approval.
+      const gate = await withTenant(ctx.tenantId, (tx) => gateOutboundMail(tx, {
+        tenantId: ctx.tenantId,
+        actorType: "agent",
+        actorId: ctx.agentId,
+        target: `task:${ctx.taskId}`,
+        recipients: outboundRecipients(resolved),
+      }));
       if (!gate.allowed) throw new ToolError(gate.message, false, gate.reason === "suppressed" ? "SUPPRESSED" : "NO_PERMISSION");
       const { externalId } = await produceIntegration({
         tenantId: ctx.tenantId,
@@ -284,7 +316,7 @@ export function inboxTools(mailbox: MailboxResolver): ToolDefinition[] {
           : undefined,
         effect: (fx) => fx.once(() => box.provider.sendDraft(pinnedId)),
       });
-      const sent = await recordSent(ctx, conv.id, externalId, a, box.identity.address, pinnedMessageId);
+      const sent = await recordSent(ctx, conv.id, externalId, { to: [...resolved.to, ...resolved.cc, ...resolved.bcc], subject: resolved.subject, body: resolved.body }, box.identity.address, pinnedMessageId);
       if (gate.opportunityIds.size) {
         await withTenant(ctx.tenantId, async (tx) => {
           for (const [to, opp] of gate.opportunityIds) await recordOutreach(tx, { tenantId: ctx.tenantId, opportunityId: opp, recipient: to, kind: "sent", actor: { type: "agent", id: ctx.agentId }, ref: externalId });

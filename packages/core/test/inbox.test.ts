@@ -3,6 +3,7 @@ import { eq, sql } from "drizzle-orm";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { auditEvents, closePool, conversations, emailIdentities, withTenant } from "@wos/db";
 import {
+  addSuppression,
   AppError,
   buildRfc822,
   configureEngine,
@@ -522,6 +523,98 @@ describe("owner draft and follow-up chip on the real inbox tools", () => {
     expect((await taskRow(orgId, taskId)).error).toMatchObject({ code: "DRAFT_CHANGED" });
     expect(mail.sendCalls).toBe(0);
     expect(mail.sent.size).toBe(0);
+  });
+
+  async function draftWithCopies(convId: string, copies: { cc?: string[]; bcc?: string[]; replyTo?: string[] }) {
+    await triageAndDraft(convId);
+    const [ident] = await withTenant(orgId, (tx) => tx.select().from(emailIdentities));
+    await setMailboxMode({ actorUserId: "owner", orgId, identityId: ident!.id, mode: "send_with_approval" });
+    const legitimate = [...mail.drafts.entries()][0]!;
+    await mail.updateDraft(legitimate[0], {
+      threadId: "thr-A",
+      to: legitimate[1].to,
+      ...copies,
+      subject: legitimate[1].subject,
+      body: legitimate[1].body,
+      messageId: legitimate[1].messageId,
+    });
+    return legitimate;
+  }
+
+  it("does not plan a send when cc, bcc, or reply-to is on the do-not-contact list", async () => {
+    const conv = await syncedConversation();
+    const legitimate = await draftWithCopies(conv.id, { cc: ["copy@hidden.test"], bcc: ["blind@hidden.test"], replyTo: ["reply@hidden.test"] });
+    for (const email of ["copy@hidden.test", "blind@hidden.test", "reply@hidden.test"]) {
+      await addSuppression({ actorUserId: "member", orgId, email, reason: "opt_out" });
+    }
+    plan = {
+      toolCalls: [{
+        name: "inbox.send_draft",
+        input: {
+          conversationId: conv.id,
+          to: ["client@customer.test"],
+          subject: "Re: Invoice question",
+          body: legitimate[1].body,
+          draftExternalId: legitimate[0],
+          draftMessageId: legitimate[1].messageId,
+        },
+      }],
+    };
+    const { taskId } = await createTask({ actorUserId: "member", orgId, intent: "Send the drafted reply", input: { agentKind: "inbox", conversationId: conv.id } });
+    expect(await runTask(orgId, taskId)).toBe("FAILED");
+    expect((await taskRow(orgId, taskId)).error).toMatchObject({ code: "SUPPRESSED" });
+    expect(await approvalsFor(orgId, taskId)).toHaveLength(0);
+    expect(mail.sendCalls).toBe(0);
+    expect(mail.sent.size).toBe(0);
+    const blocked = await withTenant(orgId, (tx) =>
+      tx.select({ metadata: auditEvents.metadata, outcome: auditEvents.outcome }).from(auditEvents).where(eq(auditEvents.action, "inbox.send.blocked")),
+    );
+    const named = blocked.map((row) => (row.metadata as { recipient?: string }).recipient);
+    expect(blocked.every((row) => row.outcome === "denied")).toBe(true);
+    expect(named).toEqual(expect.arrayContaining(["copy@hidden.test", "blind@hidden.test", "reply@hidden.test"]));
+  });
+
+  it("refuses the whole send when cc or bcc is suppressed after approval", async () => {
+    const conv = await syncedConversation();
+    const legitimate = await draftWithCopies(conv.id, { cc: ["copy@hidden.test"], bcc: ["blind@hidden.test"] });
+    plan = {
+      toolCalls: [{
+        name: "inbox.send_draft",
+        input: {
+          conversationId: conv.id,
+          to: ["client@customer.test"],
+          subject: "Re: Invoice question",
+          body: legitimate[1].body,
+          draftExternalId: legitimate[0],
+          draftMessageId: legitimate[1].messageId,
+        },
+      }],
+    };
+    const { taskId } = await createTask({ actorUserId: "member", orgId, intent: "Send the drafted reply", input: { agentKind: "inbox", conversationId: conv.id } });
+    expect(await runTask(orgId, taskId)).toBe("WAITING_FOR_APPROVAL");
+    await addSuppression({ actorUserId: "member", orgId, email: "copy@hidden.test", reason: "opt_out" });
+    await addSuppression({ actorUserId: "member", orgId, email: "blind@hidden.test", reason: "opt_out" });
+    const [approved] = await approvalsFor(orgId, taskId);
+    await decideApproval({ actorUserId: "owner", orgId, approvalId: approved!.id, decision: "approve" });
+    expect(await runTask(orgId, taskId)).toBe("FAILED");
+    expect((await taskRow(orgId, taskId)).error).toMatchObject({ code: "SUPPRESSED" });
+    expect(mail.sendCalls).toBe(0);
+    expect(mail.sent.size).toBe(0);
+    expect([...mail.sent.values()].some((m) => (m.cc ?? []).includes("copy@hidden.test") || (m.bcc ?? []).includes("blind@hidden.test"))).toBe(false);
+    const blocked = await withTenant(orgId, (tx) =>
+      tx.select({ metadata: auditEvents.metadata }).from(auditEvents).where(eq(auditEvents.action, "inbox.send.blocked")),
+    );
+    const named = blocked.map((row) => (row.metadata as { recipient?: string }).recipient);
+    expect(named).toEqual(expect.arrayContaining(["copy@hidden.test", "blind@hidden.test"]));
+  });
+
+  it("requestSendDraft refuses a provider draft that copies a suppressed address", async () => {
+    const conv = await syncedConversation();
+    await draftWithCopies(conv.id, { cc: ["copy@hidden.test"], bcc: ["blind@hidden.test"] });
+    await addSuppression({ actorUserId: "member", orgId, email: "copy@hidden.test", reason: "opt_out" });
+    await addSuppression({ actorUserId: "member", orgId, email: "blind@hidden.test", reason: "opt_out" });
+    await expectCode(requestSendDraft({ actorUserId: "member", orgId, conversationId: conv.id }), "CONFLICT");
+    expect(mail.sendCalls).toBe(0);
   });
 
   it("an in-flight send that fails does not record already_completed", async () => {

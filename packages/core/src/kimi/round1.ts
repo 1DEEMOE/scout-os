@@ -18,7 +18,7 @@ import { createRoutine } from "../routines/service";
 import { messageIdFor } from "../integrations/mail";
 import { requestSendDraft } from "../inbox/service";
 import { ingestLead } from "../speed/service";
-import { replyRecipients, replySubject, sendContentHash, snapshotFromDraft } from "../tools/inbox";
+import { gateOutboundMail, outboundRecipients, replyRecipients, replySubject, sendContentHash, snapshotFromDraft } from "../tools/inbox";
 import { seasonalHits, type SignalHit } from "../signals/sources";
 import { approvalCard, approvalExpiryMs, type ApprovalCardView } from "./cards";
 
@@ -211,6 +211,8 @@ async function rebindPlan(tx: Tx, orgId: string, task: { id: string; tenantId: s
       args.draftExternalId = canonical.draftExternalId;
       args.draftMessageId = canonical.draftMessageId;
       args.contentHash = sendContentHash(canonical);
+      const gate = await gateOutboundMail(tx, { tenantId: orgId, actorType: "agent", actorId: task.assignedAgentId, target: `task:${task.id}`, recipients: outboundRecipients(canonical) });
+      if (!gate.allowed) throw new AppError("CONFLICT", gate.message);
       changed = true;
     } else {
       for (const key of Object.keys(args)) {
