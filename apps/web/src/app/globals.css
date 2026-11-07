@@ -1,5 +1,6 @@
 @import "tailwindcss";
 @import "@fontsource-variable/schibsted-grotesk";
+@import "./palettes.css";
 
 /* Desktop icon rail: set on <html data-rail="1"> before first paint (NAV_BOOT), so it never flashes. */
 @custom-variant rail {

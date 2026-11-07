@@ -1,0 +1,818 @@
+/* Candidate palettes. Kiln stays the default when data-palette is unset.
+   Signal: bright paper, electric indigo, coral mark.
+   Harbor: mist paper, midnight bar, mint accent.
+   Nova: cool paper, ink bar, violet-to-coral gradient on accent fills.
+   Contrast is checked in apps/web/test/contrast.test.ts. */
+
+
+html[data-palette="signal"] {
+  --color-paper: #f4f6fb;
+  --color-surface: #ffffff;
+  --color-soft: #e4e9f5;
+  --color-ink: #12141f;
+  --color-muted: #3c4660;
+  --color-line: #d3dae8;
+  --color-accent: #4c25d6;
+  --color-accent-soft: #eee8ff;
+  --color-on-accent: #ffffff;
+  --color-danger: #b42318;
+  --color-warn: #8a4b00;
+  --color-caution: #9a3412;
+  --color-chrome: #ffffff;
+  --color-chrome-ink: #12141f;
+  --color-chrome-muted: #3c4660;
+  --color-chrome-accent: #c21048;
+  --color-chrome-soft: #e4e9f5;
+  --color-chrome-line: #d3dae8;
+  color-scheme: light;
+}
+
+html[data-palette="signal"][data-theme="dark"] {
+  --color-paper: #0c0e16;
+  --color-surface: #151826;
+  --color-soft: #242838;
+  --color-ink: #f4f6fd;
+  --color-muted: #c9d0e4;
+  --color-line: #343a50;
+  --color-accent: #c4b6ff;
+  --color-accent-soft: #2c2552;
+  --color-on-accent: #1a1038;
+  --color-danger: #ffb4a8;
+  --color-warn: #f0c36a;
+  --color-caution: #f5b48a;
+  --color-chrome: #0c0e16;
+  --color-chrome-ink: #f4f6fd;
+  --color-chrome-muted: #c9d0e4;
+  --color-chrome-accent: #ff9aaf;
+  --color-chrome-soft: #242838;
+  --color-chrome-line: #343a50;
+  color-scheme: dark;
+}
+
+html[data-palette="signal"][data-accent="home"] {
+  --color-accent: #0b6a3c;
+  --color-accent-soft: #d8f3e4;
+  --color-on-accent: #ffffff;
+}
+
+html[data-palette="signal"][data-accent="shops"] {
+  --color-accent: #a83208;
+  --color-accent-soft: #ffe8dc;
+  --color-on-accent: #ffffff;
+}
+
+html[data-palette="signal"][data-accent="beauty"] {
+  --color-accent: #a81450;
+  --color-accent-soft: #fde4f0;
+  --color-on-accent: #ffffff;
+}
+
+html[data-palette="signal"][data-accent="health"] {
+  --color-accent: #0c6860;
+  --color-accent-soft: #d4f4f0;
+  --color-on-accent: #ffffff;
+}
+
+html[data-palette="signal"][data-accent="pets"] {
+  --color-accent: #8a4e04;
+  --color-accent-soft: #feefd0;
+  --color-on-accent: #ffffff;
+}
+
+html[data-palette="signal"][data-accent="food"] {
+  --color-accent: #b01c14;
+  --color-accent-soft: #fde4de;
+  --color-on-accent: #ffffff;
+}
+
+html[data-palette="signal"][data-accent="retail"] {
+  --color-accent: #3f6a0c;
+  --color-accent-soft: #e8f5cc;
+  --color-on-accent: #ffffff;
+}
+
+html[data-palette="signal"][data-accent="professional"] {
+  --color-accent: #1d4ed8;
+  --color-accent-soft: #dce8ff;
+  --color-on-accent: #ffffff;
+}
+
+html[data-palette="signal"][data-accent="education"] {
+  --color-accent: #6d28d9;
+  --color-accent-soft: #f0e6ff;
+  --color-on-accent: #ffffff;
+}
+
+html[data-palette="signal"][data-accent="events"] {
+  --color-accent: #8e1898;
+  --color-accent-soft: #f8e4ff;
+  --color-on-accent: #ffffff;
+}
+
+html[data-palette="signal"][data-theme="dark"][data-accent="home"] {
+  --color-accent: #7ddec0;
+  --color-accent-soft: #143028;
+  --color-on-accent: #062018;
+}
+
+html[data-palette="signal"][data-theme="dark"][data-accent="shops"] {
+  --color-accent: #ffb086;
+  --color-accent-soft: #3a2418;
+  --color-on-accent: #2a1208;
+}
+
+html[data-palette="signal"][data-theme="dark"][data-accent="beauty"] {
+  --color-accent: #ffb0cc;
+  --color-accent-soft: #3a1828;
+  --color-on-accent: #2a0818;
+}
+
+html[data-palette="signal"][data-theme="dark"][data-accent="health"] {
+  --color-accent: #7ee0d6;
+  --color-accent-soft: #12302c;
+  --color-on-accent: #062018;
+}
+
+html[data-palette="signal"][data-theme="dark"][data-accent="pets"] {
+  --color-accent: #f0c36a;
+  --color-accent-soft: #3a2c12;
+  --color-on-accent: #241c08;
+}
+
+html[data-palette="signal"][data-theme="dark"][data-accent="food"] {
+  --color-accent: #ffb0a4;
+  --color-accent-soft: #3a1c18;
+  --color-on-accent: #2a0e0c;
+}
+
+html[data-palette="signal"][data-theme="dark"][data-accent="retail"] {
+  --color-accent: #c6e07a;
+  --color-accent-soft: #243014;
+  --color-on-accent: #141e08;
+}
+
+html[data-palette="signal"][data-theme="dark"][data-accent="professional"] {
+  --color-accent: #a8c4ff;
+  --color-accent-soft: #1a2444;
+  --color-on-accent: #0c1428;
+}
+
+html[data-palette="signal"][data-theme="dark"][data-accent="education"] {
+  --color-accent: #d2b4ff;
+  --color-accent-soft: #2a1844;
+  --color-on-accent: #160828;
+}
+
+html[data-palette="signal"][data-theme="dark"][data-accent="events"] {
+  --color-accent: #f0a0e8;
+  --color-accent-soft: #3a1840;
+  --color-on-accent: #240828;
+}
+
+html[data-palette="harbor"] {
+  --color-paper: #f2f7f6;
+  --color-surface: #ffffff;
+  --color-soft: #dceae6;
+  --color-ink: #0c1c1a;
+  --color-muted: #3a534e;
+  --color-line: #c9ddd8;
+  --color-accent: #0a6b56;
+  --color-accent-soft: #e4faf3;
+  --color-on-accent: #ffffff;
+  --color-danger: #b42318;
+  --color-warn: #8a4b00;
+  --color-caution: #9a3412;
+  --color-chrome: #071520;
+  --color-chrome-ink: #e7f6f2;
+  --color-chrome-muted: #b7d4cc;
+  --color-chrome-accent: #3dface;
+  --color-chrome-soft: #123044;
+  --color-chrome-line: #1e3c52;
+  color-scheme: light;
+}
+
+html[data-palette="harbor"][data-theme="dark"] {
+  --color-paper: #07141c;
+  --color-surface: #0d1e2a;
+  --color-soft: #143246;
+  --color-ink: #e8f6f4;
+  --color-muted: #b7d0d4;
+  --color-line: #1e3c4c;
+  --color-accent: #3eecc0;
+  --color-accent-soft: #0e3a32;
+  --color-on-accent: #04241c;
+  --color-danger: #ffb4a8;
+  --color-warn: #f0c36a;
+  --color-caution: #f5b48a;
+  --color-chrome: #07141c;
+  --color-chrome-ink: #e8f6f4;
+  --color-chrome-muted: #b7d0d4;
+  --color-chrome-accent: #3eecc0;
+  --color-chrome-soft: #143246;
+  --color-chrome-line: #1e3c4c;
+  color-scheme: dark;
+}
+
+html[data-palette="harbor"][data-accent="home"] {
+  --color-accent: #0b6a3c;
+  --color-accent-soft: #d8f3e4;
+  --color-on-accent: #ffffff;
+}
+
+html[data-palette="harbor"][data-accent="shops"] {
+  --color-accent: #a83208;
+  --color-accent-soft: #ffe8dc;
+  --color-on-accent: #ffffff;
+}
+
+html[data-palette="harbor"][data-accent="beauty"] {
+  --color-accent: #a81450;
+  --color-accent-soft: #fde4f0;
+  --color-on-accent: #ffffff;
+}
+
+html[data-palette="harbor"][data-accent="health"] {
+  --color-accent: #0c6860;
+  --color-accent-soft: #d4f4f0;
+  --color-on-accent: #ffffff;
+}
+
+html[data-palette="harbor"][data-accent="pets"] {
+  --color-accent: #8a4e04;
+  --color-accent-soft: #feefd0;
+  --color-on-accent: #ffffff;
+}
+
+html[data-palette="harbor"][data-accent="food"] {
+  --color-accent: #b01c14;
+  --color-accent-soft: #fde4de;
+  --color-on-accent: #ffffff;
+}
+
+html[data-palette="harbor"][data-accent="retail"] {
+  --color-accent: #3f6a0c;
+  --color-accent-soft: #e8f5cc;
+  --color-on-accent: #ffffff;
+}
+
+html[data-palette="harbor"][data-accent="professional"] {
+  --color-accent: #1d4ed8;
+  --color-accent-soft: #dce8ff;
+  --color-on-accent: #ffffff;
+}
+
+html[data-palette="harbor"][data-accent="education"] {
+  --color-accent: #6d28d9;
+  --color-accent-soft: #f0e6ff;
+  --color-on-accent: #ffffff;
+}
+
+html[data-palette="harbor"][data-accent="events"] {
+  --color-accent: #8e1898;
+  --color-accent-soft: #f8e4ff;
+  --color-on-accent: #ffffff;
+}
+
+html[data-palette="harbor"][data-theme="dark"][data-accent="home"] {
+  --color-accent: #7ddec0;
+  --color-accent-soft: #143028;
+  --color-on-accent: #062018;
+}
+
+html[data-palette="harbor"][data-theme="dark"][data-accent="shops"] {
+  --color-accent: #ffb086;
+  --color-accent-soft: #3a2418;
+  --color-on-accent: #2a1208;
+}
+
+html[data-palette="harbor"][data-theme="dark"][data-accent="beauty"] {
+  --color-accent: #ffb0cc;
+  --color-accent-soft: #3a1828;
+  --color-on-accent: #2a0818;
+}
+
+html[data-palette="harbor"][data-theme="dark"][data-accent="health"] {
+  --color-accent: #7ee0d6;
+  --color-accent-soft: #12302c;
+  --color-on-accent: #062018;
+}
+
+html[data-palette="harbor"][data-theme="dark"][data-accent="pets"] {
+  --color-accent: #f0c36a;
+  --color-accent-soft: #3a2c12;
+  --color-on-accent: #241c08;
+}
+
+html[data-palette="harbor"][data-theme="dark"][data-accent="food"] {
+  --color-accent: #ffb0a4;
+  --color-accent-soft: #3a1c18;
+  --color-on-accent: #2a0e0c;
+}
+
+html[data-palette="harbor"][data-theme="dark"][data-accent="retail"] {
+  --color-accent: #c6e07a;
+  --color-accent-soft: #243014;
+  --color-on-accent: #141e08;
+}
+
+html[data-palette="harbor"][data-theme="dark"][data-accent="professional"] {
+  --color-accent: #a8c4ff;
+  --color-accent-soft: #1a2444;
+  --color-on-accent: #0c1428;
+}
+
+html[data-palette="harbor"][data-theme="dark"][data-accent="education"] {
+  --color-accent: #d2b4ff;
+  --color-accent-soft: #2a1844;
+  --color-on-accent: #160828;
+}
+
+html[data-palette="harbor"][data-theme="dark"][data-accent="events"] {
+  --color-accent: #f0a0e8;
+  --color-accent-soft: #3a1840;
+  --color-on-accent: #240828;
+}
+
+html[data-palette="nova"] {
+  --color-paper: #f7f6f8;
+  --color-surface: #ffffff;
+  --color-soft: #ece7f1;
+  --color-ink: #16141c;
+  --color-muted: #4a4458;
+  --color-line: #ddd6e6;
+  --color-accent: #6d28d9;
+  --color-accent-soft: #f3e9ff;
+  --color-on-accent: #ffffff;
+  --color-accent-from: #6d28d9;
+  --color-accent-to: #e11d48;
+  --color-danger: #b42318;
+  --color-warn: #8a4b00;
+  --color-caution: #9a3412;
+  --color-chrome: #14121a;
+  --color-chrome-ink: #f7f4fb;
+  --color-chrome-muted: #d4cce0;
+  --color-chrome-accent: #e879f9;
+  --color-chrome-soft: #2a2434;
+  --color-chrome-line: #3a3348;
+  color-scheme: light;
+}
+
+html[data-palette="nova"][data-theme="dark"] {
+  --color-paper: #100e14;
+  --color-surface: #1a1622;
+  --color-soft: #2a2436;
+  --color-ink: #f6f3fb;
+  --color-muted: #d0c6de;
+  --color-line: #3a3348;
+  --color-accent: #c4b5fd;
+  --color-accent-soft: #342848;
+  --color-on-accent: #1a0a14;
+  --color-accent-from: #c4b5fd;
+  --color-accent-to: #fda4af;
+  --color-danger: #ffb4a8;
+  --color-warn: #f0c36a;
+  --color-caution: #f5b48a;
+  --color-chrome: #100e14;
+  --color-chrome-ink: #f6f3fb;
+  --color-chrome-muted: #d0c6de;
+  --color-chrome-accent: #e879f9;
+  --color-chrome-soft: #2a2436;
+  --color-chrome-line: #3a3348;
+  color-scheme: dark;
+}
+
+html[data-palette="nova"][data-accent="home"] {
+  --color-accent: #0b6a3c;
+  --color-accent-soft: #d8f3e4;
+  --color-on-accent: #ffffff;
+  --color-accent-from: #0b6a3c;
+  --color-accent-to: #e11d48;
+}
+
+html[data-palette="nova"][data-accent="shops"] {
+  --color-accent: #a83208;
+  --color-accent-soft: #ffe8dc;
+  --color-on-accent: #ffffff;
+  --color-accent-from: #a83208;
+  --color-accent-to: #e11d48;
+}
+
+html[data-palette="nova"][data-accent="beauty"] {
+  --color-accent: #a81450;
+  --color-accent-soft: #fde4f0;
+  --color-on-accent: #ffffff;
+  --color-accent-from: #a81450;
+  --color-accent-to: #e11d48;
+}
+
+html[data-palette="nova"][data-accent="health"] {
+  --color-accent: #0c6860;
+  --color-accent-soft: #d4f4f0;
+  --color-on-accent: #ffffff;
+  --color-accent-from: #0c6860;
+  --color-accent-to: #e11d48;
+}
+
+html[data-palette="nova"][data-accent="pets"] {
+  --color-accent: #8a4e04;
+  --color-accent-soft: #feefd0;
+  --color-on-accent: #ffffff;
+  --color-accent-from: #8a4e04;
+  --color-accent-to: #e11d48;
+}
+
+html[data-palette="nova"][data-accent="food"] {
+  --color-accent: #b01c14;
+  --color-accent-soft: #fde4de;
+  --color-on-accent: #ffffff;
+  --color-accent-from: #b01c14;
+  --color-accent-to: #e11d48;
+}
+
+html[data-palette="nova"][data-accent="retail"] {
+  --color-accent: #3f6a0c;
+  --color-accent-soft: #e8f5cc;
+  --color-on-accent: #ffffff;
+  --color-accent-from: #3f6a0c;
+  --color-accent-to: #e11d48;
+}
+
+html[data-palette="nova"][data-accent="professional"] {
+  --color-accent: #1d4ed8;
+  --color-accent-soft: #dce8ff;
+  --color-on-accent: #ffffff;
+  --color-accent-from: #1d4ed8;
+  --color-accent-to: #e11d48;
+}
+
+html[data-palette="nova"][data-accent="education"] {
+  --color-accent: #6d28d9;
+  --color-accent-soft: #f0e6ff;
+  --color-on-accent: #ffffff;
+  --color-accent-from: #6d28d9;
+  --color-accent-to: #e11d48;
+}
+
+html[data-palette="nova"][data-accent="events"] {
+  --color-accent: #8e1898;
+  --color-accent-soft: #f8e4ff;
+  --color-on-accent: #ffffff;
+  --color-accent-from: #8e1898;
+  --color-accent-to: #e11d48;
+}
+
+html[data-palette="nova"][data-theme="dark"][data-accent="home"] {
+  --color-accent: #7ddec0;
+  --color-accent-soft: #143028;
+  --color-on-accent: #1a0a14;
+  --color-accent-from: #7ddec0;
+  --color-accent-to: #fda4af;
+}
+
+html[data-palette="nova"][data-theme="dark"][data-accent="shops"] {
+  --color-accent: #ffb086;
+  --color-accent-soft: #3a2418;
+  --color-on-accent: #1a0a14;
+  --color-accent-from: #ffb086;
+  --color-accent-to: #fda4af;
+}
+
+html[data-palette="nova"][data-theme="dark"][data-accent="beauty"] {
+  --color-accent: #ffb0cc;
+  --color-accent-soft: #3a1828;
+  --color-on-accent: #1a0a14;
+  --color-accent-from: #ffb0cc;
+  --color-accent-to: #fda4af;
+}
+
+html[data-palette="nova"][data-theme="dark"][data-accent="health"] {
+  --color-accent: #7ee0d6;
+  --color-accent-soft: #12302c;
+  --color-on-accent: #1a0a14;
+  --color-accent-from: #7ee0d6;
+  --color-accent-to: #fda4af;
+}
+
+html[data-palette="nova"][data-theme="dark"][data-accent="pets"] {
+  --color-accent: #f0c36a;
+  --color-accent-soft: #3a2c12;
+  --color-on-accent: #1a0a14;
+  --color-accent-from: #f0c36a;
+  --color-accent-to: #fda4af;
+}
+
+html[data-palette="nova"][data-theme="dark"][data-accent="food"] {
+  --color-accent: #ffb0a4;
+  --color-accent-soft: #3a1c18;
+  --color-on-accent: #1a0a14;
+  --color-accent-from: #ffb0a4;
+  --color-accent-to: #fda4af;
+}
+
+html[data-palette="nova"][data-theme="dark"][data-accent="retail"] {
+  --color-accent: #c6e07a;
+  --color-accent-soft: #243014;
+  --color-on-accent: #1a0a14;
+  --color-accent-from: #c6e07a;
+  --color-accent-to: #fda4af;
+}
+
+html[data-palette="nova"][data-theme="dark"][data-accent="professional"] {
+  --color-accent: #a8c4ff;
+  --color-accent-soft: #1a2444;
+  --color-on-accent: #1a0a14;
+  --color-accent-from: #a8c4ff;
+  --color-accent-to: #fda4af;
+}
+
+html[data-palette="nova"][data-theme="dark"][data-accent="education"] {
+  --color-accent: #d2b4ff;
+  --color-accent-soft: #2a1844;
+  --color-on-accent: #1a0a14;
+  --color-accent-from: #d2b4ff;
+  --color-accent-to: #fda4af;
+}
+
+html[data-palette="nova"][data-theme="dark"][data-accent="events"] {
+  --color-accent: #f0a0e8;
+  --color-accent-soft: #3a1840;
+  --color-on-accent: #1a0a14;
+  --color-accent-from: #f0a0e8;
+  --color-accent-to: #fda4af;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"])[data-palette="signal"] {
+  --color-paper: #0c0e16;
+  --color-surface: #151826;
+  --color-soft: #242838;
+  --color-ink: #f4f6fd;
+  --color-muted: #c9d0e4;
+  --color-line: #343a50;
+  --color-accent: #c4b6ff;
+  --color-accent-soft: #2c2552;
+  --color-on-accent: #1a1038;
+  --color-danger: #ffb4a8;
+  --color-warn: #f0c36a;
+  --color-caution: #f5b48a;
+  --color-chrome: #0c0e16;
+  --color-chrome-ink: #f4f6fd;
+  --color-chrome-muted: #c9d0e4;
+  --color-chrome-accent: #ff9aaf;
+  --color-chrome-soft: #242838;
+  --color-chrome-line: #343a50;
+  color-scheme: dark;
+}
+
+  :root:not([data-theme="light"])[data-palette="signal"][data-accent="home"] {
+  --color-accent: #7ddec0;
+  --color-accent-soft: #143028;
+  --color-on-accent: #062018;
+}
+
+  :root:not([data-theme="light"])[data-palette="signal"][data-accent="shops"] {
+  --color-accent: #ffb086;
+  --color-accent-soft: #3a2418;
+  --color-on-accent: #2a1208;
+}
+
+  :root:not([data-theme="light"])[data-palette="signal"][data-accent="beauty"] {
+  --color-accent: #ffb0cc;
+  --color-accent-soft: #3a1828;
+  --color-on-accent: #2a0818;
+}
+
+  :root:not([data-theme="light"])[data-palette="signal"][data-accent="health"] {
+  --color-accent: #7ee0d6;
+  --color-accent-soft: #12302c;
+  --color-on-accent: #062018;
+}
+
+  :root:not([data-theme="light"])[data-palette="signal"][data-accent="pets"] {
+  --color-accent: #f0c36a;
+  --color-accent-soft: #3a2c12;
+  --color-on-accent: #241c08;
+}
+
+  :root:not([data-theme="light"])[data-palette="signal"][data-accent="food"] {
+  --color-accent: #ffb0a4;
+  --color-accent-soft: #3a1c18;
+  --color-on-accent: #2a0e0c;
+}
+
+  :root:not([data-theme="light"])[data-palette="signal"][data-accent="retail"] {
+  --color-accent: #c6e07a;
+  --color-accent-soft: #243014;
+  --color-on-accent: #141e08;
+}
+
+  :root:not([data-theme="light"])[data-palette="signal"][data-accent="professional"] {
+  --color-accent: #a8c4ff;
+  --color-accent-soft: #1a2444;
+  --color-on-accent: #0c1428;
+}
+
+  :root:not([data-theme="light"])[data-palette="signal"][data-accent="education"] {
+  --color-accent: #d2b4ff;
+  --color-accent-soft: #2a1844;
+  --color-on-accent: #160828;
+}
+
+  :root:not([data-theme="light"])[data-palette="signal"][data-accent="events"] {
+  --color-accent: #f0a0e8;
+  --color-accent-soft: #3a1840;
+  --color-on-accent: #240828;
+}
+
+  :root:not([data-theme="light"])[data-palette="harbor"] {
+  --color-paper: #07141c;
+  --color-surface: #0d1e2a;
+  --color-soft: #143246;
+  --color-ink: #e8f6f4;
+  --color-muted: #b7d0d4;
+  --color-line: #1e3c4c;
+  --color-accent: #3eecc0;
+  --color-accent-soft: #0e3a32;
+  --color-on-accent: #04241c;
+  --color-danger: #ffb4a8;
+  --color-warn: #f0c36a;
+  --color-caution: #f5b48a;
+  --color-chrome: #07141c;
+  --color-chrome-ink: #e8f6f4;
+  --color-chrome-muted: #b7d0d4;
+  --color-chrome-accent: #3eecc0;
+  --color-chrome-soft: #143246;
+  --color-chrome-line: #1e3c4c;
+  color-scheme: dark;
+}
+
+  :root:not([data-theme="light"])[data-palette="harbor"][data-accent="home"] {
+  --color-accent: #7ddec0;
+  --color-accent-soft: #143028;
+  --color-on-accent: #062018;
+}
+
+  :root:not([data-theme="light"])[data-palette="harbor"][data-accent="shops"] {
+  --color-accent: #ffb086;
+  --color-accent-soft: #3a2418;
+  --color-on-accent: #2a1208;
+}
+
+  :root:not([data-theme="light"])[data-palette="harbor"][data-accent="beauty"] {
+  --color-accent: #ffb0cc;
+  --color-accent-soft: #3a1828;
+  --color-on-accent: #2a0818;
+}
+
+  :root:not([data-theme="light"])[data-palette="harbor"][data-accent="health"] {
+  --color-accent: #7ee0d6;
+  --color-accent-soft: #12302c;
+  --color-on-accent: #062018;
+}
+
+  :root:not([data-theme="light"])[data-palette="harbor"][data-accent="pets"] {
+  --color-accent: #f0c36a;
+  --color-accent-soft: #3a2c12;
+  --color-on-accent: #241c08;
+}
+
+  :root:not([data-theme="light"])[data-palette="harbor"][data-accent="food"] {
+  --color-accent: #ffb0a4;
+  --color-accent-soft: #3a1c18;
+  --color-on-accent: #2a0e0c;
+}
+
+  :root:not([data-theme="light"])[data-palette="harbor"][data-accent="retail"] {
+  --color-accent: #c6e07a;
+  --color-accent-soft: #243014;
+  --color-on-accent: #141e08;
+}
+
+  :root:not([data-theme="light"])[data-palette="harbor"][data-accent="professional"] {
+  --color-accent: #a8c4ff;
+  --color-accent-soft: #1a2444;
+  --color-on-accent: #0c1428;
+}
+
+  :root:not([data-theme="light"])[data-palette="harbor"][data-accent="education"] {
+  --color-accent: #d2b4ff;
+  --color-accent-soft: #2a1844;
+  --color-on-accent: #160828;
+}
+
+  :root:not([data-theme="light"])[data-palette="harbor"][data-accent="events"] {
+  --color-accent: #f0a0e8;
+  --color-accent-soft: #3a1840;
+  --color-on-accent: #240828;
+}
+
+  :root:not([data-theme="light"])[data-palette="nova"] {
+  --color-paper: #100e14;
+  --color-surface: #1a1622;
+  --color-soft: #2a2436;
+  --color-ink: #f6f3fb;
+  --color-muted: #d0c6de;
+  --color-line: #3a3348;
+  --color-accent: #c4b5fd;
+  --color-accent-soft: #342848;
+  --color-on-accent: #1a0a14;
+  --color-accent-from: #c4b5fd;
+  --color-accent-to: #fda4af;
+  --color-danger: #ffb4a8;
+  --color-warn: #f0c36a;
+  --color-caution: #f5b48a;
+  --color-chrome: #100e14;
+  --color-chrome-ink: #f6f3fb;
+  --color-chrome-muted: #d0c6de;
+  --color-chrome-accent: #e879f9;
+  --color-chrome-soft: #2a2436;
+  --color-chrome-line: #3a3348;
+  color-scheme: dark;
+}
+
+  :root:not([data-theme="light"])[data-palette="nova"][data-accent="home"] {
+  --color-accent: #7ddec0;
+  --color-accent-soft: #143028;
+  --color-on-accent: #1a0a14;
+  --color-accent-from: #7ddec0;
+  --color-accent-to: #fda4af;
+}
+
+  :root:not([data-theme="light"])[data-palette="nova"][data-accent="shops"] {
+  --color-accent: #ffb086;
+  --color-accent-soft: #3a2418;
+  --color-on-accent: #1a0a14;
+  --color-accent-from: #ffb086;
+  --color-accent-to: #fda4af;
+}
+
+  :root:not([data-theme="light"])[data-palette="nova"][data-accent="beauty"] {
+  --color-accent: #ffb0cc;
+  --color-accent-soft: #3a1828;
+  --color-on-accent: #1a0a14;
+  --color-accent-from: #ffb0cc;
+  --color-accent-to: #fda4af;
+}
+
+  :root:not([data-theme="light"])[data-palette="nova"][data-accent="health"] {
+  --color-accent: #7ee0d6;
+  --color-accent-soft: #12302c;
+  --color-on-accent: #1a0a14;
+  --color-accent-from: #7ee0d6;
+  --color-accent-to: #fda4af;
+}
+
+  :root:not([data-theme="light"])[data-palette="nova"][data-accent="pets"] {
+  --color-accent: #f0c36a;
+  --color-accent-soft: #3a2c12;
+  --color-on-accent: #1a0a14;
+  --color-accent-from: #f0c36a;
+  --color-accent-to: #fda4af;
+}
+
+  :root:not([data-theme="light"])[data-palette="nova"][data-accent="food"] {
+  --color-accent: #ffb0a4;
+  --color-accent-soft: #3a1c18;
+  --color-on-accent: #1a0a14;
+  --color-accent-from: #ffb0a4;
+  --color-accent-to: #fda4af;
+}
+
+  :root:not([data-theme="light"])[data-palette="nova"][data-accent="retail"] {
+  --color-accent: #c6e07a;
+  --color-accent-soft: #243014;
+  --color-on-accent: #1a0a14;
+  --color-accent-from: #c6e07a;
+  --color-accent-to: #fda4af;
+}
+
+  :root:not([data-theme="light"])[data-palette="nova"][data-accent="professional"] {
+  --color-accent: #a8c4ff;
+  --color-accent-soft: #1a2444;
+  --color-on-accent: #1a0a14;
+  --color-accent-from: #a8c4ff;
+  --color-accent-to: #fda4af;
+}
+
+  :root:not([data-theme="light"])[data-palette="nova"][data-accent="education"] {
+  --color-accent: #d2b4ff;
+  --color-accent-soft: #2a1844;
+  --color-on-accent: #1a0a14;
+  --color-accent-from: #d2b4ff;
+  --color-accent-to: #fda4af;
+}
+
+  :root:not([data-theme="light"])[data-palette="nova"][data-accent="events"] {
+  --color-accent: #f0a0e8;
+  --color-accent-soft: #3a1840;
+  --color-on-accent: #1a0a14;
+  --color-accent-from: #f0a0e8;
+  --color-accent-to: #fda4af;
+}
+
+}
+
+/* Nova accent fills are a gradient. Text uses the solid accent, which stays inside the contrast floor. */
+html[data-palette="nova"] .bg-accent {
+  background-image: linear-gradient(105deg, var(--color-accent-from), var(--color-accent-to));
+}

@@ -1,6 +1,6 @@
 import { getPauseState, handoffReliability, listIntegrations, listInvitations, listMailboxes, listMembers } from "@wos/core";
 import { orgContext } from "@/server/org-context";
-import { TextSizeToggle, ThemeToggle } from "../../../theme";
+import { PaletteToggle, TextSizeToggle, ThemeToggle } from "../../../theme";
 import { ActionButton, ActionForm } from "../../../actions";
 import { Badge, Card, Empty, inputCls, PageTitle, quietButtonCls, When } from "../../../ui";
 import { InviteForm } from "./invite-form";
@@ -29,6 +29,8 @@ export default async function SettingsPage({ params, searchParams }: { params: P
           <p className="text-base text-muted">Reading size starts at 18px. It is saved in this browser only.</p>
           <TextSizeToggle />
           <ThemeToggle />
+          <p className="text-base text-muted">Kiln is the current look. Signal, Harbor, and Nova are candidates, saved in this browser only.</p>
+          <PaletteToggle />
         </div>
       </Card>
       <Card title="How Scout reaches you">

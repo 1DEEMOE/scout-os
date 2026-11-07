@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
-import { TEXT_KEY, THEME_KEY as KEY } from "./boot";
+import { PALETTE_KEY, TEXT_KEY, THEME_KEY as KEY } from "./boot";
 
 export { RAIL_KEY } from "./boot";
 export type Choice = "system" | "light" | "dark";
@@ -96,6 +96,56 @@ export function TextSizeToggle() {
           aria-pressed={size === value}
           onClick={() => applyTextSize(value)}
           className={`min-h-11 min-w-11 rounded-full px-3 transition-colors duration-150 ${size === value ? "bg-surface font-medium text-ink shadow-[var(--shadow-raised)]" : "text-muted hover:text-ink"}`}
+        >
+          {label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+export type PaletteName = "kiln" | "signal" | "harbor" | "nova";
+
+/** Candidate looks. Kiln stays the default when nothing is stored. Saved in this browser only. */
+export function applyPalette(palette: PaletteName) {
+  const root = document.documentElement;
+  if (palette === "kiln") delete root.dataset.palette;
+  else root.dataset.palette = palette;
+  try {
+    if (palette === "kiln") localStorage.removeItem(PALETTE_KEY);
+    else localStorage.setItem(PALETTE_KEY, palette);
+  } catch {
+    // Storage blocked: the choice lasts for this page only.
+  }
+  window.dispatchEvent(new Event("scout:palette"));
+}
+
+export function PaletteToggle() {
+  const [palette, setPalette] = useState<PaletteName>("kiln");
+  useEffect(() => {
+    const sync = () => {
+      const p = document.documentElement.dataset.palette;
+      setPalette(p === "signal" || p === "harbor" || p === "nova" ? p : "kiln");
+    };
+    sync();
+    window.addEventListener("scout:palette", sync);
+    return () => window.removeEventListener("scout:palette", sync);
+  }, []);
+  const options: [PaletteName, string][] = [
+    ["kiln", "Kiln"],
+    ["signal", "Signal"],
+    ["harbor", "Harbor"],
+    ["nova", "Nova"],
+  ];
+  return (
+    <div role="group" aria-label="Color palette" className="flex flex-wrap gap-1 rounded-2xl border border-line bg-soft p-1 text-sm">
+      {options.map(([value, label]) => (
+        <button
+          key={value}
+          type="button"
+          aria-pressed={palette === value}
+          onClick={() => applyPalette(value)}
+          className={`min-h-11 rounded-full px-3 transition-colors duration-150 ${palette === value ? "bg-surface font-medium text-ink shadow-[var(--shadow-raised)]" : "text-muted hover:text-ink"}`}
         >
           {label}
         </button>
