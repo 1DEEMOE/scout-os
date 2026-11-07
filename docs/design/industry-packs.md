@@ -6,7 +6,7 @@ Status: pack data is in the app. Schema change is proposed only (`packages/db/pr
 
 Selling should be near-turnkey. The operator picks a trade when creating the invite. The client confirms the business name, hours or service area, connects one channel (or skips), and approves the replies in one tap. That tap is the human approval. About 90% of the workspace is already the pack: service menu with example prices, pipeline names, intake fields, a morning list, and routines that only list or draft (tier 0–1).
 
-Packs are versioned data (`PACK_VERSION` in `packages/core/src/industries/packs.ts`) checked by `packages/core/src/industries/schema.ts` and `packages/core/test/industry-packs.test.ts`. They are not code forks.
+Packs are versioned data. Five bases in `packages/core/src/industries/packs.ts` and one overlay row per trade in `overlays.ts` are checked by `packages/core/src/industries/schema.ts` and `packages/core/test/industry-packs.test.ts`. They are not code forks. See `docs/design/round2.md` for the trade list.
 
 ## What a pack contains
 

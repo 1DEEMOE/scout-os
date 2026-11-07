@@ -6,6 +6,7 @@ import { recordAudit } from "../audit";
 import { MANAGERS, inOrg, requireRole, STAFF } from "../org/access";
 import { getPack } from "../industries/packs";
 import { readPackId } from "../industries/store";
+import { noteBookingRecovered } from "../pilot/metrics";
 import { ingestLead, type LeadRecord } from "./service";
 
 export interface BookedVisit {
@@ -74,9 +75,11 @@ export async function setVisitStatus(input: Actor & { visitId: string; status: B
     const visits = await load(tx, "speed:visits");
     const visit = visits.find((v) => v.id === input.visitId);
     if (!visit) throw new AppError("NOT_FOUND", "Visit not found");
+    const recovered = (visit.status === "no_show" || visit.status === "late_cancel") && input.status === "booked";
     visit.status = input.status;
     await save(tx, input.orgId, input.actorUserId, visits);
     await recordAudit(tx, { tenantId: input.orgId, actorType: "user", actorId: input.actorUserId, action: "speed.visit.status", target: `visit:${visit.id}`, tier: 1, outcome: "success", metadata: { status: input.status } });
+    if (recovered) await noteBookingRecovered(tx, input.orgId, input.actorUserId, visit.id);
   });
 }
 

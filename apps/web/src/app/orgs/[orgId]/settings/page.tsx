@@ -1,4 +1,4 @@
-import { getPauseState, listIntegrations, listInvitations, listMailboxes, listMembers } from "@wos/core";
+import { getPauseState, handoffReliability, listIntegrations, listInvitations, listMailboxes, listMembers } from "@wos/core";
 import { orgContext } from "@/server/org-context";
 import { ActionButton, ActionForm } from "../../../actions";
 import { Badge, Card, Empty, inputCls, PageTitle, quietButtonCls, When } from "../../../ui";
@@ -10,12 +10,13 @@ export default async function SettingsPage({ params, searchParams }: { params: P
   const { orgId } = await params;
   const q = await searchParams;
   const { userId, isManager, isOwner } = await orgContext(orgId);
-  const [members, integrations, mailboxes, pause, invitations] = await Promise.all([
+  const [members, integrations, mailboxes, pause, invitations, handoffs] = await Promise.all([
     listMembers({ actorUserId: userId, orgId }),
     listIntegrations({ actorUserId: userId, orgId }),
     listMailboxes({ actorUserId: userId, orgId }),
     getPauseState({ actorUserId: userId, orgId }),
     isManager ? listInvitations({ actorUserId: userId, orgId }) : Promise.resolve([]),
+    handoffReliability({ actorUserId: userId, orgId }),
   ]);
   const has = (p: string) => integrations.some((i) => i.provider === p && i.status === "active");
 
@@ -29,6 +30,17 @@ export default async function SettingsPage({ params, searchParams }: { params: P
           <a className="text-accent underline" href={`/orgs/${orgId}/goals`}>This week&apos;s goal</a>
           <a className="text-accent underline" href={`/orgs/${orgId}/library`}>Library</a>
         </div>
+      </Card>
+      <Card title="Calendar, CRM, and accounting">
+        <ul className="flex flex-col gap-3">
+          {handoffs.map((row) => (
+            <li key={row.lane} className="flex flex-col gap-1 rounded-2xl border border-line px-4 py-3">
+              <p className="font-medium">{row.label} · {row.state === "not_connected" ? "Not connected" : row.state === "ok" ? "Connected" : row.state === "failing" ? "Needs recovery" : "Recovered"}</p>
+              <p className="text-sm text-muted">{row.detail}</p>
+              {row.state === "failing" && <a className="text-sm text-accent underline" href={`/orgs/${orgId}/recovery`}>Open Recovery</a>}
+            </li>
+          ))}
+        </ul>
       </Card>
       {q.connected && <p role="status" className="text-sm text-accent">Connected {q.connected}.</p>}
       {q.error && <p role="alert" className="text-sm text-danger">{q.error}</p>}

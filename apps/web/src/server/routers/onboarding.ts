@@ -1,6 +1,7 @@
 import { z } from "zod";
 import {
   chooseIndustry,
+  closestPack,
   clearDemoData,
   finishOnboarding,
   finishQuickstart,
@@ -58,6 +59,14 @@ export const onboardingRouter = router({
   chooseIndustry: protectedProcedure
     .input(z.object({ orgId, industry: z.string().max(40) }))
     .mutation(({ ctx, input }) => chooseIndustry({ actorUserId: ctx.userId, ...input })),
+
+  closest: protectedProcedure
+    .input(z.object({ orgId, words: z.string().max(200) }))
+    .query(async ({ ctx, input }) => {
+      await getOnboardingState({ actorUserId: ctx.userId, orgId: input.orgId });
+      const hit = closestPack(input.words);
+      return { packId: hit.pack.id, label: hit.pack.label, matched: hit.matched, summary: hit.pack.summary };
+    }),
 
   saveBasics: protectedProcedure
     .input(z.object({

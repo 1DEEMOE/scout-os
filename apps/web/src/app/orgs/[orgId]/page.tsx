@@ -8,6 +8,7 @@ import {
   listFlaggedDocuments,
   listFlaggedPaymentChanges,
   listPendingFrontDeskBookings,
+  readPilotMetrics,
   speedSummary,
   listOpportunities,
   listTasks,
@@ -69,7 +70,7 @@ export default async function TodayPage({ params, searchParams }: { params: Prom
   const { userId, org } = await orgContext(orgId);
   const staff = org.role !== "viewer";
   const who = { actorUserId: userId, orgId };
-  const [review, tasks, overdue, latest, paymentFlags, frontDesk, flaggedDocs, aiCheck, samples, pace] = await Promise.all([
+  const [review, tasks, overdue, latest, paymentFlags, frontDesk, flaggedDocs, aiCheck, samples, pace, pilot] = await Promise.all([
     approvalsForReview(who),
     listTasks({ ...who, limit: 100 }),
     findOverdue(who),
@@ -80,6 +81,7 @@ export default async function TodayPage({ params, searchParams }: { params: Prom
     latestAiAnswersCheck(who),
     justSetUp ? sampleOpportunities(who, staff) : Promise.resolve([]),
     speedSummary(who).catch(() => ({ leads: 0, within60: 0, label: "respond-in-60s" as const })),
+    readPilotMetrics(who).catch(() => null),
   ]);
   const open = review.open;
   const delivery = await deliverNotifications({
@@ -146,6 +148,17 @@ export default async function TodayPage({ params, searchParams }: { params: Prom
             {staff && (
               <a href={`/orgs/${orgId}/routines`} className="inline-flex min-h-11 items-center rounded-full border border-line bg-surface px-5 font-medium transition-colors duration-150 hover:bg-soft">Set up the morning briefing</a>
             )}
+          </ScoutMessage>
+        )}
+
+        {pilot && (
+          <ScoutMessage id="pilot" title="Pilot numbers">
+            <ul className="flex flex-col gap-2 text-lg leading-relaxed">
+              <li>Setup time: {pilot.setupSeconds == null ? "not finished yet" : `${Math.max(1, Math.round(pilot.setupSeconds / 60))} min`}. The welcome steps are budgeted under 10 minutes.</li>
+              <li>First reply approved: {pilot.firstReplySeconds == null ? "not yet" : `${Math.max(1, Math.round(pilot.firstReplySeconds / 60))} min after setup started`}. Approving a template is the human OK. It does not send by itself.</li>
+              <li>Bookings recovered: {pilot.bookingsRecovered}. Counted when a missed or late-cancelled visit is booked again.</li>
+              <li>Hours saved: about {pilot.hoursSavedMinutes} minutes. That is an estimate of 6 minutes for each morning briefing that ran ({pilot.briefingRuns}), not a timesheet.</li>
+            </ul>
           </ScoutMessage>
         )}
 

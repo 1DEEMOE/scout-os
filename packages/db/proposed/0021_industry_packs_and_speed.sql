@@ -13,7 +13,14 @@ ALTER TABLE organizations ADD CONSTRAINT organizations_industry_check CHECK (
   industry IS NULL OR industry IN (
     'roofing', 'general', 'landscaping', 'plumbing', 'construction', 'hvac', 'electrical',
     'pest_control', 'tire_shop', 'auto_repair', 'auto_glass', 'moving', 'duct_cleaning',
-    'tree_service', 'nail_salon', 'hair_salon', 'esthetics', 'lash_brow'
+    'tree_service', 'nail_salon', 'hair_salon', 'esthetics', 'lash_brow',
+    'painting', 'house_cleaning', 'garage_door', 'locksmith', 'flooring', 'handyman',
+    'auto_detail', 'body_shop', 'yoga_studio', 'personal_training', 'wellness_studio',
+    'dog_grooming', 'pet_boarding', 'pet_sitting', 'restaurant', 'cafe', 'catering', 'bakery',
+    'retail_shop', 'ecommerce', 'bookkeeping_firm', 'consulting', 'real_estate', 'law_office',
+    'tutoring', 'childcare', 'music_lessons', 'event_planner', 'photographer', 'venue',
+    'startup_saas', 'startup_agency', 'startup_dtc',
+    'barber', 'med_spa', 'dental', 'junk_removal', 'pressure_washing', 'veterinary', 'tax_prep', 'towing', 'counseling'
   )
 );
 COMMENT ON COLUMN organizations.industry IS 'Industry pack id. NULL until setup. See packages/core/src/industries/packs.ts.';

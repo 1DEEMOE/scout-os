@@ -1,4 +1,4 @@
-import { getOnboardingState } from "@wos/core";
+import { getOnboardingState, listPacks } from "@wos/core";
 import { redirect } from "next/navigation";
 import { orgContext } from "@/server/org-context";
 import { PageTitle } from "../../../ui";
@@ -29,7 +29,7 @@ export default async function SetupPage({
       {!isManager ? (
         <p className="text-sm text-muted">Ask an owner or admin to finish setup. You can still browse the checklist on the overview.</p>
       ) : (
-        <SetupWizard orgId={orgId} initial={state} />
+        <SetupWizard orgId={orgId} initial={state} packs={listPacks().map((p) => ({ id: p.id, label: p.label, group: p.group, summary: p.summary }))} />
       )}
     </div>
   );

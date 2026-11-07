@@ -52,6 +52,12 @@ export function Welcome(props: {
   const [timezone, setTimezone] = useState("America/New_York");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [query, setQuery] = useState("");
+  const [custom, setCustom] = useState("");
+  const [hint, setHint] = useState<string | null>(null);
+  const groups = [...new Set(props.packs.map((p) => p.group))];
+  const q = query.trim().toLowerCase();
+  const visible = props.packs.filter((p) => !q || `${p.label} ${p.group} ${p.summary}`.toLowerCase().includes(q));
   useEffect(() => {
     const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
     if (tz) setTimezone(tz);
@@ -114,9 +120,13 @@ export function Welcome(props: {
           </label>
           <fieldset className="flex flex-col gap-6">
             <legend className="text-base font-medium">Industry</legend>
-            <p className="text-small text-muted">Already chosen for this workspace. Change it only if the operator picked the wrong trade. Prices in the pack are examples.</p>
-            {["Home services", "Shops", "Beauty & personal care", "Other"].map((group) => {
-              const items = props.packs.filter((p) => p.group === group);
+            <p className="text-small text-muted">Already chosen for this workspace. Change it only if the operator picked the wrong trade. Prices in the pack are examples. Setup stays on this page, about ten minutes.</p>
+            <label className={label}>
+              Search industries
+              <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Plumbing, yoga, cafe…" className={inputCls} />
+            </label>
+            {groups.map((group) => {
+              const items = visible.filter((p) => p.group === group);
               if (!items.length) return null;
               return (
                 <div key={group} className="flex flex-col gap-3">
@@ -133,6 +143,25 @@ export function Welcome(props: {
                 </div>
               );
             })}
+            {visible.length === 0 && <p className="text-small text-muted">No industry matches that search.</p>}
+            <div className="flex flex-col gap-3 rounded-2xl border border-line bg-surface px-5 py-4">
+              <h2 className="text-sm font-semibold text-muted">Other / custom</h2>
+              <p className="text-small text-muted">Describe the business in a few words. Scout starts from the closest pack. You can change the services later. Nothing is sent.</p>
+              <input value={custom} onChange={(e) => setCustom(e.target.value)} maxLength={200} placeholder="Mobile dog wash" className={inputCls} />
+              <button
+                type="button"
+                disabled={busy || custom.trim().length < 2}
+                className={quietButtonCls}
+                onClick={() => void run(async () => {
+                  const hit = await trpc.onboarding.closest.query({ orgId: props.orgId, words: custom });
+                  setIndustry(hit.packId);
+                  setHint(`Starting from ${hit.label}. Example prices are not a quote.`);
+                }, () => undefined)}
+              >
+                Use the closest pack
+              </button>
+              {hint && <p role="status" className="text-small">{hint}</p>}
+            </div>
           </fieldset>
           {selected?.weather && (
             <label className={label}>

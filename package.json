@@ -11,7 +11,7 @@
     "lint": "eslint .",
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm --filter @wos/db migrate:test && vitest run",
-    "test:isolation": "pnpm --filter @wos/db migrate:test && vitest run packages/db/test/isolation.test.ts packages/db/test/proposed-0021-isolation.test.ts packages/db/test/proposed-0022-isolation.test.ts --reporter=verbose",
+    "test:isolation": "pnpm --filter @wos/db migrate:test && vitest run packages/db/test/isolation.test.ts packages/db/test/proposed-0021-isolation.test.ts packages/db/test/proposed-0022-isolation.test.ts packages/db/test/proposed-0023-isolation.test.ts --reporter=verbose",
     "build": "pnpm --filter @wos/web build",
     "test:e2e": "pnpm --filter @wos/web test:e2e"
   },
