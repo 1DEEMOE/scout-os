@@ -10,6 +10,7 @@ const env = {
   DATABASE_URL: db,
   BETTER_AUTH_SECRET: "e2e-secret-e2e-secret-e2e-secret-000",
   BETTER_AUTH_URL: `http://localhost:${port}`,
+  APP_ORIGIN: `http://localhost:${port}`,
   WOS_MOCK_MODE: "1",
   WOS_SECRETS_KEY: Buffer.alloc(32, 7).toString("base64"),
   ANTHROPIC_API_KEY: "",

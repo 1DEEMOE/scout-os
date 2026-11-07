@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { withTenant } from "@wos/db";
 import { requireFeature } from "../billing/plans";
-import { ToolError, type ToolDefinition, type ToolRegistry } from "../engine/tools";
+import { objectResult, ToolError, type ToolDefinition, type ToolRegistry } from "../engine/tools";
 import { AppError } from "../errors";
 import { runScoutScan } from "./service";
 
@@ -15,6 +15,8 @@ export function scoutTools(): ToolDefinition[] {
     name: "scout.scan",
     description: "Match your prospects against recent storm reports in your reviewed service area and score them. Internal only; contacts nobody.",
     tier: 1,
+    output: objectResult,
+    rate: { limit: 12, windowMs: 60_000 },
     args: z.object({}).strict(),
     summarize: () => "Scan prospects against recent storm reports",
     async execute(ctx) {

@@ -5,6 +5,9 @@ import { logger } from "../logger";
 import { withSpan } from "../tracing";
 import { actionDigest } from "./digest";
 import { getEngine } from "./runtime";
+import { scrubPii } from "../logger";
+import { beforeToolCall, checkToolOutput } from "./tool-guard";
+import { logOp } from "../events/correlation";
 import { ToolError, type Tier, type ToolContext } from "./tools";
 
 export interface PlanStep {
@@ -95,8 +98,10 @@ export async function executeStep(task: { id: string; tenantId: string; assigned
 
   let output: unknown;
   let reconciled = false;
+  const started = Date.now();
   try {
-    output = await withSpan("tool.execute", { tool: step.tool, "task.id": task.id }, async () => {
+    output = await withSpan("tool.execute", { tool: step.tool, "task.id": task.id, "agent.id": agentId }, async () => {
+      beforeToolCall(tool, ctx);
       if (claim.hadPriorAttempt && tool.reconcile) {
         const earlier = await tool.reconcile(ctx, step.args);
         if (earlier !== undefined) {
@@ -106,15 +111,18 @@ export async function executeStep(task: { id: string; tenantId: string; assigned
       }
       return tool.execute(ctx, step.args);
     });
+    output = checkToolOutput(tool, output);
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
+    const message = String(scrubPii(err instanceof Error ? err.message : String(err)) ?? "error");
     await withTenant(task.tenantId, async (tx) => {
       await tx.update(workflowExecutions).set({ status: "failed", error: message.slice(0, 2000), finishedAt: new Date() }).where(eq(workflowExecutions.id, claim.rowId));
       await recordAudit(tx, { tenantId: task.tenantId, actorType: "agent", actorId: agentId, action: `tool.${step.tool}`, target: `task:${task.id}`, tier: step.tier, outcome: "error", metadata: { step: step.index, error: message.slice(0, 500) } });
     });
     logger.warn({ tenantId: task.tenantId, taskId: task.id, tool: step.tool, err: message }, "tool failed");
+    logOp({ message: "tool failed", tenantId: task.tenantId, agentId, tool: step.tool, input: step.digest, outcome: "error", failure: message, durationMs: Date.now() - started, recovery: err instanceof ToolError && err.retryable ? "retry" : "stop" });
     throw err;
   }
+  logOp({ message: "tool finished", tenantId: task.tenantId, agentId, tool: step.tool, input: step.digest, outcome: "success", output: reconciled ? "reconciled" : "ok", durationMs: Date.now() - started });
 
   await withTenant(task.tenantId, async (tx) => {
     await tx.update(workflowExecutions).set({ status: "succeeded", output: output ?? null, finishedAt: new Date() }).where(eq(workflowExecutions.id, claim.rowId));

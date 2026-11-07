@@ -35,6 +35,7 @@ export function mockTools(ledger: MockLedger): ToolDefinition[] {
     args,
     mock: true,
     description: `MOCK ${name}`,
+    output: z.object({ id: z.string(), mock: z.literal(true) }).passthrough(),
     summarize,
     execute: async (ctx, a) => ledger.record(ctx.idempotencyKey, name, a),
     reconcile: async (ctx) => {

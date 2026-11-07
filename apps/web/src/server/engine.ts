@@ -13,6 +13,9 @@ import {
   ModelRouter,
   ToolRegistry,
   UnconfiguredProvider,
+  setIntegrationJournal,
+  auditJournal,
+  registerIntegrationHandlers,
   type ModelProvider,
 } from "@wos/core";
 import { registerProductTools } from "./tools";
@@ -61,6 +64,8 @@ export function ensureEngine(): void {
     status = "none";
   }
   configureEngine({ router: new ModelRouter(providers, defaultProvider, meteringHooks), tools, mailbox, crm, invoicing });
+  setIntegrationJournal(auditJournal());
+  registerIntegrationHandlers();
   logger.info({ model: defaultProvider, mockMode, tools: tools.list().map((t) => t.name) }, "engine configured");
   configured = true;
 }

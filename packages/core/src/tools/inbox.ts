@@ -1,9 +1,10 @@
 import { and, desc, eq } from "drizzle-orm";
 import { z } from "zod";
 import { CONVERSATION_CATEGORIES, conversations, messages, withTenant } from "@wos/db";
-import { ToolError, type ToolContext, type ToolDefinition, type ToolRegistry } from "../engine/tools";
+import { objectResult, ToolError, type ToolContext, type ToolDefinition, type ToolRegistry } from "../engine/tools";
 import { messageIdFor } from "../integrations/mail";
 import type { MailboxResolver } from "../inbox/mailbox";
+import { produceIntegration } from "../events/produce";
 import { checkEmailAllowed, recordOutreach } from "../scout/consent";
 
 const conversationId = z.uuid();
@@ -36,6 +37,8 @@ export function inboxTools(mailbox: MailboxResolver): ToolDefinition[] {
     name: "inbox.categorize",
     description: "Set the category and a one-paragraph summary on an email conversation.",
     tier: 1,
+    output: objectResult,
+    rate: { limit: 60, windowMs: 60_000 },
     args: z.object({ conversationId, category: z.enum(CONVERSATION_CATEGORIES), summary: z.string().trim().min(1).max(600) }),
     summarize: (a) => `Mark conversation as ${a.category}`,
     async execute(ctx, a) {
@@ -55,6 +58,7 @@ export function inboxTools(mailbox: MailboxResolver): ToolDefinition[] {
     name: "inbox.create_draft",
     description: "Write a reply as a draft in the mailbox (not sent). Recipients and subject come from the thread.",
     tier: 1,
+    output: objectResult,
     args: z.object({ conversationId, body: z.string().trim().min(1).max(20000) }),
     summarize: (a) => `Draft a reply (${a.body.length} characters)`,
     async execute(ctx, a) {
@@ -64,13 +68,18 @@ export function inboxTools(mailbox: MailboxResolver): ToolDefinition[] {
       const to = replyRecipients(lastInbound);
       if (!to.length) throw new ToolError("This conversation has no inbound message to reply to", false, "NO_RECIPIENT");
       const messageId = messageIdFor(ctx.idempotencyKey);
-      const { draftId } = await box.provider.createDraft({
+      const { draftId } = await produceIntegration({
+        tenantId: ctx.tenantId,
+        integration: "mail",
+        idempotencyKey: `mail-draft:${ctx.idempotencyKey}`,
+        effect: (fx) => fx.once(() => box.provider.createDraft({
         threadId: conv.externalThreadId,
         to,
         subject: replySubject(conv.subject),
         body: a.body,
         inReplyTo: lastInbound?.rfc822MessageId ?? undefined,
         messageId,
+      })),
       });
       await withTenant(ctx.tenantId, (tx) =>
         tx.update(conversations).set({ draftExternalId: draftId, draftMessageId: messageId, draftBody: a.body, updatedAt: new Date() }).where(eq(conversations.id, conv.id)),
@@ -84,6 +93,8 @@ export function inboxTools(mailbox: MailboxResolver): ToolDefinition[] {
     name: "inbox.send_draft",
     description: "Send the drafted reply in a conversation. The approval shows exactly what goes out.",
     tier: 2,
+    output: z.object({ externalId: z.string(), to: z.array(z.string()) }),
+    rate: { limit: 20, windowMs: 60_000 },
     args: z.object({ conversationId, to: z.array(z.email()).min(1).max(20), subject: z.string().max(500), body: z.string().max(20000) }),
     summarize: (a) => `Send email to ${a.to.join(", ")}: "${a.subject}"`,
     async execute(ctx, a) {
@@ -110,7 +121,12 @@ export function inboxTools(mailbox: MailboxResolver): ToolDefinition[] {
         return g;
       });
       if (!gate.allowed) throw new ToolError(gate.message, false, gate.reason === "suppressed" ? "SUPPRESSED" : "NO_PERMISSION");
-      const { externalId } = await box.provider.sendDraft(conv.draftExternalId);
+      const { externalId } = await produceIntegration({
+        tenantId: ctx.tenantId,
+        integration: "mail",
+        idempotencyKey: `mail-send:${ctx.idempotencyKey}`,
+        effect: (fx) => fx.once(() => box.provider.sendDraft(conv.draftExternalId!)),
+      });
       const sent = await recordSent(ctx, conv.id, externalId, a, box.identity.address, conv.draftMessageId);
       if (gate.opportunityIds.size) {
         await withTenant(ctx.tenantId, async (tx) => {

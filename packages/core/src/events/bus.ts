@@ -1,0 +1,242 @@
+import { scrubPii } from "../logger";
+import { BreakerOpenError, integrations, type CircuitBreaker } from "./breaker";
+import { logOp } from "./correlation";
+
+export function safeErrorText(err: unknown): string {
+  const raw = err instanceof Error ? err.message : String(err);
+  const scrubbed = scrubPii(raw);
+  return (typeof scrubbed === "string" ? scrubbed : "error").slice(0, 200);
+}
+
+/**
+ * Deterministic pipeline: detect → decide → act → verify → log.
+ * Handlers are code, not model output, and may only be tier 0 or 1.
+ * Sending email, SMS, or money is not a bus action.
+ */
+
+export interface BusEvent {
+  tenantId: string;
+  idempotencyKey: string;
+  type: string;
+  source: string;
+  integration?: string;
+  payload?: Record<string, string | number | boolean | null>;
+}
+
+export interface EffectContext {
+  signal: AbortSignal;
+  /** Runs fn at most once for this event key. A late or overlapping attempt does not call fn again. */
+  once<T>(fn: () => Promise<T>): Promise<T>;
+}
+
+export interface BusHandler {
+  type: string;
+  /** Refused unless this is 0 or 1. Email, chat sends, and payments are not bus work. */
+  maxTier: number;
+  decide(event: BusEvent): { act: boolean; reason: string };
+  act(event: BusEvent, ctx: EffectContext): Promise<Record<string, unknown>>;
+  verify?(event: BusEvent, result: Record<string, unknown>): boolean;
+}
+
+export interface JournalEntry {
+  tenantId: string;
+  key: string;
+  type: string;
+  source: string;
+  attempt: number;
+}
+
+export interface DeadLetter {
+  tenantId: string;
+  key: string;
+  type: string;
+  source: string;
+  integration?: string;
+  error: string;
+  attempts: number;
+}
+
+export interface EventJournal {
+  has(tenantId: string, key: string): Promise<boolean>;
+  put(entry: JournalEntry): Promise<"inserted" | "duplicate">;
+  dead(entry: DeadLetter): Promise<void>;
+}
+
+export class MemoryJournal implements EventJournal {
+  readonly done = new Set<string>();
+  readonly deadLetters: DeadLetter[] = [];
+
+  async has(tenantId: string, key: string): Promise<boolean> {
+    return this.done.has(`${tenantId}:${key}`);
+  }
+
+  async put(entry: JournalEntry): Promise<"inserted" | "duplicate"> {
+    const id = `${entry.tenantId}:${entry.key}`;
+    if (this.done.has(id)) return "duplicate";
+    this.done.add(id);
+    return "inserted";
+  }
+
+  async dead(entry: DeadLetter): Promise<void> {
+    this.deadLetters.push(entry);
+  }
+}
+
+export type EventStatus = "done" | "duplicate" | "skipped" | "dead" | "degraded" | "rejected";
+
+export interface EventResult {
+  status: EventStatus;
+  reason?: string;
+  attempt?: number;
+  result?: Record<string, unknown>;
+}
+
+const inflight = new Map<string, Promise<EventResult>>();
+
+/** Successful effects, shared by every runEvent in this process. A replay of an applied key does not run the effect again. */
+const appliedEffects = new Map<string, Promise<unknown>>();
+
+export function resetAppliedEffects(): void {
+  appliedEffects.clear();
+}
+
+export function effectWasApplied(tenantId: string, key: string): boolean {
+  return appliedEffects.has(`${tenantId}:${key}`);
+}
+
+export function backoffMs(attempt: number): number {
+  return Math.min(30_000, 50 * 2 ** (attempt - 1));
+}
+
+export async function runEvent(
+  event: BusEvent,
+  handler: BusHandler,
+  deps: {
+    journal: EventJournal;
+    maxAttempts?: number;
+    sleep?: (ms: number) => Promise<void>;
+    breaker?: CircuitBreaker;
+    timeoutMs?: number;
+  },
+): Promise<EventResult> {
+  const id = `${event.tenantId}:${event.idempotencyKey}`;
+  const existing = inflight.get(id);
+  if (existing) return existing;
+  const promise = runEventInner(event, handler, deps).finally(() => inflight.delete(id));
+  inflight.set(id, promise);
+  return promise;
+}
+
+async function runEventInner(
+  event: BusEvent,
+  handler: BusHandler,
+  deps: {
+    journal: EventJournal;
+    maxAttempts?: number;
+    sleep?: (ms: number) => Promise<void>;
+    breaker?: CircuitBreaker;
+    timeoutMs?: number;
+  },
+): Promise<EventResult> {
+  const started = Date.now();
+  if (handler.maxTier !== 0 && handler.maxTier !== 1) {
+    logOp({ message: "event rejected", tenantId: event.tenantId, tool: event.type, input: event.idempotencyKey, outcome: "denied", failure: "handler_tier", durationMs: Date.now() - started });
+    return { status: "rejected", reason: "handler_tier" };
+  }
+  if (handler.type !== event.type) return { status: "rejected", reason: "type_mismatch" };
+  if (await deps.journal.has(event.tenantId, event.idempotencyKey)) return { status: "duplicate" };
+
+  const decision = handler.decide(event);
+  if (!decision.act) {
+    await deps.journal.put({ tenantId: event.tenantId, key: event.idempotencyKey, type: event.type, source: event.source, attempt: 0 });
+    logOp({ message: "event skipped", tenantId: event.tenantId, tool: event.type, input: event.idempotencyKey, outcome: "success", output: decision.reason, durationMs: Date.now() - started });
+    return { status: "skipped", reason: decision.reason };
+  }
+
+  const maxAttempts = deps.maxAttempts ?? 3;
+  const sleep = deps.sleep ?? ((ms) => new Promise((r) => setTimeout(r, ms)));
+  const breaker = deps.breaker ?? integrations;
+  let lastError = "unknown";
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      const act = () => withTimeout((signal) => handler.act(event, effectContext(event.tenantId, event.idempotencyKey, signal)), deps.timeoutMs ?? 8_000);
+      const result = event.integration ? await breaker.run(event.integration, act) : await act();
+      if (handler.verify && !handler.verify(event, result)) throw new Error("verify_failed");
+      const wrote = await deps.journal.put({ tenantId: event.tenantId, key: event.idempotencyKey, type: event.type, source: event.source, attempt });
+      if (wrote === "duplicate") return { status: "duplicate" };
+      logOp({ message: "event done", tenantId: event.tenantId, tool: event.type, input: event.idempotencyKey, outcome: "success", output: "verified", durationMs: Date.now() - started, recovery: attempt > 1 ? `attempt ${attempt}` : undefined });
+      return { status: "done", attempt, result };
+    } catch (err) {
+      lastError = safeErrorText(err);
+      if (err instanceof BreakerOpenError) {
+        await deps.journal.dead({ tenantId: event.tenantId, key: event.idempotencyKey, type: event.type, source: event.source, integration: event.integration, error: "breaker_open", attempts: attempt });
+        logOp({ message: "event degraded", tenantId: event.tenantId, tool: event.type, input: event.idempotencyKey, outcome: "degraded", failure: "breaker_open", durationMs: Date.now() - started, recovery: "dead_letter" });
+        return { status: "degraded", reason: "breaker_open", attempt };
+      }
+      // A timeout means the effect may still be finishing. Do not start another attempt.
+      if (isTimeout(err)) {
+        await deps.journal.dead({ tenantId: event.tenantId, key: event.idempotencyKey, type: event.type, source: event.source, integration: event.integration, error: "timeout", attempts: attempt });
+        logOp({ message: "event timed out", tenantId: event.tenantId, tool: event.type, input: event.idempotencyKey, outcome: "error", failure: "timeout", durationMs: Date.now() - started, recovery: "dead_letter" });
+        return { status: "dead", reason: "timeout", attempt };
+      }
+      if (attempt < maxAttempts) await sleep(backoffMs(attempt));
+    }
+  }
+  await deps.journal.dead({ tenantId: event.tenantId, key: event.idempotencyKey, type: event.type, source: event.source, integration: event.integration, error: lastError, attempts: maxAttempts });
+  logOp({ message: "event dead", tenantId: event.tenantId, tool: event.type, input: event.idempotencyKey, outcome: "error", failure: lastError, durationMs: Date.now() - started, recovery: "dead_letter" });
+  return { status: "dead", reason: lastError, attempt: maxAttempts };
+}
+
+function effectContext(tenantId: string, key: string, signal: AbortSignal): EffectContext {
+  const id = `${tenantId}:${key}`;
+  return {
+    signal,
+    once: (fn) => {
+      const prior = appliedEffects.get(id);
+      if (prior) return prior as Promise<Awaited<ReturnType<typeof fn>>>;
+      if (signal.aborted) return Promise.reject(abortError());
+      const pending = Promise.resolve()
+        .then(() => {
+          if (signal.aborted) throw abortError();
+          return fn();
+        })
+        .then((value) => {
+          appliedEffects.set(id, Promise.resolve(value));
+          return value;
+        });
+      return pending;
+    },
+  };
+}
+
+function abortError(): Error {
+  const err = new Error("aborted");
+  err.name = "AbortError";
+  return err;
+}
+
+function isTimeout(err: unknown): boolean {
+  if (err instanceof Error && (err.name === "AbortError" || err.message === "timeout" || err.message === "aborted")) return true;
+  return false;
+}
+
+function withTimeout<T>(fn: (signal: AbortSignal) => Promise<T>, ms: number): Promise<T> {
+  const controller = new AbortController();
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      controller.abort();
+      reject(new Error("timeout"));
+    }, ms);
+    fn(controller.signal).then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (err) => {
+        clearTimeout(timer);
+        controller.abort();
+        reject(err);
+      },
+    );
+  });
+}

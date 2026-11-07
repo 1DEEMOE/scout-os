@@ -1,4 +1,5 @@
 import { getAuthPool } from "@wos/db";
+import { integrations } from "@wos/core";
 
 export const dynamic = "force-dynamic";
 
@@ -10,7 +11,8 @@ export const dynamic = "force-dynamic";
 export async function GET() {
   try {
     await getAuthPool().query("SELECT 1");
-    return Response.json({ ok: true });
+    const breakers = integrations.snapshot();
+    return Response.json({ ok: true, degraded: breakers.filter((b) => b.state === "open").map((b) => b.name) });
   } catch {
     return Response.json({ ok: false }, { status: 503 });
   }

@@ -3,7 +3,7 @@ import { z } from "zod";
 import { chatDelegations, chatMessages, chatThreads, isUuid, tasks, users, type Tx } from "@wos/db";
 import { recordAudit } from "../audit";
 import { AppError } from "../errors";
-import { logger } from "../logger";
+import { logger, scrubPii } from "../logger";
 import { ANY_ROLE, auditDenied, inOrg, requireRole, STAFF } from "../org/access";
 import { agentsPaused } from "../org/pause";
 import { loadAgent } from "../engine/agents";
@@ -12,6 +12,15 @@ import { insertTask } from "../engine/tasks";
 import { externalData, SAFETY_PREAMBLE } from "../engine/orchestrator";
 import { DELEGATE_TOOL, delegateArgs, LEAD_BOT_SYSTEM, MAX_DELEGATION_DEPTH, MAX_DELEGATIONS_PER_TURN, type DelegableKind } from "./lead";
 import { workspaceSnapshot } from "./read";
+
+/** A model tool call that names another tenant is refused before any read. */
+export function classifyToolCall(orgId: string, call: { name: string; input: unknown }): "read" | "delegate" | "foreign_tenant" | "unknown" {
+  const requested = call.input && typeof call.input === "object" && "tenantId" in call.input ? String((call.input as { tenantId?: unknown }).tenantId ?? "") : "";
+  if (requested && requested !== orgId) return "foreign_tenant";
+  if (call.name === "read.workspace") return "read";
+  if (call.name === "delegate") return "delegate";
+  return "unknown";
+}
 
 export type ChatThreadRow = typeof chatThreads.$inferSelect;
 export type ChatMessageRow = typeof chatMessages.$inferSelect;
@@ -159,7 +168,7 @@ export async function sendMessage(input: { actorUserId: string; orgId: string; t
       maxTokens: 1024,
     });
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
+    const message = String(scrubPii(err instanceof Error ? err.message : String(err)) ?? "error");
     logger.warn({ tenantId: input.orgId, threadId: input.threadId, err: message }, "lead bot model call failed");
     const replyId = await inOrg(input.orgId, async (tx) => {
       const [r] = await tx.insert(chatMessages).values({ tenantId: input.orgId, threadId: input.threadId, authorType: "lead", content: `I couldn't reach the AI model, so nothing was handed off. (${message.slice(0, 300)})` }).returning({ id: chatMessages.id });
@@ -177,6 +186,10 @@ export async function sendMessage(input: { actorUserId: string; orgId: string; t
     const refused: { name: string; reason: string }[] = [];
     let snapshot = "";
     for (const call of res.toolCalls) {
+      if (classifyToolCall(input.orgId, call) === "foreign_tenant") {
+        refused.push({ name: call.name, reason: "foreign_tenant" });
+        continue;
+      }
       if (call.name === "read.workspace") {
         snapshot = await workspaceSnapshot(tx, input.orgId);
         continue;

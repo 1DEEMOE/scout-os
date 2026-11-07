@@ -2,7 +2,8 @@ import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { invoices, withTenant } from "@wos/db";
 import { applyPaymentDestinationChange, PAYMENT_DETAIL_MIN_TIER } from "../finance/payment-guard";
-import { ToolError, type ToolContext, type ToolDefinition, type ToolRegistry } from "../engine/tools";
+import { produceIntegration } from "../events/produce";
+import { objectResult, ToolError, type ToolContext, type ToolDefinition, type ToolRegistry } from "../engine/tools";
 import type { ProviderInvoice } from "../integrations/invoicing";
 import type { InvoicingResolver } from "../finance/resolver";
 
@@ -51,6 +52,8 @@ export function financeTools(resolve: InvoicingResolver): ToolDefinition[] {
     name: "finance.send_invoice_reminder",
     description: "Email the customer a reminder for an open invoice (the invoicing system sends it).",
     tier: 2,
+    output: objectResult,
+    rate: { limit: 20, windowMs: 60_000 },
     args: z.object({ invoiceId: z.uuid() }),
     summarize: (a) => `Send a payment reminder for invoice ${a.invoiceId.slice(0, 8)}`,
     async execute(ctx, a) {
@@ -67,6 +70,7 @@ export function financeTools(resolve: InvoicingResolver): ToolDefinition[] {
     name: "finance.create_invoice",
     description: "Create and send an invoice. Amounts are integer cents. Always needs a human.",
     tier: 3,
+    output: z.object({ invoiceId: z.string(), externalId: z.string(), amountDueCents: z.number() }).strict(),
     args: z.object({
       customerEmail: z.email().transform((e) => e.toLowerCase()),
       customerName: z.string().max(200).optional(),
@@ -76,7 +80,12 @@ export function financeTools(resolve: InvoicingResolver): ToolDefinition[] {
     summarize: (a) => `Invoice ${a.customerEmail} for ${money(a.lines.reduce((s, l) => s + l.amountCents, 0))} (${a.lines.length} line${a.lines.length > 1 ? "s" : ""}, due in ${a.daysUntilDue} days)`,
     async execute(ctx, a) {
       const p = await provider(resolve, ctx);
-      const created = await p.createInvoice({ ...a, currency: "usd" }, ctx.idempotencyKey);
+      const created = await produceIntegration({
+        tenantId: ctx.tenantId,
+        integration: "payments",
+        idempotencyKey: `pay:${ctx.idempotencyKey}`,
+        effect: (fx) => fx.once(() => p.createInvoice({ ...a, currency: "usd" }, ctx.idempotencyKey)),
+      });
       const invoiceId = await storeInvoice(ctx.tenantId, p.name, created);
       return { invoiceId, externalId: created.externalId, amountDueCents: created.amountDueCents };
     },
@@ -86,6 +95,7 @@ export function financeTools(resolve: InvoicingResolver): ToolDefinition[] {
     name: "finance.void_invoice",
     description: "Void an open invoice so it can no longer be paid.",
     tier: 3,
+    output: objectResult,
     args: z.object({ invoiceId: z.uuid(), reason: z.string().trim().min(1).max(500) }),
     summarize: (a) => `Void invoice ${a.invoiceId.slice(0, 8)}: ${a.reason}`,
     async execute(ctx, a) {
@@ -110,6 +120,7 @@ export function financeTools(resolve: InvoicingResolver): ToolDefinition[] {
     description:
       "Change a customer, vendor, or payee bank/remittance destination. Always needs tier-3 approval and a call-back on the phone already on file.",
     tier: PAYMENT_DETAIL_MIN_TIER,
+    output: z.object({ destinationId: z.string(), accountLast4: z.string().max(4) }).strict(),
     args: z.object({
       kind: z.enum(["customer", "vendor", "payee"]),
       label: z.string().trim().min(1).max(200),
@@ -152,6 +163,13 @@ export function financeTools(resolve: InvoicingResolver): ToolDefinition[] {
     description:
       "Request a payment that also sets new bank/remittance details. Always needs tier-3 approval and a call-back on the phone already on file.",
     tier: PAYMENT_DETAIL_MIN_TIER,
+    output: z.object({
+      destinationId: z.string(),
+      accountLast4: z.string().max(4),
+      amountCents: z.number(),
+      memo: z.string().nullable(),
+      payout: z.literal("recorded_destination_only"),
+    }).strict(),
     args: z.object({
       kind: z.enum(["customer", "vendor", "payee"]),
       label: z.string().trim().min(1).max(200),
