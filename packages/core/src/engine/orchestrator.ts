@@ -15,6 +15,8 @@ import { enqueueTaskRun } from "./queue";
 import { getEngine, now } from "./runtime";
 import { TERMINAL, transition, TransitionConflictError, type TaskRow } from "./tasks";
 import { ToolError } from "./tools";
+import { approvalExpiryMs } from "../kimi/cards";
+import { taskHeld } from "../kimi/round1";
 
 export const MAX_PLAN_STEPS = 10;
 export const MAX_ATTEMPTS = 3;
@@ -55,6 +57,10 @@ export async function runTask(tenantId: string, taskId: string, opts: { retry?: 
       // Kill switch: take no step while the org's agents are paused. Resuming re-queues the task.
       if (await withTenant(tenantId, (tx) => agentsPaused(tx, tenantId))) {
         logger.info({ tenantId, taskId, state: task.state }, "task held: agents paused");
+        return task.state;
+      }
+      if (await taskHeld(tenantId, taskId)) {
+        logger.info({ tenantId, taskId, state: task.state }, "task held: owner paused");
         return task.state;
       }
       try {
@@ -266,7 +272,8 @@ async function checkPolicy(task: TaskRow): Promise<boolean> {
 
 async function requestApprovals(task: TaskRow): Promise<boolean> {
   const p = task.plan as Plan;
-  const ttl = getEngine().approvalTtlMs ?? 24 * 60 * 60 * 1000;
+  const personTtl = getEngine().approvalTtlMs ?? 24 * 60 * 60 * 1000;
+  const ttl = approvalExpiryMs(task.requestedBy, 45, personTtl);
   return withTenant(task.tenantId, async (tx) => {
     const needed = p.steps.filter((s) => s.decision === "needs_approval");
     if (!needed.length) {

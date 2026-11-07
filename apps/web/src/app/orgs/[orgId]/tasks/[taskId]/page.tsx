@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { AppError, finishedWithoutActions, getEngine, getTask, taskLabel, TERMINAL, verifyJobPhotoChain, type Plan } from "@wos/core";
+import { AppError, finishedWithoutActions, getEngine, getTask, taskLabel, TERMINAL, verifyJobPhotoChain, watchTask, type Plan } from "@wos/core";
 import { ActionButton } from "../../../../actions";
 import { orgContext } from "@/server/org-context";
 import { Badge, Card, Empty, MockBadge, PageTitle, StateBadge, TaskStatus, TierBadge, When } from "../../../../ui";
@@ -21,6 +21,7 @@ export default async function TaskPage({ params }: { params: Promise<{ orgId: st
   const tools = getEngine().tools;
   const err = task.error as { message: string; code?: string } | null;
   const photoVerify = await verifyJobPhotoChain({ actorUserId: userId, orgId, jobId: taskId });
+  const watch = await watchTask({ actorUserId: userId, orgId, taskId }).catch(() => null);
 
   return (
     <div className="flex flex-col gap-6">
@@ -35,6 +36,17 @@ export default async function TaskPage({ params }: { params: Promise<{ orgId: st
       >
         {taskLabel(task)}
       </PageTitle>
+      {watch && (
+        <Card>
+          <div className="flex flex-col gap-3">
+            <h2 className="text-lg font-semibold">Watch this job</h2>
+            <p className="text-base text-muted">{watch.paused ? "Paused. Scout will not take the next step until you hand it back." : "Scout stops at an approval card. Taking over the draft does not send it."}</p>
+            {watch.draft && <p className="rounded-2xl border border-line px-4 py-3 text-base">{watch.draft}</p>}
+            {isManager && !watch.paused && <ActionButton path="kimi.pause" input={{ orgId, taskId }} label="Pause" />}
+            {isManager && watch.paused && <ActionButton path="kimi.handBack" input={{ orgId, taskId }} label="Hand back" />}
+          </div>
+        </Card>
+      )}
       {task.title && (
         <details className="-mt-3 text-sm">
           <summary className="cursor-pointer text-muted">Instruction given to the agent</summary>

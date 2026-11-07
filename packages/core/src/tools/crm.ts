@@ -39,6 +39,10 @@ export function crmTools(resolve: CrmResolver): ToolDefinition[] {
         tenantId: ctx.tenantId,
         integration: "crm",
         idempotencyKey: `crm-contact:${ctx.idempotencyKey}`,
+        retry: async () => {
+          const again = await crm.upsertContact(a);
+          return { externalId: again.externalId, mock: true };
+        },
         effect: (fx) => fx.once(() => crm.upsertContact(a)),
       });
       const contactId = await withTenant(ctx.tenantId, async (tx) => {

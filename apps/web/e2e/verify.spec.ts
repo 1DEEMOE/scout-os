@@ -114,7 +114,7 @@ test("member creates a task; second owner rejects a pending tier-2 request", asy
   await signIn(page, "owner2@e2e.test");
   await page.goto(`/orgs/${seed.orgId}/approvals`);
   const card = page.locator("section", { hasText: "Email bank@example.test: New account" }).last();
-  await card.getByRole("button", { name: "Decline" }).click();
+  await card.getByRole("button", { name: "Not now" }).click();
   await expect(page.locator("section", { hasText: "Recently decided" })).toContainText("Email bank@example.test: New account");
   await page.goto(`/orgs/${seed.orgId}/audit`);
   await expect(page.getByText(/reject/i).first()).toBeVisible();

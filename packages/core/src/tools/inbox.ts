@@ -125,6 +125,10 @@ export function inboxTools(mailbox: MailboxResolver): ToolDefinition[] {
         tenantId: ctx.tenantId,
         integration: "mail",
         idempotencyKey: `mail-send:${ctx.idempotencyKey}`,
+        retry: async () => {
+          const again = await box.provider.sendDraft(conv.draftExternalId!);
+          return { externalId: again.externalId, mock: true };
+        },
         effect: (fx) => fx.once(() => box.provider.sendDraft(conv.draftExternalId!)),
       });
       const sent = await recordSent(ctx, conv.id, externalId, a, box.identity.address, conv.draftMessageId);

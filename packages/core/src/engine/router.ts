@@ -73,6 +73,10 @@ export class ModelRouter {
       tenantId: routed.tenantId,
       integration: "model",
       idempotencyKey: integrationKey(`model:${routed.purpose}`),
+      retry: async () => {
+        const again = await provider.complete(routed);
+        return { provider: again.provider, mock: provider.mock };
+      },
       effect: (ctx) => {
         if (ctx.signal.aborted) return Promise.reject(new Error("aborted"));
         return ctx.once(() => provider.complete(routed));

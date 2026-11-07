@@ -1,6 +1,7 @@
 import { fetchNwsAlerts } from "../speed/nws";
 import { registerBusHandler } from "./recovery";
 import { effectWasApplied } from "./bus";
+import { runMockRetry } from "./retry";
 
 /** Event types produceIntegration writes. Replay must register each of these. */
 export const PRODUCER_EVENT_TYPES = ["integration.nws", "integration.mail", "integration.crm", "integration.payments", "integration.model"] as const;
@@ -29,7 +30,12 @@ export function registerIntegrationHandlers(): void {
       type,
       maxTier: 0,
       decide: () => ({ act: true, reason: "do not repeat the external action" }),
-      act: async (event) => ({ ok: true, duplicate: effectWasApplied(event.tenantId, event.idempotencyKey) }),
+      act: async (event) => {
+        if (effectWasApplied(event.tenantId, event.idempotencyKey)) return { ok: true, duplicate: true };
+        const retried = await runMockRetry(event.tenantId, event.idempotencyKey);
+        if (retried) return retried;
+        return { ok: true, skipped: true };
+      },
     });
   }
 }
