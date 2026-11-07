@@ -19,7 +19,8 @@ ALTER TABLE organizations ADD CONSTRAINT organizations_industry_check CHECK (
     'dog_grooming', 'pet_boarding', 'pet_sitting', 'restaurant', 'cafe', 'catering', 'bakery',
     'retail_shop', 'ecommerce', 'bookkeeping_firm', 'consulting', 'real_estate', 'law_office',
     'tutoring', 'childcare', 'music_lessons', 'event_planner', 'photographer', 'venue',
-    'startup_saas', 'startup_agency', 'startup_dtc'
+    'startup_saas', 'startup_agency', 'startup_dtc',
+    'barber', 'med_spa', 'dental', 'junk_removal', 'pressure_washing', 'veterinary', 'tax_prep', 'towing', 'counseling'
   )
 );
 COMMENT ON COLUMN organizations.industry IS 'Industry pack id. NULL until setup. See packages/core/src/industries/packs.ts.';

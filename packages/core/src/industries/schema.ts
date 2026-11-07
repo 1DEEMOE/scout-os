@@ -3,6 +3,7 @@ import { z } from "zod";
 /** The shape every industry pack file must satisfy. PACK_VERSION lives with the data. */
 export const packSchema = z.object({
   version: z.literal(1),
+  base: z.enum(["urgent_trade", "recurring_service", "auto", "booking_beauty", "quote_velocity", "general"]),
   id: z.string().regex(/^[a-z0-9_]+$/),
   label: z.string().min(2).max(60),
   group: z.enum([
@@ -31,13 +32,13 @@ export const packSchema = z.object({
     durationMinutes: z.number().int().positive().optional(),
     priceCents: z.number().int().positive(),
     priceIsExample: z.literal(true),
-  })).min(1),
+  })).min(5),
   templates: z.array(z.object({
     purpose: z.enum(["first_response", "rebook", "no_show", "late_cancel", "review"]),
     channel: z.enum(["email", "sms"]),
     name: z.string().min(1),
     body: z.string().min(8).max(500),
-  })).min(1),
+  })).length(3),
   pipeline: z.array(z.string().min(2)).min(3),
   brief: z.array(z.string().min(2)).min(3),
   routines: z.array(z.object({
@@ -45,7 +46,7 @@ export const packSchema = z.object({
     title: z.string().min(2),
     tier: z.union([z.literal(0), z.literal(1)]),
     does: z.string().min(8),
-  })).min(2),
+  })).length(3),
   /** Suggested connections only. Nothing is connected or billed from the pack. */
   integrations: z.array(z.object({
     kind: z.enum(["calendar", "crm", "accounting"]),
@@ -70,4 +71,5 @@ export const REQUIRED_PACKS = [
   "painting", "house_cleaning", "dog_grooming", "yoga_studio", "restaurant",
   "retail_shop", "ecommerce", "consulting", "tutoring", "childcare",
   "event_planner", "startup_saas", "startup_agency", "startup_dtc",
+  "barber", "med_spa", "dental", "junk_removal", "pressure_washing", "veterinary", "tax_prep", "towing", "counseling",
 ] as const;

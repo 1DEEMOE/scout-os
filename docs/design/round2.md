@@ -8,9 +8,9 @@ A signed-in page should fail in a way the owner can leave, not as a blank crash.
 
 ## Packs
 
-`packages/core/src/industries/schema.ts` is the one shape: job stages, starter services, approval-gated reply templates, tier 0–1 routines, morning-brief metrics, and suggested calendar, CRM, and accounting connections. `catalog.ts` adds the broader trades: home and field, auto, beauty, health and wellness with no health records, pets, food, retail, professional services, education and childcare, events, and a pre-seed startup pack (SaaS, agency, DTC). Search filters that list. Other / custom calls `closestPack` and starts from that pack. The owner can change services later.
+Five shared bases supply the shape, and each trade is an overlay: urgent-trade (plumbing, HVAC, electrical, roofing), recurring-service (cleaning, landscaping, pest), auto (repair, plus tire, glass, and detailing), booking-beauty (salon, barbershop waitlist, nail and lash, med spa), and quote-velocity (movers, junk removal with a photo step). Dental is a thin booking overlay: a recall list uses only a name and a last appointment date. Each base has job stages, five starter services, three reply templates that stay unsent until a person approves them, three tier 0–1 routines, a morning metric, and suggested calendar, CRM, and accounting connections. Nail, lash, and med spa deposit wording is a request you approve. Nothing is charged automatically. The next wave is photography, pressure washing, veterinary front desk, tax prep, and real estate. Lighter packs cover restaurants and food, retail, towing, startups, and counseling, plus Other / custom.
 
-Health, childcare, and pet packs do not store diagnoses, prescriptions, or medical records.
+Health, childcare, pet, dental, veterinary, counseling, and med spa packs do not store diagnoses, prescriptions, charts, or session notes.
 
 ## Pilot numbers
 
