@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { and, desc, eq, gte, sql } from "drizzle-orm";
 import { agents, approvalRequests, conversations, invoices, isUuid, memoryRecords, messages, organizations, tasks, workflowExecutions, withTenant, type Tx } from "@wos/db";
 import { recordAudit } from "../audit";
@@ -11,10 +11,11 @@ import { actionDigest } from "../engine/digest";
 import { loadAgent } from "../engine/agents";
 import { enqueueTaskRun } from "../engine/queue";
 import { getEngine } from "../engine/runtime";
-import { createTask } from "../engine/tasks";
+import { createTask, transition } from "../engine/tasks";
 import { delegationOf, type PlanStep } from "../engine/executor";
 import { forgetMemory, rememberFact } from "../memory/service";
 import { createRoutine } from "../routines/service";
+import { messageIdFor } from "../integrations/mail";
 import { requestSendDraft } from "../inbox/service";
 import { ingestLead } from "../speed/service";
 import { replyRecipients, replySubject } from "../tools/inbox";
@@ -160,7 +161,13 @@ export async function handBack(input: { actorUserId: string; orgId: string; task
     const nextInput = draft ? { ...inputJson, ownerDraft: draft } : inputJson;
     const nextIntent = draft ? bindIntent(task.intent, draft) : task.intent;
     const plan = draft && task.assignedAgentId ? await rebindPlan(tx, input.orgId, task, draft) : null;
-    await tx.update(tasks).set({ input: nextInput, intent: nextIntent, ...(plan ? { plan } : {}), updatedAt: new Date() }).where(eq(tasks.id, task.id));
+    if (plan && task.state === "ASSIGNED") {
+      await tx.update(tasks).set({ input: nextInput, intent: nextIntent, updatedAt: new Date() }).where(eq(tasks.id, task.id));
+      const [fresh] = await tx.select().from(tasks).where(eq(tasks.id, task.id));
+      await transition(tx, fresh!, "WAITING_FOR_APPROVAL", { plan });
+    } else {
+      await tx.update(tasks).set({ input: nextInput, intent: nextIntent, ...(plan ? { plan } : {}), updatedAt: new Date() }).where(eq(tasks.id, task.id));
+    }
     await tx.delete(memoryRecords).where(eq(memoryRecords.scopeRef, `${PAUSE}${input.taskId}`));
     await enqueueTaskRun(tx, { tenantId: input.orgId, taskId: input.taskId });
     await recordAudit(tx, { tenantId: input.orgId, actorType: "user", actorId: input.actorUserId, action: "kimi.handback", target: `task:${input.taskId}`, tier: 1, outcome: "success", metadata: { sent: false, bound: !!draft } });
@@ -189,11 +196,16 @@ async function rebindPlan(tx: Tx, orgId: string, task: { id: string; tenantId: s
     const args = { ...(step.args as Record<string, unknown>) };
     let changed = false;
     if (step.tool === "inbox.send_draft" && typeof args.conversationId === "string") {
-      const canonical = await writeAuthoritativeDraft(tx, orgId, args.conversationId, draft);
+      const canonical = await writeAuthoritativeDraft(tx, orgId, args.conversationId, draft, {
+        draftExternalId: typeof args.draftExternalId === "string" ? args.draftExternalId : undefined,
+        draftMessageId: typeof args.draftMessageId === "string" ? args.draftMessageId : undefined,
+      });
       args.conversationId = canonical.conversationId;
       args.to = canonical.to;
       args.subject = canonical.subject;
       args.body = canonical.body;
+      args.draftExternalId = canonical.draftExternalId;
+      args.draftMessageId = canonical.draftMessageId;
       changed = true;
     } else {
       for (const key of Object.keys(args)) {
@@ -216,24 +228,47 @@ async function rebindPlan(tx: Tx, orgId: string, task: { id: string; tenantId: s
   return { ...plan, steps };
 }
 
-/** Writes the owner's text onto the conversation row and the mailbox draft the send tool will use. */
-async function writeAuthoritativeDraft(tx: Tx, orgId: string, conversationId: string, body: string) {
+/** Writes the owner's text onto this follow-up's own mailbox draft. A deleted draft gets a new id. */
+async function writeAuthoritativeDraft(tx: Tx, orgId: string, conversationId: string, body: string, pinned?: { draftExternalId?: string; draftMessageId?: string }) {
   const [conv] = isUuid(conversationId) ? await tx.select().from(conversations).where(eq(conversations.id, conversationId)) : [];
-  if (!conv?.draftExternalId || !conv.draftMessageId) throw new AppError("CONFLICT", "There is no mailbox draft to update.");
+  if (!conv) throw new AppError("NOT_FOUND", "Conversation not found");
   const [lastInbound] = await tx.select().from(messages).where(and(eq(messages.conversationId, conv.id), eq(messages.direction, "inbound"))).orderBy(desc(messages.sentAt)).limit(1);
   const to = replyRecipients(lastInbound);
   if (!to.length) throw new AppError("CONFLICT", "This conversation has no sender to reply to.");
   const subject = replySubject(conv.subject);
   const box = await getEngine().mailbox?.(orgId);
   if (!box) throw new AppError("CONFLICT", "No mailbox is connected, so the draft can't be updated.");
-  await box.provider.updateDraft(conv.draftExternalId, { threadId: conv.externalThreadId, to, subject, body, messageId: conv.draftMessageId, inReplyTo: lastInbound?.rfc822MessageId ?? undefined });
-  await tx.update(conversations).set({ draftBody: body, updatedAt: new Date() }).where(eq(conversations.id, conv.id));
-  return { conversationId: conv.id, to, subject, body };
+  const previousId = pinned?.draftExternalId ?? conv.draftExternalId ?? undefined;
+  let draftExternalId = previousId;
+  let draftMessageId = pinned?.draftMessageId ?? conv.draftMessageId ?? undefined;
+  const base = { threadId: conv.externalThreadId, to, subject, body, inReplyTo: lastInbound?.rfc822MessageId ?? undefined };
+  let updated = false;
+  if (draftExternalId && draftMessageId) {
+    try {
+      await box.provider.updateDraft(draftExternalId, { ...base, messageId: draftMessageId });
+      updated = true;
+    } catch {
+      updated = false;
+    }
+  }
+  if (!updated) {
+    draftMessageId = messageIdFor(`handback:${randomUUID()}`);
+    const created = await box.provider.createDraft({ ...base, messageId: draftMessageId });
+    draftExternalId = created.draftId;
+  }
+  const stillLatest = !conv.draftExternalId || conv.draftExternalId === previousId;
+  await tx.update(conversations).set({
+    draftBody: body,
+    ...(stillLatest ? { draftExternalId, draftMessageId } : {}),
+    updatedAt: new Date(),
+  }).where(eq(conversations.id, conv.id));
+  return { conversationId: conv.id, to, subject, body, draftExternalId: draftExternalId!, draftMessageId: draftMessageId! };
 }
 
 async function reraiseApproval(tx: Tx, approvalId: string, next: { digest: string; summary: string; payload: Record<string, unknown>; requestedBy: string }) {
   const [old] = await tx.select().from(approvalRequests).where(eq(approvalRequests.id, approvalId));
-  if (!old || (old.status !== "pending" && old.status !== "awaiting_confirmation")) return approvalId;
+  const open = old && !old.consumedAt && (old.status === "pending" || old.status === "awaiting_confirmation" || old.status === "approved");
+  if (!old || !open) return approvalId;
   await tx.update(approvalRequests).set({ status: "expired" }).where(eq(approvalRequests.id, old.id));
   const minutes = Number(process.env.WOS_BACKGROUND_APPROVAL_MINUTES ?? 45);
   const [created] = await tx.insert(approvalRequests).values({
@@ -674,14 +709,12 @@ export async function startChipAction(input: { actorUserId: string; orgId: strin
     });
     return { taskId, tool: "memory.propose_fact", tier: 2 };
   }
-  if (!prepared.ctx.hasDraft) {
-    const tool = getEngine().tools.get("inbox.create_draft");
-    if (!tool) throw new AppError("CONFLICT", "No mailbox draft tool is available.");
-    await tool.execute(
-      { tenantId: input.orgId, taskId: input.taskId!, agentId: prepared.agentId, idempotencyKey: `chip-draft:${prepared.ctx.conversationId}` },
-      { conversationId: prepared.ctx.conversationId, body: "Thanks for your note. I'll follow up from here." },
-    );
-  }
+  const tool = getEngine().tools.get("inbox.create_draft");
+  if (!tool) throw new AppError("CONFLICT", "No mailbox draft tool is available.");
+  await tool.execute(
+    { tenantId: input.orgId, taskId: input.taskId!, agentId: prepared.agentId, idempotencyKey: `follow-up:${randomUUID()}` },
+    { conversationId: prepared.ctx.conversationId, body: "Thanks for your note. I'll follow up from here." },
+  );
   const { taskId } = await requestSendDraft({ actorUserId: input.actorUserId, orgId: input.orgId, conversationId: prepared.ctx.conversationId });
   return { taskId, tool: "inbox.send_draft", tier: 2 };
 }

@@ -68,6 +68,7 @@ export function inboxTools(mailbox: MailboxResolver): ToolDefinition[] {
       const to = replyRecipients(lastInbound);
       if (!to.length) throw new ToolError("This conversation has no inbound message to reply to", false, "NO_RECIPIENT");
       const messageId = messageIdFor(ctx.idempotencyKey);
+      if (await box.provider.findSent(messageId)) throw new ToolError("This draft was already sent. Start a new follow-up.", false, "DRAFT_ALREADY_SENT");
       const { draftId } = await produceIntegration({
         tenantId: ctx.tenantId,
         integration: "mail",
@@ -81,21 +82,30 @@ export function inboxTools(mailbox: MailboxResolver): ToolDefinition[] {
         messageId,
       })),
       });
+      const live = await box.provider.findDraft(messageId);
+      if (!live || live.draftId !== draftId) throw new ToolError("The mailbox draft is not there.", false, "DRAFT_MISSING");
       await withTenant(ctx.tenantId, (tx) =>
-        tx.update(conversations).set({ draftExternalId: draftId, draftMessageId: messageId, draftBody: a.body, updatedAt: new Date() }).where(eq(conversations.id, conv.id)),
+        tx.update(conversations).set({ draftExternalId: live.draftId, draftMessageId: messageId, draftBody: a.body, updatedAt: new Date() }).where(eq(conversations.id, conv.id)),
       );
-      return { draftId, to, mock: box.provider.mock };
+      return { draftId: live.draftId, to, mock: box.provider.mock };
     },
     // createDraft already looks the draft up by Message-ID first, so re-running is safe.
   };
 
-  const sendDraft: ToolDefinition<{ conversationId: string; to: string[]; subject: string; body: string }> = {
+  const sendDraft: ToolDefinition<{ conversationId: string; to: string[]; subject: string; body: string; draftExternalId?: string; draftMessageId?: string }> = {
     name: "inbox.send_draft",
     description: "Send the drafted reply in a conversation. The approval shows exactly what goes out.",
     tier: 2,
     output: z.object({ externalId: z.string(), to: z.array(z.string()) }),
     rate: { limit: 20, windowMs: 60_000 },
-    args: z.object({ conversationId, to: z.array(z.email()).min(1).max(20), subject: z.string().max(500), body: z.string().max(20000) }),
+    args: z.object({
+      conversationId,
+      to: z.array(z.email()).min(1).max(20),
+      subject: z.string().max(500),
+      body: z.string().max(20000),
+      draftExternalId: z.string().min(1).max(200).optional(),
+      draftMessageId: z.string().min(1).max(300).optional(),
+    }),
     summarize: (a) => `Send email to ${a.to.join(", ")}: "${a.subject}"`,
     async execute(ctx, a) {
       const box = await mailbox(ctx.tenantId);
@@ -104,11 +114,17 @@ export function inboxTools(mailbox: MailboxResolver): ToolDefinition[] {
         throw new ToolError("This mailbox is in draft-only mode. An owner can allow sending in Settings.", false, "DRAFT_ONLY");
       }
       const { conv, lastInbound } = await loadThread(ctx, a.conversationId);
-      // What was approved must still be exactly what would go out.
       const expectedTo = replyRecipients(lastInbound);
+      const pinnedId = a.draftExternalId ?? conv.draftExternalId;
+      const pinnedMessageId = a.draftMessageId ?? conv.draftMessageId;
+      const live = pinnedMessageId ? await box.provider.findDraft(pinnedMessageId) : undefined;
+      if (!pinnedId || !live || live.draftId !== pinnedId) {
+        throw new ToolError("The mailbox draft is gone. Request a new approval.", false, "DRAFT_MISSING");
+      }
+      const sameDraftOnConversation = !a.draftExternalId || conv.draftExternalId === pinnedId;
       if (
-        !conv.draftExternalId ||
-        conv.draftBody !== a.body ||
+        (live.body !== undefined && live.body !== a.body) ||
+        (sameDraftOnConversation && conv.draftBody !== a.body) ||
         replySubject(conv.subject) !== a.subject ||
         expectedTo.join(",") !== a.to.map((t) => t.toLowerCase()).join(",")
       ) {
@@ -128,13 +144,13 @@ export function inboxTools(mailbox: MailboxResolver): ToolDefinition[] {
         mock: box.provider.mock,
         retry: box.provider.mock
           ? async () => {
-              const again = await box.provider.sendDraft(conv.draftExternalId!);
+              const again = await box.provider.sendDraft(pinnedId);
               return { externalId: again.externalId, mock: true };
             }
           : undefined,
-        effect: (fx) => fx.once(() => box.provider.sendDraft(conv.draftExternalId!)),
+        effect: (fx) => fx.once(() => box.provider.sendDraft(pinnedId)),
       });
-      const sent = await recordSent(ctx, conv.id, externalId, a, box.identity.address, conv.draftMessageId);
+      const sent = await recordSent(ctx, conv.id, externalId, a, box.identity.address, pinnedMessageId);
       if (gate.opportunityIds.size) {
         await withTenant(ctx.tenantId, async (tx) => {
           for (const [to, opp] of gate.opportunityIds) await recordOutreach(tx, { tenantId: ctx.tenantId, opportunityId: opp, recipient: to, kind: "sent", actor: { type: "agent", id: ctx.agentId }, ref: externalId });
@@ -145,9 +161,16 @@ export function inboxTools(mailbox: MailboxResolver): ToolDefinition[] {
     async reconcile(ctx, a) {
       const box = await mailbox(ctx.tenantId);
       const { conv } = await loadThread(ctx, a.conversationId);
-      if (!box || !conv.draftMessageId) return undefined;
-      const sent = await box.provider.findSent(conv.draftMessageId);
-      return sent ? recordSent(ctx, conv.id, sent.externalId, a, box.identity.address, conv.draftMessageId) : undefined;
+      const messageId = a.draftMessageId ?? conv.draftMessageId;
+      if (!box || !messageId) return undefined;
+      const sent = await box.provider.findSent(messageId);
+      if (!sent) return undefined;
+      const already = await withTenant(ctx.tenantId, async (tx) => {
+        const [row] = await tx.select({ id: messages.id }).from(messages).where(and(eq(messages.conversationId, conv.id), eq(messages.rfc822MessageId, messageId), eq(messages.direction, "outbound"))).limit(1);
+        return row;
+      });
+      if (already) return undefined;
+      return recordSent(ctx, conv.id, sent.externalId, a, box.identity.address, messageId);
     },
   };
 
@@ -167,7 +190,10 @@ async function recordSent(
       .insert(messages)
       .values({ tenantId: ctx.tenantId, conversationId: convId, direction: "outbound", sender: from, recipients: a.to, subject: a.subject, body: a.body, externalId, rfc822MessageId, sentAt: new Date() })
       .onConflictDoNothing();
-    await tx.update(conversations).set({ draftExternalId: null, draftBody: null, draftMessageId: null, lastMessageAt: new Date(), updatedAt: new Date() }).where(eq(conversations.id, convId));
+    await tx.update(conversations).set({ lastMessageAt: new Date(), updatedAt: new Date() }).where(eq(conversations.id, convId));
+    if (rfc822MessageId) {
+      await tx.update(conversations).set({ draftExternalId: null, draftBody: null, draftMessageId: null }).where(and(eq(conversations.id, convId), eq(conversations.draftMessageId, rfc822MessageId)));
+    }
   });
   return { externalId, to: a.to };
 }

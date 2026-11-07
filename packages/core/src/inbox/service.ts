@@ -95,7 +95,14 @@ export async function requestSendDraft(input: { actorUserId: string; orgId: stri
   const { conversation, messages: msgs } = await getConversation(input);
   if (!conversation.draftExternalId || !conversation.draftBody) throw new AppError("CONFLICT", "There is no draft to send");
   const lastInbound = [...msgs].reverse().find((m) => m.direction === "inbound");
-  const args = { conversationId: conversation.id, to: replyRecipients(lastInbound), subject: replySubject(conversation.subject), body: conversation.draftBody };
+  const args = {
+    conversationId: conversation.id,
+    to: replyRecipients(lastInbound),
+    subject: replySubject(conversation.subject),
+    body: conversation.draftBody,
+    draftExternalId: conversation.draftExternalId,
+    draftMessageId: conversation.draftMessageId,
+  };
   // Say so now rather than after someone approves it. The send tool checks again at send time.
   const gate = await inOrg(input.orgId, (tx) => checkEmailAllowed(tx, args.to));
   if (!gate.allowed) throw new AppError("CONFLICT", gate.message);

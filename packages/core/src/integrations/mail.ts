@@ -31,7 +31,7 @@ export interface MailProvider {
   /** Replaces the body of a draft the mailbox already holds. The id stays the same. */
   updateDraft(draftId: string, draft: OutboundDraft): Promise<{ draftId: string }>;
   /** Looks for an existing draft carrying this Message-ID. */
-  findDraft(messageId: string): Promise<{ draftId: string } | undefined>;
+  findDraft(messageId: string): Promise<{ draftId: string; body?: string } | undefined>;
   sendDraft(draftId: string): Promise<{ externalId: string }>;
   /** Looks for a sent message carrying this Message-ID. */
   findSent(messageId: string): Promise<{ externalId: string } | undefined>;
@@ -74,6 +74,8 @@ export class FakeMailProvider implements MailProvider {
   drafts = new Map<string, OutboundDraft>();
   sent = new Map<string, OutboundDraft & { externalId: string }>();
   sendCalls = 0;
+  private nextDraft = 0;
+  private nextSent = 0;
   /** Simulates the provider sending, then the connection dropping. */
   dropAfterSend = 0;
 
@@ -86,7 +88,7 @@ export class FakeMailProvider implements MailProvider {
   async createDraft(draft: OutboundDraft) {
     const existing = await this.findDraft(draft.messageId);
     if (existing) return existing;
-    const draftId = `draft_${this.drafts.size + 1}`;
+    const draftId = `draft_${++this.nextDraft}`;
     this.drafts.set(draftId, draft);
     return { draftId };
   }
@@ -99,7 +101,7 @@ export class FakeMailProvider implements MailProvider {
   }
 
   async findDraft(messageId: string) {
-    for (const [draftId, d] of this.drafts) if (d.messageId === messageId) return { draftId };
+    for (const [draftId, d] of this.drafts) if (d.messageId === messageId) return { draftId, body: d.body };
     return undefined;
   }
 
@@ -107,7 +109,7 @@ export class FakeMailProvider implements MailProvider {
     this.sendCalls++;
     const d = this.drafts.get(draftId);
     if (!d) throw new Error(`MOCK: draft ${draftId} not found`);
-    const externalId = `sent_${this.sent.size + 1}`;
+    const externalId = `sent_${++this.nextSent}`;
     this.sent.set(externalId, { ...d, externalId });
     this.drafts.delete(draftId);
     if (this.dropAfterSend > 0) {

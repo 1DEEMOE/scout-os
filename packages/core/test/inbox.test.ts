@@ -325,6 +325,64 @@ describe("owner draft and follow-up chip on the real inbox tools", () => {
     expect(mail.sendCalls).toBe(1);
     expect([...mail.sent.values()][0]?.to).toEqual(["client@customer.test"]);
   });
+
+  it("a later inbound reply gets its own draft, and a deleted draft is not a completed send", async () => {
+    const conv = await syncedConversation();
+    const [ident] = await withTenant(orgId, (tx) => tx.select().from(emailIdentities));
+    await setMailboxMode({ actorUserId: "owner", orgId, identityId: ident!.id, mode: "send_with_approval" });
+    const { taskId: sourceId } = await triageConversation({ actorUserId: "member", orgId, conversationId: conv.id });
+    const first = await startChipAction({ actorUserId: "member", orgId, taskId: sourceId, kind: "follow_up" });
+    expect(await runTask(orgId, first.taskId)).toBe("WAITING_FOR_APPROVAL");
+    const [firstApproval] = await approvalsFor(orgId, first.taskId);
+    const firstDraft = (firstApproval!.payload as { args: { draftExternalId: string; draftMessageId: string } }).args;
+    await decideApproval({ actorUserId: "owner", orgId, approvalId: firstApproval!.id, decision: "approve" });
+    expect(await runTask(orgId, first.taskId)).toBe("COMPLETED");
+    expect(mail.sendCalls).toBe(1);
+
+    mail.inbox.push(inbound(2, "thr-A", "Any update on that invoice?"));
+    await syncInbox({ actorUserId: "member", orgId });
+    const second = await startChipAction({ actorUserId: "member", orgId, taskId: sourceId, kind: "follow_up" });
+    expect(await runTask(orgId, second.taskId)).toBe("WAITING_FOR_APPROVAL");
+    const [secondApproval] = await approvalsFor(orgId, second.taskId);
+    const secondDraft = (secondApproval!.payload as { args: { draftExternalId: string; draftMessageId: string } }).args;
+    expect(secondDraft.draftMessageId).not.toBe(firstDraft.draftMessageId);
+    expect(secondDraft.draftExternalId).not.toBe(firstDraft.draftExternalId);
+    await decideApproval({ actorUserId: "owner", orgId, approvalId: secondApproval!.id, decision: "approve" });
+    expect(await runTask(orgId, second.taskId)).toBe("COMPLETED");
+    expect(mail.sendCalls).toBe(2);
+    expect(mail.sent.size).toBe(2);
+
+    await withTenant(orgId, (tx) => tx.update(conversations).set({
+      draftExternalId: firstDraft.draftExternalId,
+      draftMessageId: firstDraft.draftMessageId,
+      draftBody: "This draft was already sent.",
+    }).where(eq(conversations.id, conv.id)));
+    const { taskId: staleId } = await requestSendDraft({ actorUserId: "member", orgId, conversationId: conv.id });
+    expect(await runTask(orgId, staleId)).toBe("WAITING_FOR_APPROVAL");
+    const [stale] = await approvalsFor(orgId, staleId);
+    await decideApproval({ actorUserId: "owner", orgId, approvalId: stale!.id, decision: "approve" });
+    expect(await runTask(orgId, staleId)).toBe("FAILED");
+    expect((await taskRow(orgId, staleId)).error).toMatchObject({ code: "DRAFT_MISSING" });
+    expect(mail.sendCalls).toBe(2);
+    expect(mail.sent.size).toBe(2);
+  });
+
+  it("hand-back after approval invalidates the unconsumed approval and sends the edited text once", async () => {
+    const { conv, taskId } = await draftedSend();
+    const [old] = await approvalsFor(orgId, taskId);
+    await decideApproval({ actorUserId: "owner", orgId, approvalId: old!.id, decision: "approve" });
+    await takeOverDraft({ actorUserId: "owner", orgId, taskId, text: ownerText });
+    await handBack({ actorUserId: "owner", orgId, taskId });
+    const rows = await approvalsFor(orgId, taskId);
+    expect(rows.find((row) => row.id === old!.id)?.status).toBe("expired");
+    const fresh = rows.find((row) => row.status === "pending");
+    expect(fresh!.payload).toMatchObject({ args: { body: ownerText, conversationId: conv.id } });
+    expect(await runTask(orgId, taskId)).toBe("WAITING_FOR_APPROVAL");
+    await decideApproval({ actorUserId: "owner", orgId, approvalId: fresh!.id, decision: "approve" });
+    expect(await runTask(orgId, taskId)).toBe("COMPLETED");
+    expect(mail.sendCalls).toBe(1);
+    expect([...mail.sent.values()][0]?.body).toBe(ownerText);
+  });
 });
 
 describe("prompt injection in an email", () => {
