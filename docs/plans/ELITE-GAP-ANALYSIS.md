@@ -221,9 +221,28 @@ Still true, and not claimed as done:
 
 - `pnpm lint` — pass
 - `pnpm typecheck` — pass
-- `pnpm test` — 726 passed (58 files); migrate reported 19 files
+- `pnpm test` — 731 passed (59 files); migrate reported 19 files
 - `pnpm test:isolation` — 18 passed (15 applied, 2 proposed 0021, 1 proposed 0022, both rolled back)
 - `pnpm build` — pass (Next.js 16.4.5)
 - `WOS_MOCK_MODE=1 pnpm test:e2e` — 45 passed (about 5.0m), including axe
 
 These counts are not an independent grade. 0020, 0021, and 0022 were not applied.
+
+## 13. Third pass
+
+**SELF-ASSESSMENT.** An independent check of `fc08116` was still NO-GO. The producer wrote `integration.nws` and replay only knew `weather.refresh`, so an owner replay returned CONFLICT. A second run of a timed-out key could apply the effect again. Provider-key shapes and a nested `token` field still reached the log. Malformed JSON did not open the breaker. Two concurrent producers with one key returned one success and one error.
+
+This pass registers `integration.nws`, `integration.mail`, `integration.crm`, `integration.payments`, and `integration.model`. Weather replay refetches. The other four do not repeat the external action. A successful effect is remembered for the process, and a replay of that key is a no-op success. Concurrent callers of the same key share one result. Redaction walks the whole object and covers `sk-`, `sk-ant-`, `xai-`, `AIza`, `ghp_`, JWTs, and Bearer tokens. JSON parse errors count as breaker failures. Inbox listing goes through the mail producer.
+
+Still not true: the applied-effect map and the breaker do not cross processes. Replaying mail, CRM, payments, or the model does not rebuild the original call. 0022 is still only a proposal. Production stays NO-GO.
+
+### Commands after this pass
+
+- `pnpm lint` — pass
+- `pnpm typecheck` — pass
+- `pnpm test` — 731 passed (59 files); migrate reported 19 files
+- `pnpm test:isolation` — 18 passed
+- `pnpm build` — pass
+- `WOS_MOCK_MODE=1 pnpm test:e2e` — 45 passed (5.0m)
+
+Self-assessment only.

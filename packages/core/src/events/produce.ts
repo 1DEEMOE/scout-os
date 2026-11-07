@@ -5,6 +5,7 @@ export type IntegrationName = "nws" | "mail" | "crm" | "payments" | "model";
 
 const fallbackJournal = new MemoryJournal();
 let journalOverride: EventJournal | undefined;
+const inflightProduce = new Map<string, Promise<unknown>>();
 
 /** Production sets the audit journal. Tests can install a memory journal. */
 export function setIntegrationJournal(journal: EventJournal | undefined): void {
@@ -20,7 +21,23 @@ export function integrationJournal(): EventJournal {
  * Tier stays 0: the caller passed the approval gate before this.
  * A failure is dead-lettered for Recovery. The effect checks its idempotency key via ctx.once.
  */
-export async function produceIntegration<T>(opts: {
+export function produceIntegration<T>(opts: {
+  tenantId: string;
+  integration: IntegrationName;
+  idempotencyKey: string;
+  effect: (ctx: EffectContext) => Promise<T>;
+  journal?: EventJournal;
+  timeoutMs?: number;
+}): Promise<T> {
+  const id = `${opts.tenantId}:${opts.idempotencyKey}`;
+  const existing = inflightProduce.get(id);
+  if (existing) return existing as Promise<T>;
+  const promise = runProduce<T>(opts).finally(() => inflightProduce.delete(id));
+  inflightProduce.set(id, promise);
+  return promise;
+}
+
+async function runProduce<T>(opts: {
   tenantId: string;
   integration: IntegrationName;
   idempotencyKey: string;

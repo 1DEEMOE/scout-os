@@ -93,6 +93,17 @@ export interface EventResult {
 
 const inflight = new Map<string, Promise<EventResult>>();
 
+/** Successful effects, shared by every runEvent in this process. A replay of an applied key does not run the effect again. */
+const appliedEffects = new Map<string, Promise<unknown>>();
+
+export function resetAppliedEffects(): void {
+  appliedEffects.clear();
+}
+
+export function effectWasApplied(tenantId: string, key: string): boolean {
+  return appliedEffects.has(`${tenantId}:${key}`);
+}
+
 export function backoffMs(attempt: number): number {
   return Math.min(30_000, 50 * 2 ** (attempt - 1));
 }
@@ -145,11 +156,10 @@ async function runEventInner(
   const maxAttempts = deps.maxAttempts ?? 3;
   const sleep = deps.sleep ?? ((ms) => new Promise((r) => setTimeout(r, ms)));
   const breaker = deps.breaker ?? integrations;
-  const applied = new Set<string>();
   let lastError = "unknown";
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
-      const act = () => withTimeout((signal) => handler.act(event, effectContext(event.idempotencyKey, signal, applied)), deps.timeoutMs ?? 8_000);
+      const act = () => withTimeout((signal) => handler.act(event, effectContext(event.tenantId, event.idempotencyKey, signal)), deps.timeoutMs ?? 8_000);
       const result = event.integration ? await breaker.run(event.integration, act) : await act();
       if (handler.verify && !handler.verify(event, result)) throw new Error("verify_failed");
       const wrote = await deps.journal.put({ tenantId: event.tenantId, key: event.idempotencyKey, type: event.type, source: event.source, attempt });
@@ -177,18 +187,24 @@ async function runEventInner(
   return { status: "dead", reason: lastError, attempt: maxAttempts };
 }
 
-function effectContext(key: string, signal: AbortSignal, applied: Set<string>): EffectContext {
+function effectContext(tenantId: string, key: string, signal: AbortSignal): EffectContext {
+  const id = `${tenantId}:${key}`;
   return {
     signal,
     once: (fn) => {
+      const prior = appliedEffects.get(id);
+      if (prior) return prior as Promise<Awaited<ReturnType<typeof fn>>>;
       if (signal.aborted) return Promise.reject(abortError());
-      if (applied.has(key)) return Promise.reject(new Error("already_applied"));
-      applied.add(key);
-      if (signal.aborted) {
-        applied.delete(key);
-        return Promise.reject(abortError());
-      }
-      return fn();
+      const pending = Promise.resolve()
+        .then(() => {
+          if (signal.aborted) throw abortError();
+          return fn();
+        })
+        .then((value) => {
+          appliedEffects.set(id, Promise.resolve(value));
+          return value;
+        });
+      return pending;
     },
   };
 }

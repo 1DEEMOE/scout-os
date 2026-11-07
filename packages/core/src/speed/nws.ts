@@ -28,10 +28,17 @@ interface CacheEntry {
   alerts: NwsAlert[];
 }
 const cache = new Map<string, CacheEntry>();
+let fetchOverride: typeof fetch | undefined;
+
+/** Test hook. Replay uses the same fetch as the producer. */
+export function setNwsFetchForTests(fn?: typeof fetch): void {
+  fetchOverride = fn;
+}
 
 export function resetNwsCache(): void {
   cache.clear();
   integrations.reset("nws");
+  fetchOverride = undefined;
 }
 
 export function alertKind(event: string, headline: string): "tornado" | "hail" | "wind" | null {
@@ -82,15 +89,19 @@ async function fetchNwsOnce(opts: { fetchImpl?: typeof fetch; now?: Date; area?:
   const now = opts.now ?? new Date();
   const hit = cache.get(url);
   if (hit && now.getTime() - hit.at < CACHE_MS) return { alerts: hit.alerts, cached: true };
-  const doFetch = opts.fetchImpl ?? fetch;
+  const doFetch = opts.fetchImpl ?? fetchOverride ?? fetch;
   try {
-    const res = await integrations.run("nws", async () => {
+    const body = await integrations.run("nws", async () => {
       const response = await fetchAllowlisted(url, { signal: opts.signal, headers: { Accept: "application/geo+json", "User-Agent": NWS_USER_AGENT } }, doFetch);
       if (response.status >= 500 || response.status === 408) throw new Error(`weather.gov responded ${response.status}`);
       if (!response.ok) throw new Error(`weather.gov responded ${response.status}`);
-      return response;
+      try {
+        return await response.json();
+      } catch {
+        throw new Error("weather.gov returned malformed JSON");
+      }
     }, now.getTime());
-    const alerts = parseNwsPayload(await res.json());
+    const alerts = parseNwsPayload(body);
     cache.set(url, { at: now.getTime(), alerts });
     return { alerts, cached: false };
   } catch (err) {

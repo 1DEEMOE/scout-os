@@ -1,6 +1,7 @@
 import { eq } from "drizzle-orm";
 import { conversations, emailIdentities, messages, QUEUES, type Tx } from "@wos/db";
 import { recordAudit } from "../audit";
+import { produceIntegration } from "../events/produce";
 import { fetchNwsAlerts } from "../speed/nws";
 import { getBoss } from "../engine/queue";
 import { getEngine } from "../engine/runtime";
@@ -68,7 +69,12 @@ async function resolveMailbox(orgId: string): Promise<Mailbox | null> {
 }
 
 async function pullFromMailbox(orgId: string, box: Mailbox, actor: { type: "user" | "system"; id: string }, max: number): Promise<{ newMessages: number; mock: boolean }> {
-  const { messages: incoming, cursor } = await box.provider.listRecent({ cursor: box.identity.syncCursor, max });
+  const { messages: incoming, cursor } = await produceIntegration({
+    tenantId: orgId,
+    integration: "mail",
+    idempotencyKey: `mail-sync:${box.identity.id}:${box.identity.syncCursor ?? "start"}:${Date.now()}`,
+    effect: (ctx) => ctx.once(() => box.provider.listRecent({ cursor: box.identity.syncCursor, max })),
+  });
   const added = await inOrg(orgId, async (tx) => {
     let n = 0;
     for (const m of incoming) n += await upsertMessage(tx, orgId, box.identity.id, m);
