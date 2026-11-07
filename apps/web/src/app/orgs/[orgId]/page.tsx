@@ -1,5 +1,6 @@
 import {
   approvalsForReview,
+  deliverNotifications,
   findOverdue,
   formatRiskFlags,
   latestAiAnswersCheck,
@@ -81,6 +82,13 @@ export default async function TodayPage({ params, searchParams }: { params: Prom
     speedSummary(who).catch(() => ({ leads: 0, within60: 0, label: "respond-in-60s" as const })),
   ]);
   const open = review.open;
+  const delivery = await deliverNotifications({
+    actorUserId: userId,
+    orgId,
+    items: open.map((item) => ({ id: item.approval.id, tier: item.approval.tier, item })),
+  });
+  const nowApprovals = delivery.now.map((row) => row.item);
+  const briefApprovals = delivery.brief.map((row) => row.item);
   const briefing = latest?.run.output as Briefing | undefined;
   const sections = briefing?.sections.filter((s) => s.status === "ok" && s.count > 0).slice(0, 4) ?? [];
   const attention = tasks.filter((t) => t.state === "ESCALATED" || t.state === "FAILED").slice(0, 5);
@@ -171,20 +179,20 @@ export default async function TodayPage({ params, searchParams }: { params: Prom
           </ScoutMessage>
         )}
 
-        {open.length > 0 ? (
-          <ScoutMessage title={open.length === 1 ? "One thing needs your OK before it happens." : `${open.length} things need your OK before they happen.`}>
+        {nowApprovals.length > 0 ? (
+          <ScoutMessage title={nowApprovals.length === 1 ? "One thing needs your OK before it happens." : `${nowApprovals.length} things need your OK before they happen.`}>
             <div className="flex flex-col gap-5">
-              {open.slice(0, APPROVALS_UP_FRONT).map((item) => (
+              {nowApprovals.slice(0, APPROVALS_UP_FRONT).map((item) => (
                 <ApprovalCard key={item.approval.id} item={item} orgId={orgId} />
               ))}
-              {open.length > APPROVALS_UP_FRONT && (
+              {nowApprovals.length > APPROVALS_UP_FRONT && (
                 <details className="group">
                   <summary className="inline-flex min-h-11 cursor-pointer list-none items-center gap-2 rounded-full border border-line bg-surface px-5 font-medium transition-colors duration-150 hover:bg-soft [&::-webkit-details-marker]:hidden">
-                    <span className="group-open:hidden">Show {open.length - APPROVALS_UP_FRONT} more</span>
+                    <span className="group-open:hidden">Show {nowApprovals.length - APPROVALS_UP_FRONT} more</span>
                     <span className="hidden group-open:inline">Show fewer</span>
                   </summary>
                   <div className="mt-5 flex flex-col gap-5">
-                    {open.slice(APPROVALS_UP_FRONT).map((item) => (
+                    {nowApprovals.slice(APPROVALS_UP_FRONT).map((item) => (
                       <ApprovalCard key={item.approval.id} item={item} orgId={orgId} />
                     ))}
                   </div>
@@ -194,6 +202,15 @@ export default async function TodayPage({ params, searchParams }: { params: Prom
           </ScoutMessage>
         ) : (
           <ScoutMessage title="Nothing needs your OK right now. When a teammate wants to send, charge or change something important, I'll ask you here first." />
+        )}
+        {briefApprovals.length > 0 && (
+          <ScoutMessage title={delivery.quiet ? "Held for the morning brief. Quiet hours are on, so these wait." : "Held for the morning brief. Today's alert cap is full."}>
+            <div className="flex flex-col gap-5">
+              {briefApprovals.map((item) => (
+                <ApprovalCard key={item.approval.id} item={item} orgId={orgId} />
+              ))}
+            </div>
+          </ScoutMessage>
         )}
 
         {paymentFlags.length > 0 && (

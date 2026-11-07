@@ -1,12 +1,18 @@
 import { createHash } from "node:crypto";
-import { and, desc, eq, sql } from "drizzle-orm";
-import { invoices, memoryRecords, organizations, tasks, workflowExecutions, withTenant, type Tx } from "@wos/db";
+import { and, desc, eq, gte, sql } from "drizzle-orm";
+import { agents, approvalRequests, invoices, memoryRecords, organizations, tasks, workflowExecutions, withTenant, type Tx } from "@wos/db";
 import { recordAudit } from "../audit";
 import { listAuditEvents } from "../audit-log/service";
 import { AppError } from "../errors";
 import { scrubPii } from "../logger";
 import { ANY_ROLE, inOrg, MANAGERS, requireRole, STAFF } from "../org/access";
 import { getPack, type IndustryPack } from "../industries/packs";
+import { actionDigest } from "../engine/digest";
+import { loadAgent } from "../engine/agents";
+import { enqueueTaskRun } from "../engine/queue";
+import { getEngine } from "../engine/runtime";
+import { createTask } from "../engine/tasks";
+import { delegationOf, type PlanStep } from "../engine/executor";
 import { forgetMemory, rememberFact } from "../memory/service";
 import { createRoutine } from "../routines/service";
 import { ingestLead } from "../speed/service";
@@ -47,20 +53,25 @@ export interface SavedRule {
   savedAt: string;
 }
 
-/** A suggestion the owner must explicitly save. Refused for money, irreversible, and tier >= 2. */
-export async function saveSuggestedRule(input: { actorUserId: string; orgId: string; text: string; tier: number; toolName: string }): Promise<SavedRule> {
-  const card = approvalCard({ summary: input.text, tier: input.tier, toolName: input.toolName });
-  if (card.alwaysAllowBlocked || input.tier >= 2) {
-    throw new AppError("FORBIDDEN", card.alwaysAllowBlocked ?? "That kind of action always needs a person.");
-  }
+/**
+ * A suggestion the owner must explicitly save. The tier comes from the tool
+ * registry, not from the caller. Refused for money, irreversible, and tier >= 2.
+ */
+export async function saveSuggestedRule(input: { actorUserId: string; orgId: string; text: string; toolName: string }): Promise<SavedRule> {
   const text = input.text.trim().slice(0, 300);
   if (!text) throw new AppError("VALIDATION", "Write the rule in plain words");
   return inOrg(input.orgId, async (tx) => {
     await requireRole(tx, input.orgId, input.actorUserId, MANAGERS, "kimi.rule.save");
+    const tool = getEngine().tools.get(input.toolName);
+    if (!tool) throw new AppError("FORBIDDEN", "That action isn't available, so it can't become a rule.");
+    const card = approvalCard({ summary: text, tier: tool.tier, toolName: tool.name });
+    if (card.alwaysAllowBlocked || tool.tier >= 2) {
+      throw new AppError("FORBIDDEN", card.alwaysAllowBlocked ?? "That kind of action always needs a person.");
+    }
     const id = crypto.randomUUID();
-    const saved: SavedRule = { id, text, tier: input.tier, savedAt: new Date().toISOString() };
+    const saved: SavedRule = { id, text, tier: tool.tier, savedAt: new Date().toISOString() };
     await putJson(tx, input.orgId, input.actorUserId, `${RULE}${id}`, saved);
-    await recordAudit(tx, { tenantId: input.orgId, actorType: "user", actorId: input.actorUserId, action: "kimi.rule.save", target: `rule:${id}`, tier: 1, outcome: "success", metadata: { tier: input.tier } });
+    await recordAudit(tx, { tenantId: input.orgId, actorType: "user", actorId: input.actorUserId, action: "kimi.rule.save", target: `rule:${id}`, tier: 1, outcome: "success", metadata: { tier: tool.tier, tool: tool.name } });
     return saved;
   });
 }
@@ -135,14 +146,61 @@ export async function takeOverDraft(input: { actorUserId: string; orgId: string;
   });
 }
 
-/** Hands the draft back. Does not send it. */
+/** Hands the draft back. The draft is what the resumed run uses. Nothing is sent here. */
 export async function handBack(input: { actorUserId: string; orgId: string; taskId: string }) {
   return inOrg(input.orgId, async (tx) => {
     await requireRole(tx, input.orgId, input.actorUserId, MANAGERS, "kimi.handback");
+    const [draftRow] = await tx.select().from(memoryRecords).where(eq(memoryRecords.scopeRef, `${DRAFT}${input.taskId}`)).orderBy(desc(memoryRecords.createdAt)).limit(1);
+    const draft = parse<{ text: string }>(draftRow?.content ?? "")?.text?.trim() ?? "";
+    const [task] = await tx.select().from(tasks).where(eq(tasks.id, input.taskId));
+    if (!task) throw new AppError("NOT_FOUND", "Task not found");
+    const inputJson = (task.input ?? {}) as Record<string, unknown>;
+    const nextInput = draft ? { ...inputJson, ownerDraft: draft } : inputJson;
+    const nextIntent = draft ? bindIntent(task.intent, draft) : task.intent;
+    const rebound = draft && task.assignedAgentId ? rebindPlan(task, draft) : null;
+    await tx.update(tasks).set({ input: nextInput, intent: nextIntent, ...(rebound ? { plan: rebound.plan } : {}), updatedAt: new Date() }).where(eq(tasks.id, task.id));
+    if (rebound) {
+      for (const ap of rebound.approvals) {
+        await tx.update(approvalRequests).set({ actionDigest: ap.digest, summary: ap.summary, payload: ap.payload }).where(and(eq(approvalRequests.id, ap.id), eq(approvalRequests.status, "pending")));
+      }
+    }
     await tx.delete(memoryRecords).where(eq(memoryRecords.scopeRef, `${PAUSE}${input.taskId}`));
-    await recordAudit(tx, { tenantId: input.orgId, actorType: "user", actorId: input.actorUserId, action: "kimi.handback", target: `task:${input.taskId}`, tier: 1, outcome: "success", metadata: { sent: false } });
-    return { handedBack: true, sent: false };
+    await enqueueTaskRun(tx, { tenantId: input.orgId, taskId: input.taskId });
+    await recordAudit(tx, { tenantId: input.orgId, actorType: "user", actorId: input.actorUserId, action: "kimi.handback", target: `task:${input.taskId}`, tier: 1, outcome: "success", metadata: { sent: false, bound: !!draft } });
+    return { handedBack: true, sent: false as const, bound: !!draft };
   });
+}
+
+function bindIntent(intent: string, draft: string): string {
+  const note = `Owner draft (use this text; do not send it until a person approves):\n${draft}`;
+  if (intent.includes(draft)) return intent.slice(0, 4000);
+  return `${intent}\n\n${note}`.slice(0, 4000);
+}
+
+const DRAFT_FIELDS = new Set(["body", "content", "text"]);
+
+function rebindPlan(task: { id: string; tenantId: string; assignedAgentId: string | null; input: unknown; plan: unknown }, draft: string): { plan: unknown; approvals: { id: string; digest: string; summary: string; payload: Record<string, unknown> }[] } | null {
+  const plan = task.plan as { steps?: PlanStep[]; direct?: unknown; note?: string; model?: unknown } | null;
+  if (!plan?.steps?.length || !task.assignedAgentId) return null;
+  const chainId = delegationOf((task.input ?? undefined) as Record<string, unknown> | undefined)?.chainId;
+  const approvals: { id: string; digest: string; summary: string; payload: Record<string, unknown> }[] = [];
+  const steps = plan.steps.map((step) => {
+    if (!step.args || typeof step.args !== "object" || Array.isArray(step.args)) return step;
+    const args = { ...(step.args as Record<string, unknown>) };
+    let changed = false;
+    for (const key of Object.keys(args)) {
+      if (DRAFT_FIELDS.has(key) && typeof args[key] === "string") {
+        args[key] = draft;
+        changed = true;
+      }
+    }
+    if (!changed) return step;
+    const digest = actionDigest({ tenantId: task.tenantId, taskId: task.id, agentId: task.assignedAgentId!, step: step.index, tool: step.tool, args, ...(chainId ? { chainId } : {}) });
+    const summary = `Use the owner's draft: ${draft.slice(0, 160)}`;
+    if (step.approvalId) approvals.push({ id: step.approvalId, digest, summary, payload: { tool: step.tool, args, step: step.index, ownerDraft: true } });
+    return { ...step, args, digest, summary };
+  });
+  return { plan: { ...plan, steps }, approvals };
 }
 
 export async function watchTask(input: { actorUserId: string; orgId: string; taskId: string }) {
@@ -517,11 +575,56 @@ export function laneOf(action: string): "Inbox" | "Schedule" | "Follow-ups" | "R
   return "Inbox";
 }
 
-export function nextActionChips(job: string): { label: string; sends: false }[] {
+export function nextActionChips(job: string): { kind: "follow_up" | "note"; label: string }[] {
+  const safe = redactForDisplay(job).slice(0, 80) || "this job";
   return [
-    { label: `Draft a follow-up for ${job.slice(0, 80)}`, sends: false },
-    { label: "Add a note to the customer record", sends: false },
+    { kind: "follow_up", label: `Draft a follow-up for ${safe}` },
+    { kind: "note", label: "Add a note to the customer record" },
   ];
+}
+
+/**
+ * Starts a real task for a suggested chip. The tool and its tier come from the
+ * registry and from an agent that is allowed to use it. Tier 2+ stops in
+ * Approvals. Nothing is sent or saved before that.
+ */
+export async function startChipAction(input: { actorUserId: string; orgId: string; taskId?: string; kind?: "follow_up" | "note"; label?: string }): Promise<{ taskId: string; tool: string; tier: number }> {
+  const kind = input.kind ?? "follow_up";
+  const label = redactForDisplay(input.label || (kind === "follow_up" ? "Draft a follow-up" : "Add a note to the customer record")).slice(0, 200);
+  const choice = await inOrg(input.orgId, async (tx) => {
+    await requireRole(tx, input.orgId, input.actorUserId, STAFF, "kimi.chip");
+    const names = kind === "follow_up" ? ["inbox.send_draft", "mock.send_email"] : ["memory.propose_fact"];
+    const rows = await tx.select({ id: agents.id }).from(agents).where(eq(agents.status, "active"));
+    for (const name of names) {
+      const tool = getEngine().tools.get(name);
+      if (!tool || tool.tier < 2) continue;
+      for (const row of rows) {
+        const loaded = await loadAgent(tx, { id: row.id });
+        const max = loaded?.grant.maxTier.get(tool.name);
+        if (loaded && loaded.grant.allowlist.includes(tool.name) && max !== undefined && max >= tool.tier) {
+          return { tool: tool.name, tier: tool.tier, agentKind: loaded.agent.kind, args: chipArgs(tool.name, label) };
+        }
+      }
+    }
+    throw new AppError("CONFLICT", "No approval-gated action is available for that step.");
+  });
+  const { taskId } = await createTask({
+    actorUserId: input.actorUserId,
+    orgId: input.orgId,
+    title: label,
+    intent: `${label}. Wait for approval. Do not send or save this until a person OKs it.`,
+    input: input.taskId ? { sourceTaskId: input.taskId } : {},
+    direct: { agentKind: choice.agentKind, steps: [{ tool: choice.tool, args: choice.args }] },
+  });
+  return { taskId, tool: choice.tool, tier: choice.tier };
+}
+
+function chipArgs(tool: string, label: string): Record<string, unknown> {
+  if (tool === "inbox.send_draft") {
+    return { conversationId: "00000000-0000-4000-8000-000000000000", to: ["drafts@example.test"], subject: label.slice(0, 80), body: `${label}\n\nNot sent until you approve.` };
+  }
+  if (tool === "mock.send_email") return { to: "drafts@example.test", subject: label.slice(0, 80), body: `${label}\n\nNot sent until you approve.` };
+  return { content: label, reason: "Suggested from this job. Nothing is saved until you approve." };
 }
 
 export interface Artifact {
@@ -532,8 +635,14 @@ export interface Artifact {
   expiresAt: string;
 }
 
+/** Titles shown in the library. Emails and provider keys are scrubbed before storage and again on read. */
+export function redactForDisplay(value: string): string {
+  const clean = String(scrubPii(value) ?? "").replace(/\s+/g, " ").trim();
+  return clean.slice(0, 200);
+}
+
 export async function saveArtifact(input: { actorUserId: string; orgId: string; title: string; now?: Date }): Promise<Artifact> {
-  const title = input.title.trim().slice(0, 120);
+  const title = redactForDisplay(input.title).slice(0, 120);
   if (!title) throw new AppError("VALIDATION", "Name the document");
   const now = input.now ?? new Date();
   return inOrg(input.orgId, async (tx) => {
@@ -543,7 +652,7 @@ export async function saveArtifact(input: { actorUserId: string; orgId: string; 
     const artifact: Artifact = { id, title, token, expiresAt: new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString() };
     await putJson(tx, input.orgId, input.actorUserId, `${ARTIFACT}${id}`, artifact);
     await recordAudit(tx, { tenantId: input.orgId, actorType: "user", actorId: input.actorUserId, action: "kimi.artifact.save", target: `artifact:${id}`, tier: 1, outcome: "success" });
-    return artifact;
+    return presentArtifact(artifact);
   });
 }
 
@@ -557,8 +666,12 @@ export async function readArtifactByToken(input: { actorUserId: string; orgId: s
     const rows = await tx.select().from(memoryRecords).where(sql`${memoryRecords.scopeRef} LIKE 'kimi:artifact:%'`).limit(100);
     const found = rows.map((r) => parse<Artifact>(r.content)).find((a) => a?.token === input.token);
     if (!found || !artifactLinkOpen(found, input.now ?? new Date())) throw new AppError("NOT_FOUND", "That link has expired");
-    return found;
+    return presentArtifact(found);
   });
+}
+
+function presentArtifact(artifact: Artifact): Artifact {
+  return { ...artifact, title: redactForDisplay(artifact.title) || "Untitled" };
 }
 
 export async function notifyPrefs(input: { actorUserId: string; orgId: string }) {
@@ -589,8 +702,9 @@ function clampHour(value: number | undefined, fallback: number): number {
 
 const MONEY_CAP = "kimi:money-cap";
 
-export async function saveMoneyCap(input: { actorUserId: string; orgId: string; weeklyCapCents?: number }) {
-  const weeklyCapCents = Math.min(100_000_000, Math.max(0, Math.round(input.weeklyCapCents ?? 0)));
+export async function saveMoneyCap(input: { actorUserId: string; orgId: string; weeklyCapDollars?: number; weeklyCapCents?: number }) {
+  const cents = input.weeklyCapDollars !== undefined ? Math.round(input.weeklyCapDollars * 100) : Math.round(input.weeklyCapCents ?? 0);
+  const weeklyCapCents = Math.min(100_000_000, Math.max(0, cents));
   return inOrg(input.orgId, async (tx) => {
     await requireRole(tx, input.orgId, input.actorUserId, MANAGERS, "kimi.money.cap");
     await tx.delete(memoryRecords).where(eq(memoryRecords.scopeRef, MONEY_CAP));
@@ -600,10 +714,15 @@ export async function saveMoneyCap(input: { actorUserId: string; orgId: string; 
   });
 }
 
-export async function moneySnapshot(input: { actorUserId: string; orgId: string }) {
+export async function moneySnapshot(input: { actorUserId: string; orgId: string; now?: Date }) {
+  const now = input.now ?? new Date();
+  const since = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
   return inOrg(input.orgId, async (tx) => {
     await requireRole(tx, input.orgId, input.actorUserId, ANY_ROLE, "kimi.money");
-    const rows = await tx.select({ status: invoices.status, amountDueCents: invoices.amountDueCents }).from(invoices);
+    const rows = await tx
+      .select({ status: invoices.status, amountDueCents: invoices.amountDueCents, createdAt: invoices.createdAt })
+      .from(invoices)
+      .where(gte(invoices.createdAt, since));
     const openCents = rows.filter((r) => r.status === "open").reduce((sum, r) => sum + r.amountDueCents, 0);
     const paidCents = rows.filter((r) => r.status === "paid").reduce((sum, r) => sum + r.amountDueCents, 0);
     const [capRow] = await tx.select().from(memoryRecords).where(eq(memoryRecords.scopeRef, MONEY_CAP)).orderBy(desc(memoryRecords.createdAt)).limit(1);
@@ -625,8 +744,56 @@ export async function listArtifacts(input: { actorUserId: string; orgId: string 
   return inOrg(input.orgId, async (tx) => {
     await requireRole(tx, input.orgId, input.actorUserId, ANY_ROLE, "kimi.artifact.list");
     const rows = await tx.select().from(memoryRecords).where(sql`${memoryRecords.scopeRef} LIKE 'kimi:artifact:%'`).orderBy(desc(memoryRecords.createdAt)).limit(50);
-    return rows.map((r) => parse<Artifact>(r.content)).filter((a): a is Artifact => !!a);
+    return rows.map((r) => parse<Artifact>(r.content)).filter((a): a is Artifact => !!a).map(presentArtifact);
   });
+}
+
+const NOTIFY_SENT = "kimi:notify:sent:";
+
+/**
+ * The in-app delivery path. Quiet hours, the daily cap, and batching decide
+ * what is shown now and what waits for the morning brief. Approvals are not
+ * deleted; they are only grouped.
+ */
+export async function deliverNotifications<T extends { id: string; tier: number }>(input: { actorUserId: string; orgId: string; items: T[]; now?: Date }): Promise<{ now: T[]; brief: T[]; cap: number; quiet: boolean }> {
+  const now = input.now ?? new Date();
+  return inOrg(input.orgId, async (tx) => {
+    await requireRole(tx, input.orgId, input.actorUserId, ANY_ROLE, "kimi.notify.deliver");
+    const [org] = await tx.select({ timezone: organizations.timezone }).from(organizations).where(eq(organizations.id, input.orgId));
+    const clock = localClock(now, org?.timezone || "America/New_York");
+    const [prefRow] = await tx.select().from(memoryRecords).where(eq(memoryRecords.scopeRef, NOTIFY)).orderBy(desc(memoryRecords.createdAt)).limit(1);
+    const prefs = parse<{ quietStart: number; quietEnd: number; cap: number }>(prefRow?.content ?? "") ?? { quietStart: 21, quietEnd: 8, cap: 5 };
+    const scope = `${NOTIFY_SENT}${clock.day}`;
+    const [sentRow] = await tx.select().from(memoryRecords).where(eq(memoryRecords.scopeRef, scope)).orderBy(desc(memoryRecords.createdAt)).limit(1);
+    const sent = new Set(parse<string[]>(sentRow?.content ?? "") ?? []);
+    const fresh = input.items.filter((item) => !sent.has(item.id));
+    const classified = fresh.map((item) => ({ ...item, urgency: classifyUrgency({ money: item.tier >= 3, customerWaiting: item.tier === 2 }) }));
+    const batched = batchNotifications(classified, { hour: clock.hour, alreadyToday: sent.size, cap: prefs.cap, quietStart: prefs.quietStart, quietEnd: prefs.quietEnd });
+    const delivered = [...sent, ...batched.now.map((item) => item.id)];
+    if (batched.now.length) {
+      await tx.delete(memoryRecords).where(eq(memoryRecords.scopeRef, scope));
+      await putJson(tx, input.orgId, input.actorUserId, scope, delivered);
+    }
+    const nowIds = new Set(delivered);
+    const briefIds = new Set(batched.brief.map((item) => item.id));
+    return {
+      now: input.items.filter((item) => nowIds.has(item.id) && !briefIds.has(item.id)),
+      brief: input.items.filter((item) => briefIds.has(item.id)),
+      cap: prefs.cap,
+      quiet: withinQuietHours(clock.hour, prefs.quietStart, prefs.quietEnd),
+    };
+  });
+}
+
+function localClock(now: Date, timeZone: string): { day: string; hour: number } {
+  try {
+    const parts = new Intl.DateTimeFormat("en-US", { timeZone, hour: "numeric", hourCycle: "h23", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(now);
+    const get = (type: string) => parts.find((p) => p.type === type)?.value ?? "";
+    const hour = Number(get("hour"));
+    return { day: `${get("year")}-${get("month")}-${get("day")}`, hour: Number.isFinite(hour) ? hour : now.getUTCHours() };
+  } catch {
+    return { day: now.toISOString().slice(0, 10), hour: now.getUTCHours() };
+  }
 }
 
 export { approvalCard, type ApprovalCardView };

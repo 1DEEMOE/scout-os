@@ -16,7 +16,7 @@ const ACTIONS = [
   "routines.pause", "routines.resume", "routines.runNow", "routines.recoverLost",
   "gaps2.frontDeskEnable", "gaps2.frontDeskAddSlots", "gaps2.frontDeskSetStatus", "gaps2.aiAnswersRun", "gaps2.jobPhotoUpload", "gaps2.documentAnalyze",
   "onboarding.clearDemo",
-  "kimi.pause", "kimi.handBack", "kimi.saveRule", "kimi.takeOver", "kimi.goal", "kimi.artifact", "kimi.notifySave", "kimi.moneyCap", "kimi.undoPractice",
+  "kimi.pause", "kimi.handBack", "kimi.saveRule", "kimi.takeOver", "kimi.goal", "kimi.artifact", "kimi.notifySave", "kimi.moneyCap", "kimi.undoPractice", "kimi.chip",
 ] as const;
 export type ActionPath = (typeof ACTIONS)[number];
 

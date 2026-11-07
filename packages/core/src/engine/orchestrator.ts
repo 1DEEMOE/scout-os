@@ -159,7 +159,8 @@ async function plan(task: TaskRow): Promise<boolean> {
     await withTenant(task.tenantId, (tx) => transition(tx, task, "ESCALATED", fail("Assigned agent no longer exists", "NO_AGENT")));
     return true;
   }
-  const { agentKind: _routing, delegation: _delegation, ...context } = task.input;
+  const { agentKind: _routing, delegation: _delegation, ownerDraft: _draft, ...context } = task.input;
+  const ownerDraft = typeof task.input.ownerDraft === "string" ? task.input.ownerDraft : "";
   const chainId = delegationOf(task.input)?.chainId;
   const externalText = Object.keys(context).length ? JSON.stringify(context) : "";
   const memory = await withTenant(task.tenantId, (tx) => recallMemory(tx, { query: task.intent, taskId: task.id }));
@@ -178,6 +179,7 @@ async function plan(task: TaskRow): Promise<boolean> {
           role: "user",
           content: [
             `Request from the business user:\n${task.intent}`,
+            ownerDraft ? `The owner took this draft over. Use this text. Do not send it unless a person approves:\n${ownerDraft}` : "",
             memoryBlock(memory),
             Object.keys(context).length ? externalData("task_input", context) : "",
           ].filter(Boolean).join("\n\n"),

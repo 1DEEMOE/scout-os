@@ -4,7 +4,15 @@ Clean-room trust UX. Public product ideas only. No competitor text, layout, or c
 
 Approval policy is unchanged. A suggested rule can be saved only for tier 0–1, and never for money, irreversible actions, or anything tier 2 or higher. Saving a rule does not change `evaluatePolicy`. A chat sentence such as “every Friday, list next week's customers” creates a real `routines` row. The applied schema only allows `morning_briefing`, so that is the kind: `maxTier` stays 0 and the run does not send. Anything that would pay, delete, or send is refused and is not scheduled. Opportunity cards are drafts. SMS and voice stay mock. The text-Scout panel is labelled DEMO and does not use a phone.
 
-Activity-feed group names are a hash of the scrubbed task id or audit target. An email address or a provider key in that field is not shown.
+Activity-feed group names are a hash of the scrubbed task id or audit target. Library titles are scrubbed the same way before they are stored and again before they are shown. An email address or a provider key does not appear.
+
+Always-allow uses the tier on the registered tool. A caller cannot declare a lower tier.
+
+Notification quiet hours, the daily cap, and batching decide which approvals Today shows now and which wait for the morning brief. The approval itself is unchanged.
+
+The money digest counts invoices created in the last 7 days. Amounts are cents in storage and dollars on screen. The weekly cap is entered in dollars and stored as cents. Auto-pay stays off.
+
+A suggested chip starts a task whose tool is tier 2 or higher in the registry, so it stops in Approvals. Handing a draft back writes it onto the task. The resumed run uses that text and still does not send it.
 
 Background practice approvals (`requestedBy` starting with `system:` or `routine:`) expire in 30–60 minutes. `WOS_BACKGROUND_APPROVAL_MINUTES` sets the window and is clamped to that range. The default is 45. A person who asked in chat still waits the normal approval window.
 

@@ -84,7 +84,7 @@ test("chat remember, a scheduled sentence, takeover, and the new screens do real
 
   await page.goto(`/orgs/${seed.orgId}/settings/money`);
   await expect(page.getByText("Auto-pay is off.")).toBeVisible();
-  await page.getByLabel("Cap in dollars. This does not pay anything.").fill("50000");
+  await page.getByLabel("Cap in dollars. This does not pay anything.").fill("500");
   await page.getByRole("button", { name: "Save cap" }).click();
   await expect(page.getByText("$500.00")).toBeVisible();
   await page.screenshot({ path: path.join(shots, "money.png"), fullPage: true });

@@ -1,5 +1,6 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
-import { approvalRequests, closePool, routines, withTenant } from "@wos/db";
+import { eq } from "drizzle-orm";
+import { approvalRequests, closePool, invoices, routines, tasks, withTenant } from "@wos/db";
 import {
   activityFeed,
   approvalCard,
@@ -8,26 +9,43 @@ import {
   batchNotifications,
   classifyUrgency,
   configureEngine,
+  createAgent,
   createOrg,
+  createTask,
+  deliverNotifications,
   denyStopsRetry,
   feedGroupKey,
   firstRunFor,
   firstRunScript,
+  handBack,
   ingestLead,
+  listArtifacts,
+  memoryTools,
+  MockLedger,
+  mockTools,
   moneyDigest,
+  moneySnapshot,
   MockModelProvider,
   ModelRouter,
   opportunityCardsForPack,
   parseChatRoutine,
   parseForget,
+  pauseTask,
+  readArtifactByToken,
   produceIntegration,
   recordAudit,
   registerIntegrationHandlers,
   replayDeadLetter,
   resetAppliedEffects,
   runEvent,
+  runTask,
+  saveArtifact,
   saveChatRoutine,
+  saveMoneyCap,
+  saveNotifyPrefs,
   saveSuggestedRule,
+  startChipAction,
+  takeOverDraft,
   setIntegrationJournal,
   stopBoss,
   ToolRegistry,
@@ -61,7 +79,7 @@ describe("rules, routines, opportunities, notifications", () => {
   beforeEach(async () => {
     await resetDb();
     await seedUser("owner", "owner@example.test");
-    configureEngine({ router: new ModelRouter([new MockModelProvider(() => ({}))], "mock"), tools: new ToolRegistry() });
+    configureEngine({ router: new ModelRouter([new MockModelProvider(() => ({}))], "mock"), tools: new ToolRegistry().register(...memoryTools(), ...mockTools(new MockLedger())) });
   });
   afterAll(async () => {
     await stopBoss();
@@ -70,8 +88,8 @@ describe("rules, routines, opportunities, notifications", () => {
 
   it("will not save an always-allow rule for tier 2 or money", async () => {
     const { orgId } = await createOrg({ actorUserId: "owner", name: "Rules Co" });
-    await expect(saveSuggestedRule({ actorUserId: "owner", orgId, text: "Always email new leads", tier: 2, toolName: "inbox.send_draft" })).rejects.toThrow(/automatic rule|person/);
-    const saved = await saveSuggestedRule({ actorUserId: "owner", orgId, text: "Keep notes short", tier: 1, toolName: "memory.note" });
+    await expect(saveSuggestedRule({ actorUserId: "owner", orgId, text: "Always email new leads", toolName: "mock.send_email" })).rejects.toThrow(/automatic rule|person|isn't available/);
+    const saved = await saveSuggestedRule({ actorUserId: "owner", orgId, text: "Keep notes short", toolName: "memory.note" });
     expect(saved.tier).toBe(1);
   });
 
@@ -145,6 +163,80 @@ describe("rules, routines, opportunities, notifications", () => {
     await undoPracticeMemory({ actorUserId: "owner", orgId, memoryId: first.practiceMemoryId! });
     const again = await firstRunFor({ actorUserId: "owner", orgId, businessName: "Practice Co", packId: "general" });
     expect(again.practiceMemoryId).toBeNull();
+  });
+
+  it("redacts emails and provider keys on library titles", async () => {
+    const { orgId } = await createOrg({ actorUserId: "owner", name: "Library Co" });
+    const raw = "client@example.test sk-ant-api03-abcdefghijklmnopqrstuvwxyz0123456789";
+    const saved = await saveArtifact({ actorUserId: "owner", orgId, title: raw });
+    expect(saved.title).not.toMatch(/example\.test|sk-ant/);
+    const listed = await listArtifacts({ actorUserId: "owner", orgId });
+    const opened = await readArtifactByToken({ actorUserId: "owner", orgId, token: saved.token });
+    expect(JSON.stringify({ listed, opened })).not.toMatch(/example\.test|sk-ant/);
+    expect(opened.title).toMatch(/\[email\]|\[REDACTED\]/);
+  });
+
+  it("limits the money digest to the last 7 days and stores the cap in cents", async () => {
+    const now = new Date("2026-11-07T15:00:00Z");
+    const { orgId } = await createOrg({ actorUserId: "owner", name: "Money Co" });
+    await withTenant(orgId, (tx) => tx.insert(invoices).values([
+      { tenantId: orgId, provider: "fake", externalId: "old", status: "open", amountDueCents: 9999, createdAt: new Date("2026-10-01T00:00:00Z") },
+      { tenantId: orgId, provider: "fake", externalId: "open", status: "open", amountDueCents: 2500, createdAt: new Date("2026-11-06T00:00:00Z") },
+      { tenantId: orgId, provider: "fake", externalId: "paid", status: "paid", amountDueCents: 4000, createdAt: new Date("2026-11-05T00:00:00Z") },
+    ]));
+    const snap = await moneySnapshot({ actorUserId: "owner", orgId, now });
+    expect(snap.openCents).toBe(2500);
+    expect(snap.collectedCents).toBe(4000);
+    expect(snap.invoicedCents).toBe(6500);
+    expect(snap.autoPay).toBe(false);
+    expect((await saveMoneyCap({ actorUserId: "owner", orgId, weeklyCapDollars: 500 })).weeklyCapCents).toBe(50_000);
+  });
+
+  it("enforces quiet hours and the daily cap when deciding what to show", async () => {
+    const { orgId } = await createOrg({ actorUserId: "owner", name: "Notify Co" });
+    await saveNotifyPrefs({ actorUserId: "owner", orgId, quietStart: 21, quietEnd: 8, cap: 1 });
+    const items = [{ id: "a", tier: 2 }, { id: "b", tier: 2 }];
+    const quiet = await deliverNotifications({ actorUserId: "owner", orgId, items, now: new Date("2026-11-07T03:00:00Z") });
+    expect(quiet.quiet).toBe(true);
+    expect(quiet.now).toEqual([]);
+    expect(quiet.brief.map((item) => item.id)).toEqual(["a", "b"]);
+    const day = new Date("2026-11-07T16:00:00Z");
+    const first = await deliverNotifications({ actorUserId: "owner", orgId, items, now: day });
+    expect(first.quiet).toBe(false);
+    expect(first.now.map((item) => item.id)).toEqual(["a"]);
+    expect(first.brief.map((item) => item.id)).toEqual(["b"]);
+    const again = await deliverNotifications({ actorUserId: "owner", orgId, items: [...items, { id: "c", tier: 2 }], now: day });
+    expect(again.now.map((item) => item.id)).toEqual(["a"]);
+    expect(again.brief.map((item) => item.id).sort()).toEqual(["b", "c"]);
+  });
+
+  it("starts a suggested chip as an approval-gated task", async () => {
+    const { orgId } = await createOrg({ actorUserId: "owner", name: "Chip Co" });
+    await createAgent({ actorUserId: "owner", orgId, spec: { kind: "inbox", displayName: "Inbox", instructions: "x", tools: [{ name: "mock.send_email", maxTier: 2 }, { name: "memory.propose_fact", maxTier: 2 }] } });
+    const started = await startChipAction({ actorUserId: "owner", orgId, kind: "follow_up", label: "Draft a follow-up for client@example.test" });
+    expect(started.tier).toBeGreaterThanOrEqual(2);
+    expect(started.tool).toBe("mock.send_email");
+    expect(await runTask(orgId, started.taskId)).toBe("WAITING_FOR_APPROVAL");
+    const [approval] = await withTenant(orgId, (tx) => tx.select().from(approvalRequests));
+    expect(approval).toMatchObject({ tier: 2, toolName: "mock.send_email", status: "pending" });
+    expect(JSON.stringify(approval)).not.toMatch(/client@example\.test|sk-ant/);
+  });
+
+  it("binds a takeover draft into the run that resumes", async () => {
+    const model = new MockModelProvider((req) => (req.purpose === "classify" ? { text: "inbox" } : {}));
+    configureEngine({ router: new ModelRouter([model], "mock"), tools: new ToolRegistry().register(...memoryTools(), ...mockTools(new MockLedger())) });
+    const { orgId } = await createOrg({ actorUserId: "owner", name: "Draft Co" });
+    await createAgent({ actorUserId: "owner", orgId, spec: { kind: "inbox", displayName: "Inbox", instructions: "Draft only.", tools: [{ name: "memory.note", maxTier: 1 }] } });
+    const { taskId } = await createTask({ actorUserId: "owner", orgId, intent: "Reply to the customer" });
+    await pauseTask({ actorUserId: "owner", orgId, taskId });
+    await takeOverDraft({ actorUserId: "owner", orgId, taskId, text: "Use this exact draft and do not send it." });
+    const back = await handBack({ actorUserId: "owner", orgId, taskId });
+    expect(back).toMatchObject({ sent: false, bound: true });
+    const [row] = await withTenant(orgId, (tx) => tx.select().from(tasks).where(eq(tasks.id, taskId)));
+    expect(row?.input).toMatchObject({ ownerDraft: "Use this exact draft and do not send it." });
+    await runTask(orgId, taskId);
+    const prompt = model.calls.find((call) => call.purpose === "plan")?.messages[0]?.content ?? "";
+    expect(prompt).toContain("Use this exact draft and do not send it.");
   });
 
   it("drafts opportunities and batches notifications", () => {

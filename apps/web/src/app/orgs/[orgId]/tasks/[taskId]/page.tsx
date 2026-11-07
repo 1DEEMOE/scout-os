@@ -54,8 +54,8 @@ export default async function TaskPage({ params }: { params: Promise<{ orgId: st
             </div>
             <ul aria-label="Suggested next steps" className="flex flex-col gap-2">
               {nextActionChips(taskLabel(task)).map((chip) => (
-                <li key={chip.label}>
-                  <ActionButton path="memory.add" input={{ orgId, content: `${chip.label}. Nothing is sent.` }} label={chip.label} variant="quiet" />
+                <li key={chip.kind}>
+                  <ActionButton path="kimi.chip" input={{ orgId, taskId, kind: chip.kind, label: chip.label }} label={chip.label} variant="quiet" redirectToTask={{ orgId }} />
                 </li>
               ))}
             </ul>

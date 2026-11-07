@@ -1,4 +1,4 @@
-import { AppError, listArtifacts, readArtifactByToken } from "@wos/core";
+import { AppError, listArtifacts, readArtifactByToken, scrubPii } from "@wos/core";
 import { ActionForm } from "../../../actions";
 import { orgContext } from "@/server/org-context";
 import { Card, Empty, inputCls, PageTitle } from "../../../ui";
@@ -23,14 +23,14 @@ export default async function LibraryPage({ params, searchParams }: { params: Pr
   return (
     <div className="flex flex-col gap-8">
       <PageTitle sub="Notes you asked Scout to keep. Each link expires after a week.">Library</PageTitle>
-      {opened && <p role="status" className="text-base text-accent">Opened “{opened.title}”. The link is still good.</p>}
+      {opened && <p role="status" className="text-base text-accent">Opened “{shown(opened.title)}”. The link is still good.</p>}
       {expired && <p role="alert" className="text-base text-danger">That link has expired.</p>}
       <Card title="Saved notes">
         {artifacts.length === 0 ? <Empty>Nothing saved yet.</Empty> : (
           <ul className="flex flex-col gap-3">
             {artifacts.map((item) => (
               <li key={item.id} className="flex flex-col gap-1 rounded-2xl border border-line px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
-                <span className="text-lg">{item.title}</span>
+                <span className="text-lg">{shown(item.title)}</span>
                 <a className="text-base text-accent underline" href={`/orgs/${orgId}/library?token=${item.token}`}>Open · expires {item.expiresAt.slice(0, 10)}</a>
               </li>
             ))}
@@ -47,4 +47,9 @@ export default async function LibraryPage({ params, searchParams }: { params: Pr
       )}
     </div>
   );
+}
+
+function shown(value: string): string {
+  const clean = scrubPii(value);
+  return typeof clean === "string" && clean.trim() ? clean : "Untitled";
 }
