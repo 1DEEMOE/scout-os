@@ -1,5 +1,6 @@
 import { getPauseState, handoffReliability, listIntegrations, listInvitations, listMailboxes, listMembers } from "@wos/core";
 import { orgContext } from "@/server/org-context";
+import { TextSizeToggle, ThemeToggle } from "../../../theme";
 import { ActionButton, ActionForm } from "../../../actions";
 import { Badge, Card, Empty, inputCls, PageTitle, quietButtonCls, When } from "../../../ui";
 import { InviteForm } from "./invite-form";
@@ -23,6 +24,13 @@ export default async function SettingsPage({ params, searchParams }: { params: P
   return (
     <div className="flex flex-col gap-6">
       <PageTitle>Settings</PageTitle>
+      <Card title="Reading and color">
+        <div className="flex flex-col gap-4">
+          <p className="text-base text-muted">Reading size starts at 18px. It is saved in this browser only.</p>
+          <TextSizeToggle />
+          <ThemeToggle />
+        </div>
+      </Card>
       <Card title="How Scout reaches you">
         <div className="flex flex-col gap-2 text-base">
           <a className="text-accent underline" href={`/orgs/${orgId}/settings/notifications`}>Notification settings</a>

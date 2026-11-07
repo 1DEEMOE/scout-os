@@ -65,7 +65,7 @@ export function MockBadge() {
 
 export function Card({ title, children, actions }: { title?: React.ReactNode; children: React.ReactNode; actions?: React.ReactNode }) {
   return (
-    <section className="rounded-[var(--radius-card)] border border-line bg-surface p-6 sm:p-7">
+    <section className="rounded-[var(--radius-card)] border border-line bg-surface p-6 shadow-[var(--shadow-raised)] sm:p-8">
       {(title || actions) && (
         <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
           {title && <h2 className="text-xl font-semibold">{title}</h2>}

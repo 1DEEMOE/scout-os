@@ -167,7 +167,7 @@ test.describe("chat-first Scout OS", () => {
     await page.getByRole("group", { name: "Theme" }).getByRole("button", { name: "Dark" }).click();
     await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
     const bg = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
-    expect(bg).toBe("rgb(15, 18, 22)");
+    expect(bg).toBe("rgb(20, 17, 14)");
     await page.reload();
     // Applied before first paint by the inline boot script, so no light flash.
     await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
@@ -187,7 +187,7 @@ test.describe("chat-first Scout OS", () => {
     const page = await ctx.newPage();
     await page.goto("/sign-in");
     const bg = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
-    expect(bg).toBe("rgb(15, 18, 22)");
+    expect(bg).toBe("rgb(20, 17, 14)");
     await expectAccessible(page, "sign-in (system dark)");
     await ctx.close();
   });

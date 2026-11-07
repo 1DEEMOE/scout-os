@@ -2,7 +2,7 @@
 import { usePathname } from "next/navigation";
 import { BRAND } from "@/brand";
 import { BrandMark } from "./brand-mark";
-import { ThemeToggle } from "./theme";
+import { TextSizeToggle, ThemeToggle } from "./theme";
 
 /**
  * Org pages bring their own shell (sidebar, chat). Everything else (sign-in,
@@ -14,10 +14,11 @@ export function Frame({ children }: { children: React.ReactNode }) {
   return (
     <>
       <header className="border-b border-line bg-surface">
-        <div className="mx-auto flex max-w-5xl items-center justify-between gap-4 px-6 py-4 sm:px-8">
+        <div className="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-3 px-6 py-4 sm:px-8">
           <a href="/orgs" aria-label={`${BRAND.name} home`} className="rounded-lg"><BrandMark /></a>
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center justify-end gap-2">
             <span className="hidden rounded-full border border-line px-3 py-1 text-sm text-muted sm:inline">Development build</span>
+            <TextSizeToggle />
             <ThemeToggle />
           </div>
         </div>

@@ -61,6 +61,27 @@ describe("design token contrast (WCAG 2.2 AA)", () => {
     }
   });
 
+  it("industry accents stay at least AA on every surface", () => {
+    const lightPaper = themes.light.paper!;
+    const lightSurface = themes.light.surface!;
+    const lightSoft = themes.light.soft!;
+    const darkPaper = themes.dark.paper!;
+    const darkSurface = themes.dark.surface!;
+    const darkSoft = themes.dark.soft!;
+    for (const match of css.matchAll(/html\[data-accent="([a-z]+)"\] \{([^}]+)\}/g)) {
+      const colors = Object.fromEntries([...match[2]!.matchAll(/--color-([a-z-]+):\s*(#[0-9a-f]{6})/gi)].map((m) => [m[1]!, m[2]!]));
+      for (const bg of [lightPaper, lightSurface, lightSoft]) expect(ratio(colors.accent!, bg)).toBeGreaterThanOrEqual(4.5);
+      expect(ratio(colors["on-accent"]!, colors.accent!)).toBeGreaterThanOrEqual(4.5);
+      expect(ratio(colors.accent!, colors["accent-soft"]!)).toBeGreaterThanOrEqual(4.5);
+    }
+    for (const match of css.matchAll(/:root\[data-theme="dark"\]\[data-accent="([a-z]+)"\] \{([^}]+)\}/g)) {
+      const colors = Object.fromEntries([...match[2]!.matchAll(/--color-([a-z-]+):\s*(#[0-9a-f]{6})/gi)].map((m) => [m[1]!, m[2]!]));
+      for (const bg of [darkPaper, darkSurface, darkSoft]) expect(ratio(colors.accent!, bg)).toBeGreaterThanOrEqual(4.5);
+      expect(ratio(colors["on-accent"]!, colors.accent!)).toBeGreaterThanOrEqual(4.5);
+      expect(ratio(colors.accent!, colors["accent-soft"]!)).toBeGreaterThanOrEqual(4.5);
+    }
+  });
+
   it("the system-dark block matches the explicit dark theme", () => {
     const sys = css.slice(css.indexOf(':root:not([data-theme="light"])'));
     const sysVals = Object.fromEntries([...sys.slice(0, sys.indexOf("}")).matchAll(/--color-([a-z-]+):\s*(#[0-9a-f]{6})/gi)].map((m) => [m[1]!, m[2]!]));
