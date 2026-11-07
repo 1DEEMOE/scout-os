@@ -3,7 +3,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import { BrandMark } from "../../brand-mark";
 import { SignOutButton } from "../../sign-out-button";
-import { PaletteToggle, RAIL_KEY, TextSizeToggle, ThemeToggle } from "../../theme";
+import { RAIL_KEY, TextSizeToggle, ThemeToggle } from "../../theme";
 import { CommandPalette, openPalette, ShortcutHint, TOGGLE_RAIL } from "./command-palette";
 import { Icon } from "./icons";
 import { isActive, moreGroups, primaryItems, type NavGroup, type NavItem, type ShellData } from "./nav-model";
@@ -214,8 +214,6 @@ function ProfileItems({ d, onNavigate }: { d: ShellData; onNavigate?: () => void
         <p className="px-1 text-sm text-muted">Reading size</p>
         <TextSizeToggle />
         <ThemeToggle />
-        <p className="px-1 text-sm text-muted">Color palette</p>
-        <PaletteToggle />
       </div>
       <div className="px-1 pt-1 pb-1 [&_button]:w-full [&_button]:justify-center"><SignOutButton /></div>
     </>
@@ -441,7 +439,7 @@ export function Shell({ data, banners, children }: { data: ShellData; banners: R
 
   return (
     <div className="min-h-screen lg:grid lg:grid-cols-[var(--sidebar-w)_1fr] lg:transition-[grid-template-columns] lg:duration-200">
-      <a href="#main" className="sr-only z-50 rounded-full bg-accent px-5 py-3 font-medium text-on-accent focus:not-sr-only focus:fixed focus:top-3 focus:left-3">Skip to content</a>
+      <a href="#main" className="accent-fill sr-only z-50 rounded-full bg-accent px-5 py-3 font-medium text-on-accent focus:not-sr-only focus:fixed focus:top-3 focus:left-3">Skip to content</a>
       <aside id="sidebar" className="sticky top-0 hidden h-screen overflow-y-auto border-r border-chrome-line bg-chrome text-chrome-ink lg:block rail:overflow-visible">
         <Sidebar d={data} path={path} />
       </aside>

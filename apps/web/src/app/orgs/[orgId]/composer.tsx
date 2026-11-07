@@ -100,7 +100,7 @@ export function Composer({ orgId, threadId, suggestions = [], disabledReason }: 
         <button
           type="submit"
           disabled={busy || !text.trim() || !!disabledReason}
-          className="inline-flex min-h-11 min-w-11 items-center justify-center gap-2 rounded-full bg-accent px-5 font-medium text-on-accent transition-[filter,opacity] duration-150 hover:brightness-110 disabled:opacity-40"
+          className="accent-fill inline-flex min-h-11 min-w-11 items-center justify-center gap-2 rounded-full bg-accent px-5 font-medium text-on-accent transition-[filter,opacity] duration-150 hover:brightness-110 disabled:opacity-40"
         >
           {busy ? "Sending…" : "Send"}
         </button>

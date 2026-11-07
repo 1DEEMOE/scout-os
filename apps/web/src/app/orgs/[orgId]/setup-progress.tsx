@@ -30,7 +30,7 @@ export function SetupProgress({ orgId, done, total, nextLabel, minutesLeft }: { 
         </div>
       </div>
       <div className="flex shrink-0 items-center gap-2">
-        <a href={`/orgs/${orgId}/welcome`} className="inline-flex min-h-11 items-center rounded-full bg-accent px-5 font-medium text-on-accent transition-[filter] duration-150 hover:brightness-110">
+        <a href={`/orgs/${orgId}/welcome`} className="accent-fill inline-flex min-h-11 items-center rounded-full bg-accent px-5 font-medium text-on-accent transition-[filter] duration-150 hover:brightness-110">
           Continue setup
         </a>
         <button

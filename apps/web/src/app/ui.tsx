@@ -2,7 +2,7 @@
 export const inputCls =
   "min-h-11 w-full rounded-[var(--radius-control)] border border-line bg-surface px-4 py-2.5 text-base text-ink placeholder:text-muted outline-none transition-[border-color,box-shadow] duration-150 focus:border-accent focus:ring-4 focus:ring-accent/15";
 export const buttonCls =
-  "inline-flex min-h-11 items-center justify-center gap-2 rounded-full bg-accent px-5 py-2.5 text-base font-medium text-on-accent transition-[filter,transform] duration-150 hover:brightness-110 active:scale-[0.98] disabled:opacity-50";
+  "accent-fill inline-flex min-h-11 items-center justify-center gap-2 rounded-full bg-accent px-5 py-2.5 text-base font-medium text-on-accent transition-[filter,transform] duration-150 hover:brightness-110 active:scale-[0.98] disabled:opacity-50";
 export const quietButtonCls =
   "inline-flex min-h-11 items-center justify-center gap-2 rounded-full border border-line bg-surface px-4 py-2.5 text-base text-ink transition-colors duration-150 hover:bg-soft disabled:opacity-50";
 export const dangerButtonCls =

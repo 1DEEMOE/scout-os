@@ -6,7 +6,7 @@ export default function RootError({ reset }: { error: Error & { digest?: string 
       <h1 className="text-display font-semibold">Something went wrong</h1>
       <p>This page didn&apos;t load. Your approvals, routines, and settings are unchanged.</p>
       <div className="flex flex-wrap gap-3">
-        <button type="button" onClick={() => reset()} className="inline-flex min-h-11 items-center rounded-full bg-accent px-5 text-on-accent">Try again</button>
+        <button type="button" onClick={() => reset()} className="accent-fill inline-flex min-h-11 items-center rounded-full bg-accent px-5 text-on-accent">Try again</button>
         <a href="/orgs" className="inline-flex min-h-11 items-center rounded-full border border-line px-5">Back to workspaces</a>
       </div>
     </main>

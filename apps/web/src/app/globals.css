@@ -1,6 +1,5 @@
 @import "tailwindcss";
 @import "@fontsource-variable/schibsted-grotesk";
-@import "./palettes.css";
 
 /* Desktop icon rail: set on <html data-rail="1"> before first paint (NAV_BOOT), so it never flashes. */
 @custom-variant rail {
@@ -12,34 +11,36 @@
 }
 
 /*
- * Scout OS design tokens. Signature palette: Kiln, darkened.
- * Light mode keeps a warm reading surface and a near-black espresso bar.
- * Dark mode is near-black throughout. The accent is burnished bronze / oxblood,
- * not a blue or purple. Body ink on paper is >= 7:1. Secondary text is >= 4.5:1.
+ * Scout OS design tokens. Signature palette: Nova.
+ * Cool paper, an ink navigation bar, and a violet accent.
+ * The violet-to-coral gradient is only for primary fills (.accent-fill).
+ * Body text, badges, meters, and charts stay solid. Body ink on paper is >= 7:1.
  * Checked by apps/web/test/contrast.test.ts.
  * Theme: data-theme="light" | "dark" on <html>, or follow the system when unset.
  * Reading size: data-text="large" | "larger" (default is 18px).
- * Industry: data-accent shifts only the accent trio. Status still has words.
+ * Industry: data-accent shifts only the accent. Status still has words.
  */
 @theme {
-  --color-paper: #efe4d4;
-  --color-surface: #f7f1e6;
-  --color-soft: #e2d3be;
-  --color-ink: #140e0b;
-  --color-muted: #5a4a3e;
-  --color-line: #d4c4ae;
-  --color-accent: #6e2a1c;
-  --color-accent-soft: #ead3c4;
-  --color-on-accent: #fff6ee;
-  --color-danger: #7e1a14;
-  --color-warn: #6a4300;
-  --color-caution: #6e3410;
-  --color-chrome: #120e0c;
-  --color-chrome-ink: #f6eee6;
-  --color-chrome-muted: #d4c4b4;
-  --color-chrome-accent: #e8b56a;
-  --color-chrome-soft: #2a221c;
-  --color-chrome-line: #3c322c;
+  --color-paper: #f7f6f8;
+  --color-surface: #ffffff;
+  --color-soft: #ece7f1;
+  --color-ink: #16141c;
+  --color-muted: #4a4458;
+  --color-line: #ddd6e6;
+  --color-accent: #6d28d9;
+  --color-accent-soft: #f3e9ff;
+  --color-on-accent: #ffffff;
+  --color-accent-from: #6d28d9;
+  --color-accent-to: #e11d48;
+  --color-danger: #b42318;
+  --color-warn: #8a4b00;
+  --color-caution: #9a3412;
+  --color-chrome: #14121a;
+  --color-chrome-ink: #f7f4fb;
+  --color-chrome-muted: #d4cce0;
+  --color-chrome-accent: #e879f9;
+  --color-chrome-soft: #2a2434;
+  --color-chrome-line: #3a3348;
 
   --font-sans: "Schibsted Grotesk Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
 
@@ -62,92 +63,101 @@
   --radius-card: 1.5rem;
   --radius-control: 0.875rem;
 
-  --shadow-raised: 0 1px 2px rgb(28 20 15 / 0.05), 0 12px 28px -14px rgb(28 20 15 / 0.14);
+  --shadow-raised: 0 1px 2px rgb(22 20 28 / 0.06), 0 12px 28px -14px rgb(22 20 28 / 0.16);
 
   --ease-calm: cubic-bezier(0.2, 0.7, 0.2, 1);
   --motion-rise: 220ms;
 }
 
 :root[data-theme="dark"] {
-  --color-paper: #0e0c0a;
-  --color-surface: #171310;
-  --color-soft: #261e18;
-  --color-ink: #f7f1e8;
-  --color-muted: #d4c4b2;
-  --color-line: #3a322a;
-  --color-accent: #e2b06a;
-  --color-accent-soft: #3a2a18;
-  --color-on-accent: #24160a;
-  --color-danger: #f0b0a6;
-  --color-warn: #e8c06a;
-  --color-caution: #e8b08a;
-  --color-chrome: #0e0c0a;
-  --color-chrome-ink: #f7f1e8;
-  --color-chrome-muted: #d4c4b2;
-  --color-chrome-accent: #e2b06a;
-  --color-chrome-soft: #261e18;
-  --color-chrome-line: #3a322a;
+  --color-paper: #100e14;
+  --color-surface: #1a1622;
+  --color-soft: #2a2436;
+  --color-ink: #f6f3fb;
+  --color-muted: #d0c6de;
+  --color-line: #3a3348;
+  --color-accent: #c4b5fd;
+  --color-accent-soft: #342848;
+  --color-on-accent: #1a0a14;
+  --color-accent-from: #c4b5fd;
+  --color-accent-to: #fda4af;
+  --color-danger: #ffb4a8;
+  --color-warn: #f0c36a;
+  --color-caution: #f5b48a;
+  --color-chrome: #100e14;
+  --color-chrome-ink: #f6f3fb;
+  --color-chrome-muted: #d0c6de;
+  --color-chrome-accent: #e879f9;
+  --color-chrome-soft: #2a2436;
+  --color-chrome-line: #3a3348;
   --shadow-raised: 0 1px 2px rgb(0 0 0 / 0.4), 0 16px 36px -16px rgb(0 0 0 / 0.7);
   color-scheme: dark;
 }
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --color-paper: #0e0c0a;
-    --color-surface: #171310;
-    --color-soft: #261e18;
-    --color-ink: #f7f1e8;
-    --color-muted: #d4c4b2;
-    --color-line: #3a322a;
-    --color-accent: #e2b06a;
-    --color-accent-soft: #3a2a18;
-    --color-on-accent: #24160a;
-    --color-danger: #f0b0a6;
-    --color-warn: #e8c06a;
-    --color-caution: #e8b08a;
-    --color-chrome: #0e0c0a;
-    --color-chrome-ink: #f7f1e8;
-    --color-chrome-muted: #d4c4b2;
-    --color-chrome-accent: #e2b06a;
-    --color-chrome-soft: #261e18;
-    --color-chrome-line: #3a322a;
+    --color-paper: #100e14;
+    --color-surface: #1a1622;
+    --color-soft: #2a2436;
+    --color-ink: #f6f3fb;
+    --color-muted: #d0c6de;
+    --color-line: #3a3348;
+    --color-accent: #c4b5fd;
+    --color-accent-soft: #342848;
+    --color-on-accent: #1a0a14;
+    --color-accent-from: #c4b5fd;
+    --color-accent-to: #fda4af;
+    --color-danger: #ffb4a8;
+    --color-warn: #f0c36a;
+    --color-caution: #f5b48a;
+    --color-chrome: #100e14;
+    --color-chrome-ink: #f6f3fb;
+    --color-chrome-muted: #d0c6de;
+    --color-chrome-accent: #e879f9;
+    --color-chrome-soft: #2a2436;
+    --color-chrome-line: #3a3348;
     --shadow-raised: 0 1px 2px rgb(0 0 0 / 0.4), 0 16px 36px -16px rgb(0 0 0 / 0.7);
     color-scheme: dark;
   }
-  :root:not([data-theme="light"])[data-accent="home"] { --color-accent: #9ad4bc; --color-accent-soft: #1a2e26; --color-on-accent: #102018; }
-  :root:not([data-theme="light"])[data-accent="shops"] { --color-accent: #e2b06a; --color-accent-soft: #3a2a18; --color-on-accent: #24160a; }
-  :root:not([data-theme="light"])[data-accent="beauty"] { --color-accent: #f0b0c0; --color-accent-soft: #3a2028; --color-on-accent: #2a1018; }
-  :root:not([data-theme="light"])[data-accent="health"] { --color-accent: #9ad4c8; --color-accent-soft: #16302c; --color-on-accent: #0e221e; }
-  :root:not([data-theme="light"])[data-accent="pets"] { --color-accent: #e8c56a; --color-accent-soft: #3a2c14; --color-on-accent: #2a1c08; }
-  :root:not([data-theme="light"])[data-accent="food"] { --color-accent: #f0b8ae; --color-accent-soft: #3a221c; --color-on-accent: #2a120c; }
-  :root:not([data-theme="light"])[data-accent="retail"] { --color-accent: #d0d498; --color-accent-soft: #2a2e18; --color-on-accent: #1a1e0c; }
-  :root:not([data-theme="light"])[data-accent="professional"] { --color-accent: #e6c898; --color-accent-soft: #332816; --color-on-accent: #241c0c; }
-  :root:not([data-theme="light"])[data-accent="education"] { --color-accent: #e2b08a; --color-accent-soft: #3a2a18; --color-on-accent: #24160a; }
-  :root:not([data-theme="light"])[data-accent="events"] { --color-accent: #e8b0c8; --color-accent-soft: #3a2030; --color-on-accent: #2a101c; }
+  :root:not([data-theme="light"])[data-accent="home"] { --color-accent: #7ddec0; --color-accent-soft: #143028; --color-on-accent: #1a0a14; --color-accent-from: #7ddec0; --color-accent-to: #fda4af; }
+  :root:not([data-theme="light"])[data-accent="shops"] { --color-accent: #ffb086; --color-accent-soft: #3a2418; --color-on-accent: #1a0a14; --color-accent-from: #ffb086; --color-accent-to: #fda4af; }
+  :root:not([data-theme="light"])[data-accent="beauty"] { --color-accent: #ffb0cc; --color-accent-soft: #3a1828; --color-on-accent: #1a0a14; --color-accent-from: #ffb0cc; --color-accent-to: #fda4af; }
+  :root:not([data-theme="light"])[data-accent="health"] { --color-accent: #7ee0d6; --color-accent-soft: #12302c; --color-on-accent: #1a0a14; --color-accent-from: #7ee0d6; --color-accent-to: #fda4af; }
+  :root:not([data-theme="light"])[data-accent="pets"] { --color-accent: #f0c36a; --color-accent-soft: #3a2c12; --color-on-accent: #1a0a14; --color-accent-from: #f0c36a; --color-accent-to: #fda4af; }
+  :root:not([data-theme="light"])[data-accent="food"] { --color-accent: #ffb0a4; --color-accent-soft: #3a1c18; --color-on-accent: #1a0a14; --color-accent-from: #ffb0a4; --color-accent-to: #fda4af; }
+  :root:not([data-theme="light"])[data-accent="retail"] { --color-accent: #c6e07a; --color-accent-soft: #243014; --color-on-accent: #1a0a14; --color-accent-from: #c6e07a; --color-accent-to: #fda4af; }
+  :root:not([data-theme="light"])[data-accent="professional"] { --color-accent: #a8c4ff; --color-accent-soft: #1a2444; --color-on-accent: #1a0a14; --color-accent-from: #a8c4ff; --color-accent-to: #fda4af; }
+  :root:not([data-theme="light"])[data-accent="education"] { --color-accent: #d2b4ff; --color-accent-soft: #2a1844; --color-on-accent: #1a0a14; --color-accent-from: #d2b4ff; --color-accent-to: #fda4af; }
+  :root:not([data-theme="light"])[data-accent="events"] { --color-accent: #f0a0e8; --color-accent-soft: #3a1840; --color-on-accent: #1a0a14; --color-accent-from: #f0a0e8; --color-accent-to: #fda4af; }
 }
 
-/* Light industry accents. Words still name the status. Only the accent hue moves. */
-html[data-accent="home"] { --color-accent: #1a5340; --color-accent-soft: #d4e6dc; --color-on-accent: #fff6ee; }
-html[data-accent="shops"] { --color-accent: #7a3e14; --color-accent-soft: #f0dcc8; --color-on-accent: #fff6ee; }
-html[data-accent="beauty"] { --color-accent: #7a2844; --color-accent-soft: #f3d5e0; --color-on-accent: #fff6ee; }
-html[data-accent="health"] { --color-accent: #174e48; --color-accent-soft: #d2e8e4; --color-on-accent: #fff6ee; }
-html[data-accent="pets"] { --color-accent: #6e4408; --color-accent-soft: #f3e4c4; --color-on-accent: #fff6ee; }
-html[data-accent="food"] { --color-accent: #7c261c; --color-accent-soft: #f3d6d0; --color-on-accent: #fff6ee; }
-html[data-accent="retail"] { --color-accent: #454c1c; --color-accent-soft: #e2e6c8; --color-on-accent: #fff6ee; }
-html[data-accent="professional"] { --color-accent: #5e3c10; --color-accent-soft: #eadcc4; --color-on-accent: #fff6ee; }
-html[data-accent="education"] { --color-accent: #6e3220; --color-accent-soft: #f0d8ce; --color-on-accent: #fff6ee; }
-html[data-accent="events"] { --color-accent: #5c1c40; --color-accent-soft: #f0d0e0; --color-on-accent: #fff6ee; }
+/* Industry accents. Words still name the status. Only the accent hue moves. */
+html[data-accent="home"] { --color-accent: #0b6a3c; --color-accent-soft: #d8f3e4; --color-on-accent: #ffffff; --color-accent-from: #0b6a3c; --color-accent-to: #e11d48; }
+html[data-accent="shops"] { --color-accent: #a83208; --color-accent-soft: #ffe8dc; --color-on-accent: #ffffff; --color-accent-from: #a83208; --color-accent-to: #e11d48; }
+html[data-accent="beauty"] { --color-accent: #a81450; --color-accent-soft: #fde4f0; --color-on-accent: #ffffff; --color-accent-from: #a81450; --color-accent-to: #e11d48; }
+html[data-accent="health"] { --color-accent: #0c6860; --color-accent-soft: #d4f4f0; --color-on-accent: #ffffff; --color-accent-from: #0c6860; --color-accent-to: #e11d48; }
+html[data-accent="pets"] { --color-accent: #8a4e04; --color-accent-soft: #feefd0; --color-on-accent: #ffffff; --color-accent-from: #8a4e04; --color-accent-to: #e11d48; }
+html[data-accent="food"] { --color-accent: #b01c14; --color-accent-soft: #fde4de; --color-on-accent: #ffffff; --color-accent-from: #b01c14; --color-accent-to: #e11d48; }
+html[data-accent="retail"] { --color-accent: #3f6a0c; --color-accent-soft: #e8f5cc; --color-on-accent: #ffffff; --color-accent-from: #3f6a0c; --color-accent-to: #e11d48; }
+html[data-accent="professional"] { --color-accent: #1d4ed8; --color-accent-soft: #dce8ff; --color-on-accent: #ffffff; --color-accent-from: #1d4ed8; --color-accent-to: #e11d48; }
+html[data-accent="education"] { --color-accent: #6d28d9; --color-accent-soft: #f0e6ff; --color-on-accent: #ffffff; --color-accent-from: #6d28d9; --color-accent-to: #e11d48; }
+html[data-accent="events"] { --color-accent: #8e1898; --color-accent-soft: #f8e4ff; --color-on-accent: #ffffff; --color-accent-from: #8e1898; --color-accent-to: #e11d48; }
 
-:root[data-theme="dark"][data-accent="home"] { --color-accent: #9ad4bc; --color-accent-soft: #1a2e26; --color-on-accent: #102018; }
-:root[data-theme="dark"][data-accent="shops"] { --color-accent: #e2b06a; --color-accent-soft: #3a2a18; --color-on-accent: #24160a; }
-:root[data-theme="dark"][data-accent="beauty"] { --color-accent: #f0b0c0; --color-accent-soft: #3a2028; --color-on-accent: #2a1018; }
-:root[data-theme="dark"][data-accent="health"] { --color-accent: #9ad4c8; --color-accent-soft: #16302c; --color-on-accent: #0e221e; }
-:root[data-theme="dark"][data-accent="pets"] { --color-accent: #e8c56a; --color-accent-soft: #3a2c14; --color-on-accent: #2a1c08; }
-:root[data-theme="dark"][data-accent="food"] { --color-accent: #f0b8ae; --color-accent-soft: #3a221c; --color-on-accent: #2a120c; }
-:root[data-theme="dark"][data-accent="retail"] { --color-accent: #d0d498; --color-accent-soft: #2a2e18; --color-on-accent: #1a1e0c; }
-:root[data-theme="dark"][data-accent="professional"] { --color-accent: #e6c898; --color-accent-soft: #332816; --color-on-accent: #241c0c; }
-:root[data-theme="dark"][data-accent="education"] { --color-accent: #e2b08a; --color-accent-soft: #3a2a18; --color-on-accent: #24160a; }
-:root[data-theme="dark"][data-accent="events"] { --color-accent: #e8b0c8; --color-accent-soft: #3a2030; --color-on-accent: #2a101c; }
+:root[data-theme="dark"][data-accent="home"] { --color-accent: #7ddec0; --color-accent-soft: #143028; --color-on-accent: #1a0a14; --color-accent-from: #7ddec0; --color-accent-to: #fda4af; }
+:root[data-theme="dark"][data-accent="shops"] { --color-accent: #ffb086; --color-accent-soft: #3a2418; --color-on-accent: #1a0a14; --color-accent-from: #ffb086; --color-accent-to: #fda4af; }
+:root[data-theme="dark"][data-accent="beauty"] { --color-accent: #ffb0cc; --color-accent-soft: #3a1828; --color-on-accent: #1a0a14; --color-accent-from: #ffb0cc; --color-accent-to: #fda4af; }
+:root[data-theme="dark"][data-accent="health"] { --color-accent: #7ee0d6; --color-accent-soft: #12302c; --color-on-accent: #1a0a14; --color-accent-from: #7ee0d6; --color-accent-to: #fda4af; }
+:root[data-theme="dark"][data-accent="pets"] { --color-accent: #f0c36a; --color-accent-soft: #3a2c12; --color-on-accent: #1a0a14; --color-accent-from: #f0c36a; --color-accent-to: #fda4af; }
+:root[data-theme="dark"][data-accent="food"] { --color-accent: #ffb0a4; --color-accent-soft: #3a1c18; --color-on-accent: #1a0a14; --color-accent-from: #ffb0a4; --color-accent-to: #fda4af; }
+:root[data-theme="dark"][data-accent="retail"] { --color-accent: #c6e07a; --color-accent-soft: #243014; --color-on-accent: #1a0a14; --color-accent-from: #c6e07a; --color-accent-to: #fda4af; }
+:root[data-theme="dark"][data-accent="professional"] { --color-accent: #a8c4ff; --color-accent-soft: #1a2444; --color-on-accent: #1a0a14; --color-accent-from: #a8c4ff; --color-accent-to: #fda4af; }
+:root[data-theme="dark"][data-accent="education"] { --color-accent: #d2b4ff; --color-accent-soft: #2a1844; --color-on-accent: #1a0a14; --color-accent-from: #d2b4ff; --color-accent-to: #fda4af; }
+:root[data-theme="dark"][data-accent="events"] { --color-accent: #f0a0e8; --color-accent-soft: #3a1840; --color-on-accent: #1a0a14; --color-accent-from: #f0a0e8; --color-accent-to: #fda4af; }
+
+/* Primary buttons and links only. Badges, meters, and charts stay a flat accent. */
+.accent-fill {
+  background-image: linear-gradient(105deg, var(--color-accent-from), var(--color-accent-to));
+}
 
 html {
   font-size: 16px;
