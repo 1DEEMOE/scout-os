@@ -103,6 +103,10 @@ export function moreGroups(d: ShellData): NavGroup[] {
       icon: "workspace",
       items: [
         { href: "/settings", label: "Settings", exact: true, keywords: "preferences pause agents" },
+        { href: "/settings/notifications", label: "Notifications", keywords: "quiet hours alerts cap" },
+        { href: "/settings/money", label: "Money digest", keywords: "invoices cap autopay spending" },
+        { href: "/goals", label: "This week", keywords: "goals weekly outcome" },
+        { href: "/library", label: "Library", keywords: "artifacts notes documents" },
         { href: "/settings#team", label: "Team", keywords: "members invite people roles" },
         { href: "/settings#connections", label: "Integrations", keywords: "connect gmail google hubspot stripe apps" },
         { href: "/settings/front-desk", label: "Front desk", keywords: "booking link appointments" },

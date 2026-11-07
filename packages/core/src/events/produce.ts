@@ -29,8 +29,10 @@ export function produceIntegration<T>(opts: {
   effect: (ctx: EffectContext) => Promise<T>;
   journal?: EventJournal;
   timeoutMs?: number;
-  /** Idempotent mock retry. Replay of a failed email, CRM, payment, or model call uses this. */
+  /** Idempotent mock retry. Stored only when `mock` is true and mock mode is on. */
   retry?: () => Promise<Record<string, unknown>>;
+  /** True only when the provider itself is a mock. Live providers must pass false. */
+  mock?: boolean;
 }): Promise<T> {
   const id = `${opts.tenantId}:${opts.idempotencyKey}`;
   const existing = inflightProduce.get(id);
@@ -48,8 +50,9 @@ async function runProduce<T>(opts: {
   journal?: EventJournal;
   timeoutMs?: number;
   retry?: () => Promise<Record<string, unknown>>;
+  mock?: boolean;
 }): Promise<T> {
-  if (opts.retry) rememberMockRetry(opts.tenantId, opts.idempotencyKey, opts.retry);
+  if (opts.retry) rememberMockRetry(opts.tenantId, opts.idempotencyKey, opts.retry, opts.mock === true);
   let value: T | undefined;
   let failure: unknown;
   const inner = opts.journal ?? integrationJournal();

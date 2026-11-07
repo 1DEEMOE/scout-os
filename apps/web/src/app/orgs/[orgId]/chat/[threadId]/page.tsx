@@ -4,6 +4,7 @@ import { orgContext } from "@/server/org-context";
 import { AutoRefresh } from "../../../../auto-refresh";
 import { Badge, TaskStatus } from "../../../../ui";
 import { ApprovalCard, PersonMessage, ScoutMessage, Transcript } from "../../chat-ui";
+import { RememberedChip } from "../../remembered-chip";
 import { Composer } from "../../composer";
 
 export const dynamic = "force-dynamic";
@@ -12,6 +13,12 @@ export const dynamic = "force-dynamic";
 const RUNNING = ["REQUESTED", "CLASSIFIED", "PLANNED", "POLICY_CHECKED", "ASSIGNED", "EXECUTING", "VERIFYING", "RETRY_SCHEDULED"];
 
 const TEAMMATE: Record<string, string> = { inbox: "Inbox", sales: "Pipeline", finance: "Billing", scout: "Scout", scheduling: "Scheduling", reporting: "Analyst", orchestrator: "Coordinator" };
+
+function parseRemembered(content: string): { memoryId: string; text: string } | null {
+  const match = /^\[\[kimi:remembered:([0-9a-f-]{36})\]\]Remembered: ([\s\S]+)$/.exec(content);
+  if (!match) return null;
+  return { memoryId: match[1]!, text: match[2]! };
+}
 
 export default async function ThreadPage({ params }: { params: Promise<{ orgId: string; threadId: string }> }) {
   const { orgId, threadId } = await params;
@@ -39,7 +46,12 @@ export default async function ThreadPage({ params }: { params: Promise<{ orgId: 
       <Transcript label="Conversation">
         {messages.map((m) => {
           const steps = delegations.filter((d) => d.messageId === m.id);
-          const body = <p className="break-words whitespace-pre-wrap">{m.content}</p>;
+          const remembered = parseRemembered(m.content);
+          const body = remembered ? (
+            <RememberedChip orgId={orgId} memoryId={remembered.memoryId} text={remembered.text} />
+          ) : (
+            <p className="break-words whitespace-pre-wrap">{m.content}</p>
+          );
           if (m.authorType === "user") {
             return (
               <PersonMessage key={m.id} name={m.authorUserId === userId ? "You" : m.authorName} at={m.createdAt}>

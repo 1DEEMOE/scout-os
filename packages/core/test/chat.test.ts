@@ -1,6 +1,6 @@
 import { eq } from "drizzle-orm";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
-import { approvalRequests, chatDelegations, closePool, organizationMembers, tasks, withTenant } from "@wos/db";
+import { approvalRequests, chatDelegations, closePool, organizationMembers, routines, tasks, withTenant } from "@wos/db";
 import {
   actionDigest,
   AppError,
@@ -62,6 +62,30 @@ describe("lead bot chat: delegation", () => {
 
     const actions = (await auditActions(h.orgId)).map((a) => `${a.action}:${a.outcome}`);
     expect(actions).toEqual(expect.arrayContaining(["chat.thread.create:success", "chat.message.send:success", "chat.lead.reply:success", "chat.delegate:success", "task.create:success"]));
+  });
+
+  it("remember, forget, and a Friday sentence do not call the model or send", async () => {
+    const threadId = await thread();
+    const remembered = await say("remember example prices are not quotes", "owner", threadId);
+    expect(remembered.taskIds).toEqual([]);
+    expect(remembered.mock).toBe(false);
+    expect(remembered.chip).toMatchObject({ kind: "remembered" });
+    const view = await getThread({ actorUserId: "owner", orgId: h.orgId, threadId });
+    expect(view.messages.at(-1)?.content).toMatch(/\[\[kimi:remembered:/);
+    const forgotten = await say("forget example prices", "owner", threadId);
+    expect(forgotten.taskIds).toEqual([]);
+    expect(forgotten.mock).toBe(false);
+    const routine = await say("every Friday, list next week's customers", "owner", threadId);
+    expect(routine.taskIds).toEqual([]);
+    expect(routine.chip).toMatchObject({ kind: "routine" });
+    const [row] = await withTenant(h.orgId, (tx) => tx.select().from(routines));
+    expect(row?.maxTier).toBeLessThanOrEqual(1);
+    expect(row?.kind).toBe("morning_briefing");
+    const refused = await say("every Friday pay the vendors", "owner", threadId);
+    expect(refused.taskIds).toEqual([]);
+    const after = await getThread({ actorUserId: "owner", orgId: h.orgId, threadId });
+    expect(after.messages.at(-1)?.content).toMatch(/money|undone/i);
+    expect(await withTenant(h.orgId, async (tx) => (await tx.select().from(routines)).length)).toBe(1);
   });
 
   it("asks instead of delegating when the request is unclear", async () => {

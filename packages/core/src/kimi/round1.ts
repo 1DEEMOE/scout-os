@@ -1,11 +1,14 @@
+import { createHash } from "node:crypto";
 import { and, desc, eq, sql } from "drizzle-orm";
-import { memoryRecords, tasks, workflowExecutions, withTenant, type Tx } from "@wos/db";
+import { invoices, memoryRecords, organizations, tasks, workflowExecutions, withTenant, type Tx } from "@wos/db";
 import { recordAudit } from "../audit";
 import { listAuditEvents } from "../audit-log/service";
 import { AppError } from "../errors";
 import { scrubPii } from "../logger";
 import { ANY_ROLE, inOrg, MANAGERS, requireRole, STAFF } from "../org/access";
 import { getPack, type IndustryPack } from "../industries/packs";
+import { forgetMemory, rememberFact } from "../memory/service";
+import { createRoutine } from "../routines/service";
 import { ingestLead } from "../speed/service";
 import { seasonalHits, type SignalHit } from "../signals/sources";
 import { approvalCard, type ApprovalCardView } from "./cards";
@@ -13,7 +16,6 @@ import { approvalCard, type ApprovalCardView } from "./cards";
 const RULE = "kimi:rule:";
 const PAUSE = "kimi:pause:";
 const DRAFT = "kimi:draft:";
-const ROUTINE = "kimi:routine:";
 const GOAL = "kimi:goal:";
 const ARTIFACT = "kimi:artifact:";
 const NOTIFY = "kimi:notify";
@@ -95,7 +97,8 @@ export async function activityFeed(input: { actorUserId: string; orgId: string }
   const rows = await listAuditEvents({ actorUserId: input.actorUserId, orgId: input.orgId, limit: 200 });
   const groups = new Map<string, FeedStep[]>();
   for (const row of rows) {
-    const job = String(row.metadata.taskId ?? row.target ?? "workspace").slice(0, 80);
+    const meta = (row.metadata ?? {}) as { taskId?: unknown };
+    const job = feedGroupKey(meta.taskId ?? row.target ?? "workspace");
     const step: FeedStep = { stage: stageOf(row.action), action: String(scrubPii(row.action)), at: row.at.toISOString() };
     const list = groups.get(job) ?? [];
     list.push(step);
@@ -193,6 +196,18 @@ export interface ChatRoutine {
   hour: number;
   maxTier: 0 | 1;
   sends: false;
+  /** A real routines row, scheduled. It does not send. */
+  scheduled: true;
+}
+
+/**
+ * Stable activity-feed group label. The raw key is scrubbed and then hashed
+ * so an email address or a provider key cannot appear in the group name.
+ */
+export function feedGroupKey(raw: unknown): string {
+  const scrubbed = String(scrubPii(raw == null ? "workspace" : String(raw)) ?? "workspace");
+  const hash = createHash("sha256").update(scrubbed).digest("hex").slice(0, 12);
+  return `job:${hash}`;
 }
 
 const DAYS: Record<string, number> = { sunday: 0, monday: 1, tuesday: 2, wednesday: 3, thursday: 4, friday: 5, saturday: 6 };
@@ -209,17 +224,74 @@ export function parseChatRoutine(text: string): { plain: string; daysOfWeek: num
   return { plain, daysOfWeek: [DAYS[day]!], hour: 9, maxTier: 1 };
 }
 
-export async function saveChatRoutine(input: { actorUserId: string; orgId: string; text: string }): Promise<ChatRoutine> {
+/**
+ * A chat sentence becomes a real routines row. The applied schema only allows
+ * the morning briefing, which is read-only: maxTier stays 0 and it does not send.
+ */
+export async function saveChatRoutine(input: { actorUserId: string; orgId: string; text: string; timezone?: string }): Promise<ChatRoutine> {
   const parsed = parseChatRoutine(input.text);
   if ("refused" in parsed) throw new AppError("FORBIDDEN", parsed.refused);
-  return inOrg(input.orgId, async (tx) => {
+  const timezone = input.timezone ?? (await inOrg(input.orgId, async (tx) => {
     await requireRole(tx, input.orgId, input.actorUserId, MANAGERS, "kimi.routine");
-    const id = crypto.randomUUID();
-    const saved: ChatRoutine = { id, ...parsed, sends: false };
-    await putJson(tx, input.orgId, input.actorUserId, `${ROUTINE}${id}`, saved);
-    await recordAudit(tx, { tenantId: input.orgId, actorType: "user", actorId: input.actorUserId, action: "kimi.routine.save", target: `routine:${id}`, tier: 1, outcome: "success", metadata: { maxTier: saved.maxTier, sends: false } });
-    return saved;
+    const [org] = await tx.select({ timezone: organizations.timezone }).from(organizations).where(eq(organizations.id, input.orgId));
+    return org?.timezone || "America/New_York";
+  }));
+  const created = await createRoutine({
+    actorUserId: input.actorUserId,
+    orgId: input.orgId,
+    kind: "morning_briefing",
+    name: parsed.plain.slice(0, 120),
+    hour: parsed.hour,
+    minute: 0,
+    daysOfWeek: parsed.daysOfWeek,
+    timezone,
   });
+  return { id: created.id, plain: parsed.plain, daysOfWeek: parsed.daysOfWeek, hour: parsed.hour, maxTier: 0, sends: false, scheduled: true };
+}
+
+const PRACTICE_FACT = "Example prices are not quotes.";
+const PRACTICE_DISMISS = "kimi:practice-dismissed";
+
+export interface ChatCommandResult {
+  reply: string;
+  chip: { kind: "remembered"; memoryId: string; text: string } | { kind: "routine"; routineId: string; text: string } | null;
+}
+
+/** Remember, forget, and "every Friday" stay in the product. They do not call the model and they do not send. */
+export async function applyChatCommand(input: { actorUserId: string; orgId: string; text: string }): Promise<ChatCommandResult | null> {
+  const text = input.text.trim();
+  const remember = /^\s*remember\s+(.+)$/i.exec(text);
+  if (remember) {
+    const row = await rememberFact({ actorUserId: input.actorUserId, orgId: input.orgId, content: remember[1]! });
+    return { reply: `[[kimi:remembered:${row.id}]]Remembered: ${row.content}`, chip: { kind: "remembered", memoryId: row.id, text: row.content } };
+  }
+  const phrase = parseForget(text);
+  if (phrase) {
+    try {
+      const forgotten = await forgetByPhrase({ actorUserId: input.actorUserId, orgId: input.orgId, phrase });
+      return { reply: `Forgot “${forgotten.text}”.`, chip: null };
+    } catch (err) {
+      if (err instanceof AppError && (err.code === "NOT_FOUND" || err.code === "FORBIDDEN")) return { reply: err.message, chip: null };
+      throw err;
+    }
+  }
+  if (/\bevery\b/i.test(text) && /\b(sunday|monday|tuesday|wednesday|thursday|friday|saturday|pay|charge|refund|delete|wire)\b/i.test(text)) {
+    const parsed = parseChatRoutine(text);
+    if ("refused" in parsed) return { reply: parsed.refused, chip: null };
+    const saved = await saveChatRoutine({ actorUserId: input.actorUserId, orgId: input.orgId, text });
+    return { reply: `${saved.plain} This is on the schedule. It does not send.`, chip: { kind: "routine", routineId: saved.id, text: saved.plain } };
+  }
+  return null;
+}
+
+export async function forgetByPhrase(input: { actorUserId: string; orgId: string; phrase: string }) {
+  const phrase = input.phrase.trim().toLowerCase();
+  if (!phrase) throw new AppError("VALIDATION", "Say what to forget");
+  const rows = await memoryPanel({ actorUserId: input.actorUserId, orgId: input.orgId });
+  const hit = rows.find((r) => r.text.toLowerCase().includes(phrase));
+  if (!hit) throw new AppError("NOT_FOUND", `I don't have anything about “${input.phrase.trim()}”.`);
+  await forgetMemory({ actorUserId: input.actorUserId, orgId: input.orgId, memoryId: hit.id });
+  return { id: hit.id, text: hit.text };
 }
 
 export interface OpportunityCard {
@@ -315,10 +387,10 @@ export interface FirstRunScript {
   textDemo: { label: "DEMO"; reply: string };
 }
 
-export async function firstRunFor(input: { actorUserId: string; orgId: string; businessName: string; packId: string }): Promise<FirstRunScript> {
+export async function firstRunFor(input: { actorUserId: string; orgId: string; businessName: string; packId: string }): Promise<FirstRunScript & { practiceMemoryId: string | null }> {
   const script = firstRunScript({ businessName: input.businessName, packId: input.packId });
   const role = await inOrg(input.orgId, (tx) => requireRole(tx, input.orgId, input.actorUserId, ANY_ROLE, "kimi.firstRun"));
-  if (role === "viewer") return script;
+  if (role === "viewer") return { ...script, practiceMemoryId: null };
   await ingestLead({
     actorUserId: input.actorUserId,
     orgId: input.orgId,
@@ -328,7 +400,48 @@ export async function firstRunFor(input: { actorUserId: string; orgId: string; b
     email: "mock-lead@example.test",
     customBody: script.lead.draft,
   });
-  return script;
+  const practiceMemoryId = await ensurePracticeFact(input.actorUserId, input.orgId);
+  return { ...script, practiceMemoryId };
+}
+
+async function ensurePracticeFact(actorUserId: string, orgId: string): Promise<string | null> {
+  return inOrg(orgId, async (tx) => {
+    const [dismissed] = await tx.select({ id: memoryRecords.id }).from(memoryRecords).where(eq(memoryRecords.scopeRef, PRACTICE_DISMISS)).limit(1);
+    if (dismissed) return null;
+    const [existing] = await tx
+      .select({ id: memoryRecords.id })
+      .from(memoryRecords)
+      .where(and(eq(memoryRecords.scopeRef, "org"), eq(memoryRecords.content, PRACTICE_FACT)))
+      .limit(1);
+    return existing?.id ?? null;
+  }).then(async (id) => {
+    if (id) return id;
+    const dismissed = await inOrg(orgId, async (tx) => {
+      const [row] = await tx.select({ id: memoryRecords.id }).from(memoryRecords).where(eq(memoryRecords.scopeRef, PRACTICE_DISMISS)).limit(1);
+      return !!row;
+    });
+    if (dismissed) return null;
+    const row = await rememberFact({ actorUserId, orgId, content: PRACTICE_FACT });
+    return row.id;
+  });
+}
+
+/** Undo on the first-run card. Removes the fact and does not put it back on the next visit. */
+export async function undoPracticeMemory(input: { actorUserId: string; orgId: string; memoryId?: string }) {
+  if (input.memoryId) {
+    try {
+      await forgetMemory({ actorUserId: input.actorUserId, orgId: input.orgId, memoryId: input.memoryId });
+    } catch (err) {
+      if (!(err instanceof AppError) || err.code !== "NOT_FOUND") throw err;
+    }
+  }
+  return inOrg(input.orgId, async (tx) => {
+    await requireRole(tx, input.orgId, input.actorUserId, MANAGERS, "kimi.practice.undo");
+    const [already] = await tx.select({ id: memoryRecords.id }).from(memoryRecords).where(eq(memoryRecords.scopeRef, PRACTICE_DISMISS)).limit(1);
+    if (!already) await putJson(tx, input.orgId, input.actorUserId, PRACTICE_DISMISS, { at: new Date().toISOString() });
+    await recordAudit(tx, { tenantId: input.orgId, actorType: "user", actorId: input.actorUserId, action: "kimi.practice.undo", target: input.memoryId ? `memory:${input.memoryId}` : "memory:practice", tier: 4, outcome: "success", metadata: { sent: false } });
+    return { undone: true };
+  });
 }
 
 export function firstRunScript(input: { businessName: string; packId: string }): FirstRunScript {
@@ -451,8 +564,68 @@ export async function readArtifactByToken(input: { actorUserId: string; orgId: s
 export async function notifyPrefs(input: { actorUserId: string; orgId: string }) {
   return inOrg(input.orgId, async (tx) => {
     await requireRole(tx, input.orgId, input.actorUserId, ANY_ROLE, "kimi.notify");
-    const [row] = await tx.select().from(memoryRecords).where(eq(memoryRecords.scopeRef, NOTIFY)).limit(1);
+    const [row] = await tx.select().from(memoryRecords).where(eq(memoryRecords.scopeRef, NOTIFY)).orderBy(desc(memoryRecords.createdAt)).limit(1);
     return parse<{ quietStart: number; quietEnd: number; cap: number }>(row?.content ?? "") ?? { quietStart: 21, quietEnd: 8, cap: 5 };
+  });
+}
+
+export async function saveNotifyPrefs(input: { actorUserId: string; orgId: string; quietStart?: number; quietEnd?: number; cap?: number }) {
+  const quietStart = clampHour(input.quietStart, 21);
+  const quietEnd = clampHour(input.quietEnd, 8);
+  const cap = Math.min(20, Math.max(1, Math.round(input.cap ?? 5)));
+  return inOrg(input.orgId, async (tx) => {
+    await requireRole(tx, input.orgId, input.actorUserId, MANAGERS, "kimi.notify.save");
+    await tx.delete(memoryRecords).where(eq(memoryRecords.scopeRef, NOTIFY));
+    await putJson(tx, input.orgId, input.actorUserId, NOTIFY, { quietStart, quietEnd, cap });
+    await recordAudit(tx, { tenantId: input.orgId, actorType: "user", actorId: input.actorUserId, action: "kimi.notify.save", target: "memory:notify", tier: 1, outcome: "success", metadata: { quietStart, quietEnd, cap } });
+    return { quietStart, quietEnd, cap };
+  });
+}
+
+function clampHour(value: number | undefined, fallback: number): number {
+  if (value === undefined || Number.isNaN(value)) return fallback;
+  return Math.min(23, Math.max(0, Math.round(value)));
+}
+
+const MONEY_CAP = "kimi:money-cap";
+
+export async function saveMoneyCap(input: { actorUserId: string; orgId: string; weeklyCapCents?: number }) {
+  const weeklyCapCents = Math.min(100_000_000, Math.max(0, Math.round(input.weeklyCapCents ?? 0)));
+  return inOrg(input.orgId, async (tx) => {
+    await requireRole(tx, input.orgId, input.actorUserId, MANAGERS, "kimi.money.cap");
+    await tx.delete(memoryRecords).where(eq(memoryRecords.scopeRef, MONEY_CAP));
+    await putJson(tx, input.orgId, input.actorUserId, MONEY_CAP, { weeklyCapCents, autoPay: false });
+    await recordAudit(tx, { tenantId: input.orgId, actorType: "user", actorId: input.actorUserId, action: "kimi.money.cap", target: "memory:money-cap", tier: 1, outcome: "success", metadata: { weeklyCapCents, autoPay: false } });
+    return { weeklyCapCents, autoPay: false as const };
+  });
+}
+
+export async function moneySnapshot(input: { actorUserId: string; orgId: string }) {
+  return inOrg(input.orgId, async (tx) => {
+    await requireRole(tx, input.orgId, input.actorUserId, ANY_ROLE, "kimi.money");
+    const rows = await tx.select({ status: invoices.status, amountDueCents: invoices.amountDueCents }).from(invoices);
+    const openCents = rows.filter((r) => r.status === "open").reduce((sum, r) => sum + r.amountDueCents, 0);
+    const paidCents = rows.filter((r) => r.status === "paid").reduce((sum, r) => sum + r.amountDueCents, 0);
+    const [capRow] = await tx.select().from(memoryRecords).where(eq(memoryRecords.scopeRef, MONEY_CAP)).orderBy(desc(memoryRecords.createdAt)).limit(1);
+    const cap = parse<{ weeklyCapCents: number }>(capRow?.content ?? "");
+    const digest = moneyDigest({ invoicedCents: openCents + paidCents, collectedCents: paidCents });
+    return { ...digest, openCents, weeklyCapCents: cap?.weeklyCapCents ?? null, autoPay: false as const };
+  });
+}
+
+export async function listGoals(input: { actorUserId: string; orgId: string }): Promise<Goal[]> {
+  return inOrg(input.orgId, async (tx) => {
+    await requireRole(tx, input.orgId, input.actorUserId, ANY_ROLE, "kimi.goal.list");
+    const rows = await tx.select().from(memoryRecords).where(sql`${memoryRecords.scopeRef} LIKE 'kimi:goal:%'`).orderBy(desc(memoryRecords.createdAt)).limit(20);
+    return rows.map((r) => parse<Goal>(r.content)).filter((g): g is Goal => !!g);
+  });
+}
+
+export async function listArtifacts(input: { actorUserId: string; orgId: string }): Promise<Artifact[]> {
+  return inOrg(input.orgId, async (tx) => {
+    await requireRole(tx, input.orgId, input.actorUserId, ANY_ROLE, "kimi.artifact.list");
+    const rows = await tx.select().from(memoryRecords).where(sql`${memoryRecords.scopeRef} LIKE 'kimi:artifact:%'`).orderBy(desc(memoryRecords.createdAt)).limit(50);
+    return rows.map((r) => parse<Artifact>(r.content)).filter((a): a is Artifact => !!a);
   });
 }
 

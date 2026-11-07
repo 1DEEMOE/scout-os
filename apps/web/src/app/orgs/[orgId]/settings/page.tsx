@@ -22,6 +22,14 @@ export default async function SettingsPage({ params, searchParams }: { params: P
   return (
     <div className="flex flex-col gap-6">
       <PageTitle>Settings</PageTitle>
+      <Card title="How Scout reaches you">
+        <div className="flex flex-col gap-2 text-base">
+          <a className="text-accent underline" href={`/orgs/${orgId}/settings/notifications`}>Notification settings</a>
+          <a className="text-accent underline" href={`/orgs/${orgId}/settings/money`}>Money digest and weekly cap</a>
+          <a className="text-accent underline" href={`/orgs/${orgId}/goals`}>This week&apos;s goal</a>
+          <a className="text-accent underline" href={`/orgs/${orgId}/library`}>Library</a>
+        </div>
+      </Card>
       {q.connected && <p role="status" className="text-sm text-accent">Connected {q.connected}.</p>}
       {q.error && <p role="alert" className="text-sm text-danger">{q.error}</p>}
 

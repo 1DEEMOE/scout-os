@@ -48,3 +48,76 @@ test("first run, activity, memory, and opportunities stay spacious and labelled"
   await expect(page.getByText("Nothing is sent")).toBeVisible();
   await page.screenshot({ path: path.join(shots, "opportunities.png"), fullPage: true });
 });
+
+test("chat remember, a scheduled sentence, takeover, and the new screens do real work", async ({ page }) => {
+  test.setTimeout(150_000);
+  await signIn(page);
+  await page.goto(`/orgs/${seed.orgId}/chat`);
+  await page.getByLabel("Ask Scout to do something").fill("remember the side gate code is 2468");
+  await page.getByRole("button", { name: "Send" }).click();
+  await expect(page.getByText("Remembered: the side gate code is 2468")).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByRole("button", { name: "Undo" })).toBeVisible();
+
+  await page.goto(`/orgs/${seed.orgId}/tasks`);
+  await page.getByPlaceholder("e.g. Draft replies to this week's billing questions").fill("Note the delivery window for the practice job");
+  await page.getByRole("button", { name: "Send to agents" }).click();
+  await expect(page).toHaveURL(/\/tasks\/[0-9a-f-]+$/, { timeout: 20_000 });
+  await page.getByLabel("Your draft").fill("I'll take this one. This draft is not sent.");
+  await page.getByRole("button", { name: "Take over this draft" }).click();
+  await expect(page.getByRole("paragraph").filter({ hasText: "I'll take this one. This draft is not sent." })).toBeVisible();
+  await page.getByRole("button", { name: "Hand back" }).click();
+  await expect(page.getByRole("button", { name: "Pause" })).toBeVisible();
+
+  await page.goto(`/orgs/${seed.orgId}/goals`);
+  await page.getByLabel("What should be true by Friday?").fill("Fill Thursday afternoon");
+  await page.getByRole("button", { name: "Save goal" }).click();
+  await expect(page.getByText("Fill Thursday afternoon")).toBeVisible();
+
+  await page.goto(`/orgs/${seed.orgId}/library`);
+  await page.getByLabel("Name").fill("Weekly note");
+  await page.getByRole("button", { name: "Save" }).click();
+  await expect(page.getByText("Weekly note")).toBeVisible();
+
+  await page.goto(`/orgs/${seed.orgId}/settings/notifications`);
+  await page.getByRole("button", { name: "Save notification settings" }).click();
+  await expect(page.getByText("Done.")).toBeVisible();
+
+  await page.goto(`/orgs/${seed.orgId}/settings/money`);
+  await expect(page.getByText("Auto-pay is off.")).toBeVisible();
+  await page.getByLabel("Cap in dollars. This does not pay anything.").fill("50000");
+  await page.getByRole("button", { name: "Save cap" }).click();
+  await expect(page.getByText("$500.00")).toBeVisible();
+  await page.screenshot({ path: path.join(shots, "money.png"), fullPage: true });
+});
+
+test("a chat sentence schedules a real read-only routine on a new organization", async ({ browser }) => {
+  test.setTimeout(150_000);
+  const page = await browser.newPage();
+  const email = `routine-${Date.now()}@e2e.test`;
+  for (let attempt = 0; ; attempt++) {
+    await page.goto("/sign-up");
+    await page.getByLabel("Name").fill("Routine Owner");
+    await page.getByLabel("Email").fill(email);
+    await page.getByLabel("Password").fill("routine-password-12345");
+    await page.getByRole("button", { name: "Create account" }).click();
+    try {
+      await expect(page).toHaveURL(/\/orgs$/, { timeout: 12_000 });
+      break;
+    } catch (err) {
+      if (attempt >= 4) throw err;
+      await page.waitForTimeout(11_000);
+    }
+  }
+  await page.getByLabel("Organization name").fill("Routine Shop");
+  await page.getByRole("button", { name: "Create" }).click();
+  await expect(page).toHaveURL(/\/orgs\/[0-9a-f-]+\/setup/, { timeout: 20_000 });
+  const orgId = page.url().match(/orgs\/([0-9a-f-]+)/)![1];
+  await page.goto(`/orgs/${orgId}/chat`);
+  await page.getByLabel("Ask Scout to do something").fill("every Friday, list next week's customers");
+  await page.getByRole("button", { name: "Send" }).click();
+  await expect(page.getByText("This is on the schedule. It does not send.")).toBeVisible({ timeout: 20_000 });
+  await page.goto(`/orgs/${orgId}/routines`);
+  await expect(page.locator("#main").getByRole("link", { name: /Every friday/i })).toBeVisible();
+  await expect(page.getByText("active").first()).toBeVisible();
+  await page.close();
+});

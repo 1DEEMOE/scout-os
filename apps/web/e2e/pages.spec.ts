@@ -11,6 +11,7 @@ const PAGES: [string, string][] = [
   ["", "Today"], ["/approvals", "Needs your OK"], ["/tasks", "Tasks"], ["/inbox", "Inbox"], ["/sales", "Customers & Deals"],
   ["/finance", "Money · Invoices"], ["/agents", "AI workforce"], ["/audit", "Audit log"], ["/billing", "Billing"], ["/settings", "Settings"], ["/chat", "Chat"],
   ["/first-run", "Your first 10 minutes"], ["/activity", "Activity"], ["/memory", "What Scout knows"], ["/opportunities", "Opportunities"],
+  ["/goals", "This week"], ["/library", "Library"], ["/settings/notifications", "Notifications"], ["/settings/money", "Money digest"],
   ["/scout", "Scout"], ["/analytics", "Analytics"],
 ];
 

@@ -1,8 +1,8 @@
 import { notFound } from "next/navigation";
-import { AppError, finishedWithoutActions, getEngine, getTask, taskLabel, TERMINAL, verifyJobPhotoChain, watchTask, type Plan } from "@wos/core";
-import { ActionButton } from "../../../../actions";
+import { AppError, finishedWithoutActions, getEngine, getTask, nextActionChips, taskLabel, TERMINAL, verifyJobPhotoChain, watchTask, type Plan } from "@wos/core";
+import { ActionButton, ActionForm } from "../../../../actions";
 import { orgContext } from "@/server/org-context";
-import { Badge, Card, Empty, MockBadge, PageTitle, StateBadge, TaskStatus, TierBadge, When } from "../../../../ui";
+import { Badge, Card, Empty, inputCls, MockBadge, PageTitle, StateBadge, TaskStatus, TierBadge, When } from "../../../../ui";
 
 export const dynamic = "force-dynamic";
 
@@ -42,8 +42,23 @@ export default async function TaskPage({ params }: { params: Promise<{ orgId: st
             <h2 className="text-lg font-semibold">Watch this job</h2>
             <p className="text-base text-muted">{watch.paused ? "Paused. Scout will not take the next step until you hand it back." : "Scout stops at an approval card. Taking over the draft does not send it."}</p>
             {watch.draft && <p className="rounded-2xl border border-line px-4 py-3 text-base">{watch.draft}</p>}
-            {isManager && !watch.paused && <ActionButton path="kimi.pause" input={{ orgId, taskId }} label="Pause" />}
-            {isManager && watch.paused && <ActionButton path="kimi.handBack" input={{ orgId, taskId }} label="Hand back" />}
+            {isManager && (
+              <ActionForm path="kimi.takeOver" fixed={{ orgId, taskId }} submitLabel={watch.paused ? "Update the draft" : "Take over this draft"} quiet>
+                <label htmlFor={`takeover-${taskId}`} className="text-base">Your draft</label>
+                <textarea id={`takeover-${taskId}`} name="text" required rows={4} defaultValue={watch.draft} placeholder="Write the reply. Taking over does not send it." className={inputCls} />
+              </ActionForm>
+            )}
+            <div className="flex flex-wrap gap-2">
+              {isManager && !watch.paused && <ActionButton path="kimi.pause" input={{ orgId, taskId }} label="Pause" />}
+              {isManager && watch.paused && <ActionButton path="kimi.handBack" input={{ orgId, taskId }} label="Hand back" />}
+            </div>
+            <ul aria-label="Suggested next steps" className="flex flex-col gap-2">
+              {nextActionChips(taskLabel(task)).map((chip) => (
+                <li key={chip.label}>
+                  <ActionButton path="memory.add" input={{ orgId, content: `${chip.label}. Nothing is sent.` }} label={chip.label} variant="quiet" />
+                </li>
+              ))}
+            </ul>
           </div>
         </Card>
       )}
