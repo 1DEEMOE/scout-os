@@ -1,8 +1,11 @@
 /**
  * Industry packs are configuration, not code forks. One record describes how a
  * local shop talks about its work, which signals apply, and whether the work
- * is a job/quote or an appointment. Adding a trade means adding a record here.
+ * is a job/quote or an appointment. Adding a trade means adding a record here
+ * or a row in catalog.ts.
  */
+
+import { CATALOG, type CatalogRow } from "./catalog";
 
 export type WorkFlow = "job" | "appointment";
 export type SignalSourceId = "weather" | "seasonal" | "reservice" | "new_mover" | "permit";
@@ -34,6 +37,37 @@ export interface PackTemplate {
   body: string;
 }
 
+export type IntegrationKind = "calendar" | "crm" | "accounting";
+
+export interface PackIntegration {
+  kind: IntegrationKind;
+  label: string;
+  /** What the owner would connect later. The pack does not connect it. */
+  note: string;
+}
+
+export interface PackMetric {
+  id: string;
+  label: string;
+}
+
+export const PACK_GROUPS = [
+  "Home services",
+  "Shops",
+  "Beauty & personal care",
+  "Health & wellness",
+  "Pets",
+  "Food & hospitality",
+  "Retail",
+  "Professional services",
+  "Education & childcare",
+  "Events",
+  "Startup",
+  "Other",
+] as const;
+
+export type PackGroup = (typeof PACK_GROUPS)[number];
+
 /** Bump when the pack shape changes. Every pack in this file shares it. */
 export const PACK_VERSION = 1;
 
@@ -41,7 +75,7 @@ export interface IndustryPack {
   version: typeof PACK_VERSION;
   id: string;
   label: string;
-  group: "Home services" | "Shops" | "Beauty & personal care" | "Other";
+  group: PackGroup;
   summary: string;
   flow: WorkFlow;
   /** What organizations.industry may store today (the applied check constraint). */
@@ -56,6 +90,8 @@ export interface IndustryPack {
   /** Morning layout, in order. Reads only (tier 0). */
   brief: string[];
   routines: PackRoutine[];
+  integrations: PackIntegration[];
+  metrics: PackMetric[];
   signals: readonly SignalSourceId[];
   /** Month is 1–12. A note, not a prediction. */
   seasons?: { month: number; label: string }[];
@@ -87,10 +123,20 @@ const visitFields = [
   { id: "when", label: "Requested time" },
 ];
 
-type Draft = Omit<IndustryPack, "version" | "flow" | "leadFields" | "vocabulary" | "services" | "routines" | "brief" | "pipeline"> & {
+type Draft = Omit<IndustryPack, "version" | "flow" | "leadFields" | "vocabulary" | "services" | "routines" | "brief" | "pipeline" | "integrations" | "metrics"> & {
   vocabulary?: IndustryPack["vocabulary"];
   services: Omit<PackService, "priceIsExample">[];
+  pipeline?: string[];
+  brief?: string[];
+  integrations?: PackIntegration[];
+  metrics?: PackMetric[];
 };
+
+const DEFAULT_INTEGRATIONS: PackIntegration[] = [
+  { kind: "calendar", label: "Calendar", note: "Suggested only. A booking is not written until you connect a calendar and approve the change." },
+  { kind: "crm", label: "CRM", note: "Suggested only. A handoff waits for your OK. Nothing is written by itself." },
+  { kind: "accounting", label: "Accounting", note: "Suggested only. No invoice is sent and nothing is paid automatically." },
+];
 
 /** Trade-named pipeline and the morning list. Versioned with PACK_VERSION. */
 const TRADE: Record<string, { pipeline: string[]; brief: string[] }> = {
@@ -133,8 +179,9 @@ function routinesFor(flow: WorkFlow): PackRoutine[] {
 }
 
 function finish(flow: WorkFlow, leadFields: IndustryPack["leadFields"], vocabulary: IndustryPack["vocabulary"], draft: Draft): IndustryPack {
-  const trade = TRADE[draft.id];
+  const trade = TRADE[draft.id] ?? (draft.pipeline && draft.brief ? { pipeline: draft.pipeline, brief: draft.brief } : undefined);
   if (!trade) throw new Error(`Pack ${draft.id} has no pipeline or morning layout`);
+  const brief = draft.brief ?? trade.brief;
   return {
     ...draft,
     version: PACK_VERSION,
@@ -142,9 +189,11 @@ function finish(flow: WorkFlow, leadFields: IndustryPack["leadFields"], vocabula
     leadFields,
     vocabulary,
     routines: routinesFor(flow),
+    integrations: draft.integrations ?? DEFAULT_INTEGRATIONS,
+    metrics: draft.metrics ?? brief.slice(0, 4).map((label, i) => ({ id: `brief_${i}`, label })),
     services: draft.services.map((s, i) => ({ ...s, priceCents: s.priceCents ?? 7_500 + i * 2_500, priceIsExample: true as const })),
-    pipeline: trade.pipeline,
-    brief: trade.brief,
+    pipeline: draft.pipeline ?? trade.pipeline,
+    brief,
   };
 }
 
@@ -159,7 +208,32 @@ function visit(p: Omit<Draft, "legacyColumn" | "trialPlan">): IndustryPack {
 const reply = (trade: string) =>
   first("First reply", "sms", `Hi {{name}}, this is {{business}}. Thanks for reaching out about ${trade}. We'll confirm a time shortly. Reply STOP to opt out.`);
 
-export const INDUSTRY_PACKS: readonly IndustryPack[] = [
+function fromCatalog(row: CatalogRow): IndustryPack {
+  const templates: PackTemplate[] = [reply(row.about)];
+  if (row.flow === "appointment") {
+    templates.push(
+      { purpose: "rebook", channel: "sms", name: "Due again", body: `Hi {{name}}, it may be time to book again at {{business}}. Reply STOP to opt out.` },
+      { purpose: "no_show", channel: "sms", name: "Missed visit", body: `Hi {{name}}, we missed you at {{business}}. Reply if you'd like another time. Reply STOP to opt out.` },
+    );
+  }
+  const shared = {
+    id: row.id,
+    label: row.label,
+    group: row.group as PackGroup,
+    summary: row.summary,
+    services: row.services,
+    templates,
+    signals: row.signals,
+    watchLine: row.watchLine,
+    pipeline: row.pipeline,
+    brief: row.brief,
+    seasons: row.seasons,
+    rebookEveryDays: row.rebookEveryDays,
+  };
+  return row.flow === "appointment" ? visit(shared) : job({ ...shared, legacyColumn: "general", trialPlan: "growth" });
+}
+
+const BASE_PACKS: readonly IndustryPack[] = [
   job({
     id: "roofing",
     label: "Roofing",
@@ -432,6 +506,8 @@ export const INDUSTRY_PACKS: readonly IndustryPack[] = [
   }),
 ];
 
+export const INDUSTRY_PACKS: readonly IndustryPack[] = [...BASE_PACKS, ...CATALOG.map(fromCatalog)];
+
 const BY_ID = new Map(INDUSTRY_PACKS.map((p) => [p.id, p]));
 
 export function listPacks(): readonly IndustryPack[] {
@@ -450,4 +526,39 @@ export function isPackId(id: string): boolean {
 
 export function packsUsing(source: SignalSourceId): IndustryPack[] {
   return INDUSTRY_PACKS.filter((p) => p.signals.includes(source));
+}
+
+/** Case-insensitive match on the label, group, and summary. Empty query returns every pack. */
+export function searchPacks(query: string): IndustryPack[] {
+  const q = query.trim().toLowerCase();
+  if (!q) return [...INDUSTRY_PACKS];
+  return INDUSTRY_PACKS.filter((p) => `${p.label} ${p.group} ${p.summary} ${p.id.replaceAll("_", " ")}`.toLowerCase().includes(q));
+}
+
+const CLOSEST: Array<[RegExp, string]> = [
+  [/dog|cat|pet|groom|kennel|boarding/, "dog_grooming"],
+  [/restaurant|cafe|coffee|bakery|cater|food|bar\b/, "restaurant"],
+  [/saas|software|startup|pre-seed|preseed/, "startup_saas"],
+  [/agency|studio/, "startup_agency"],
+  [/dtc|shopify|product brand/, "startup_dtc"],
+  [/yoga|pilates|gym|trainer|fitness/, "yoga_studio"],
+  [/child|daycare|preschool|tutor|lesson/, "childcare"],
+  [/wedding|event|photo|venue/, "event_planner"],
+  [/lawyer|legal|attorney/, "law_office"],
+  [/realtor|real estate|broker/, "real_estate"],
+  [/retail|store|e-?commerce|online shop/, "retail_shop"],
+];
+
+/**
+ * The pack to start from when the owner describes a business that is not in the list.
+ * A direct search hit is returned as matched. Otherwise the closest known pack, or general.
+ */
+export function closestPack(words: string): { pack: IndustryPack; matched: boolean } {
+  const hits = searchPacks(words);
+  if (words.trim() && hits.length && hits.length < INDUSTRY_PACKS.length) return { pack: hits[0]!, matched: true };
+  const text = words.toLowerCase();
+  for (const [re, id] of CLOSEST) {
+    if (re.test(text)) return { pack: getPack(id), matched: false };
+  }
+  return { pack: getPack("general"), matched: false };
 }

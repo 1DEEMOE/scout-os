@@ -88,6 +88,7 @@ const input = () => ({
   confirmEmail: "victim@example.test",
   briefingHour: 7,
   samples: false,
+  words: "probe trade",
 });
 
 beforeAll(async () => {

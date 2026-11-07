@@ -29,6 +29,7 @@ import { runScoutScan } from "../scout/service";
 import { recordPermission } from "../scout/lifecycle";
 import { applyCsvMapping, proposeCsvMapping, type LeadField } from "./csv-map";
 import { readPackId, requirePack, legacyColumn, writePackId } from "../industries/store";
+import { noteSetupStarted } from "../pilot/metrics";
 import { getPreset, ONBOARDING_STEPS, type IndustryId, type OnboardingStepId } from "./presets";
 import { lookupZip, normalizeZip } from "./zip-to-county";
 
@@ -167,6 +168,7 @@ export async function chooseIndustry(input: Actor & { industry: IndustryId }): P
       .set({ industry: legacyColumn(pack), onboardingStep: "basics" })
       .where(eq(organizations.id, input.orgId));
     await writePackId(tx, input.orgId, pack.id, input.actorUserId);
+    await noteSetupStarted(tx, input.orgId, input.actorUserId);
     await applyPlan(tx, input.orgId, preset.trialPlan, { type: "system", id: "onboarding" }, `onboarding trial: ${input.industry} by user:${input.actorUserId}`);
     await recordAudit(tx, {
       tenantId: input.orgId,

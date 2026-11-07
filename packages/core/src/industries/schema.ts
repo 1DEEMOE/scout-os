@@ -5,7 +5,20 @@ export const packSchema = z.object({
   version: z.literal(1),
   id: z.string().regex(/^[a-z0-9_]+$/),
   label: z.string().min(2).max(60),
-  group: z.enum(["Home services", "Shops", "Beauty & personal care", "Other"]),
+  group: z.enum([
+    "Home services",
+    "Shops",
+    "Beauty & personal care",
+    "Health & wellness",
+    "Pets",
+    "Food & hospitality",
+    "Retail",
+    "Professional services",
+    "Education & childcare",
+    "Events",
+    "Startup",
+    "Other",
+  ]),
   summary: z.string().min(8).max(240),
   flow: z.enum(["job", "appointment"]),
   legacyColumn: z.enum(["roofing", "general"]),
@@ -33,6 +46,17 @@ export const packSchema = z.object({
     tier: z.union([z.literal(0), z.literal(1)]),
     does: z.string().min(8),
   })).min(2),
+  /** Suggested connections only. Nothing is connected or billed from the pack. */
+  integrations: z.array(z.object({
+    kind: z.enum(["calendar", "crm", "accounting"]),
+    label: z.string().min(2).max(40),
+    note: z.string().min(8).max(180),
+  })).min(1),
+  /** Lines the morning briefing can count. Reads only. */
+  metrics: z.array(z.object({
+    id: z.string().min(1).max(40),
+    label: z.string().min(2).max(80),
+  })).min(2),
   signals: z.array(z.enum(["weather", "seasonal", "reservice", "new_mover", "permit"])).min(1),
   seasons: z.array(z.object({ month: z.number().int().min(1).max(12), label: z.string().min(2) })).optional(),
   rebookEveryDays: z.array(z.object({ serviceId: z.string(), days: z.number().int().positive(), label: z.string() })).optional(),
@@ -43,4 +67,7 @@ export const REQUIRED_PACKS = [
   "roofing", "hvac", "plumbing", "electrical", "landscaping", "pest_control", "construction",
   "auto_repair", "tire_shop", "auto_glass", "moving", "duct_cleaning",
   "nail_salon", "hair_salon", "esthetics",
+  "painting", "house_cleaning", "dog_grooming", "yoga_studio", "restaurant",
+  "retail_shop", "ecommerce", "consulting", "tutoring", "childcare",
+  "event_planner", "startup_saas", "startup_agency", "startup_dtc",
 ] as const;

@@ -42,7 +42,7 @@ function initialStep(s: State): Step {
   return "basics";
 }
 
-export function SetupWizard({ orgId, initial }: { orgId: string; initial: State }) {
+export function SetupWizard({ orgId, initial, packs = [] }: { orgId: string; initial: State; packs?: { id: string; label: string; group: string; summary: string }[] }) {
   const router = useRouter();
   const [state, setState] = useState(initial);
   const [step, setStep] = useState<Step>(initialStep(initial));
@@ -67,6 +67,13 @@ export function SetupWizard({ orgId, initial }: { orgId: string; initial: State 
   const [inviteRole, setInviteRole] = useState("member");
 
   const stepIndex = STEPS.indexOf(step);
+  const [packQuery, setPackQuery] = useState("");
+  const [customTrade, setCustomTrade] = useState("");
+  const packQ = packQuery.trim().toLowerCase();
+  const packChoices = (packs.length ? packs : [
+    { id: "roofing", label: "Roofing", group: "Home services", summary: "Storm leads, inbox, pipeline, and billing." },
+    { id: "general", label: "General SMB", group: "Other", summary: "Inbox, pipeline, follow-up, and billing." },
+  ]).filter((p) => !packQ || `${p.label} ${p.group} ${p.summary}`.toLowerCase().includes(packQ));
 
   async function run<T>(fn: () => Promise<T>, next?: Step): Promise<T | undefined> {
     setBusy(true);
@@ -110,25 +117,39 @@ export function SetupWizard({ orgId, initial }: { orgId: string; initial: State 
       {step === "industry" && (
         <section className="flex flex-col gap-3 rounded-md border border-line p-4">
           <h2 className="font-semibold">What kind of business is this?</h2>
-          <p className="text-sm text-muted">Picks agent defaults, the Morning Briefing, and plan entitlements. Approval rules stay the same.</p>
-          <div className="grid gap-3 sm:grid-cols-2">
+          <p className="text-sm text-muted">Picks agent defaults, the Morning Briefing, and plan entitlements. Approval rules stay the same. This step is part of a setup that stays under ten minutes.</p>
+          <label className="flex flex-col gap-1 text-sm">
+            Search
+            <input className={inputCls} value={packQuery} onChange={(e) => setPackQuery(e.target.value)} placeholder="Plumbing, yoga, cafe…" />
+          </label>
+          <div className="grid max-h-80 gap-3 overflow-y-auto sm:grid-cols-2">
+            {packChoices.map((p) => (
+              <button
+                key={p.id}
+                type="button"
+                disabled={busy}
+                className="rounded-md border border-line p-4 text-left hover:border-accent"
+                onClick={() => void run(() => trpc.onboarding.chooseIndustry.mutate({ orgId, industry: p.id }), "basics")}
+              >
+                <div className="font-medium">{p.label}</div>
+                <p className="mt-1 text-sm text-muted">{p.summary}</p>
+              </button>
+            ))}
+          </div>
+          <div className="flex flex-col gap-2 rounded-md border border-line p-4">
+            <div className="font-medium">Other / custom</div>
+            <p className="text-sm text-muted">Describe the business. Scout starts from the closest pack.</p>
+            <input className={inputCls} value={customTrade} onChange={(e) => setCustomTrade(e.target.value)} maxLength={200} placeholder="Mobile dog wash" />
             <button
               type="button"
-              disabled={busy}
-              className="rounded-md border border-line p-4 text-left hover:border-accent"
-              onClick={() => void run(() => trpc.onboarding.chooseIndustry.mutate({ orgId, industry: "roofing" }), "basics")}
+              disabled={busy || customTrade.trim().length < 2}
+              className={quietButtonCls}
+              onClick={() => void run(async () => {
+                const hit = await trpc.onboarding.closest.query({ orgId, words: customTrade });
+                return trpc.onboarding.chooseIndustry.mutate({ orgId, industry: hit.packId });
+              }, "basics")}
             >
-              <div className="font-medium">Roofing</div>
-              <p className="mt-1 text-sm text-muted">Storm leads → inbox → pipeline → billing. Starts a Scout Pro trial.</p>
-            </button>
-            <button
-              type="button"
-              disabled={busy}
-              className="rounded-md border border-line p-4 text-left hover:border-accent"
-              onClick={() => void run(() => trpc.onboarding.chooseIndustry.mutate({ orgId, industry: "general" }), "basics")}
-            >
-              <div className="font-medium">General SMB</div>
-              <p className="mt-1 text-sm text-muted">Inbox, pipeline, follow-up and billing for any small team. Growth trial.</p>
+              Use the closest pack
             </button>
           </div>
         </section>

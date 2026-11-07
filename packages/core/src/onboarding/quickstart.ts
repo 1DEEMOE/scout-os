@@ -20,6 +20,7 @@ import { acceptUrlFor, hashToken, INVITE_TTL_MS } from "../org/service";
 import { assertPlatformAdmin } from "../platform/admin";
 import { getBusinessProfile, listOpportunities, reviewBusinessProfile, saveBusinessProfile } from "../scout/service";
 import { legacyColumn, requirePack, writePackId } from "../industries/store";
+import { noteSetupFinished, noteSetupStarted } from "../pilot/metrics";
 import { getPreset, type IndustryId } from "./presets";
 import { approveAllTemplates, stagePackTemplates } from "../speed/service";
 import { finishOnboarding, getOnboardingState, loadDemoData, type OnboardingState } from "./service";
@@ -88,6 +89,7 @@ export async function provisionClientWorkspace(input: {
   await withTenant(orgId, async (tx) => {
     await tx.insert(organizations).values({ id: orgId, name: v.name, industry: legacyColumn(pack), timezone: v.timezone, onboardingStep: "basics" });
     await writePackId(tx, orgId, pack.id, input.actorUserId);
+    await noteSetupStarted(tx, orgId, input.actorUserId);
     await stagePackTemplates(tx, orgId, input.actorUserId, pack.id);
     await applyPlan(tx, orgId, preset.trialPlan, { type: "system", id: "provisioning" }, `client workspace trial: ${v.industry} by platform admin user:${input.actorUserId}`);
     await tx.insert(organizationInvitations).values({
@@ -141,6 +143,7 @@ export async function quickstartBusiness(input: Actor & { name: string; industry
     const industryChanged = org.industry !== legacyColumn(pack);
     if (industryChanged && org.completed) throw new AppError("CONFLICT", "Setup is already finished. Change your trade from Settings.");
     await tx.update(organizations).set({ name, timezone: tz.data, industry: legacyColumn(pack), onboardingStep: "connect" }).where(eq(organizations.id, input.orgId));
+    await noteSetupStarted(tx, input.orgId, input.actorUserId);
     await writePackId(tx, input.orgId, pack.id, input.actorUserId);
     await stagePackTemplates(tx, input.orgId, input.actorUserId, pack.id);
     if (industryChanged) await applyPlan(tx, input.orgId, getPreset(input.industry).trialPlan, { type: "system", id: "onboarding" }, `onboarding trial: ${input.industry} by user:${input.actorUserId}`);
@@ -215,6 +218,7 @@ export async function finishQuickstart(input: Actor & { briefingHour: number; sa
   }
   await inOrg(input.orgId, async (tx) => {
     await requireRole(tx, input.orgId, input.actorUserId, MANAGERS, "onboarding.quickstart.finish");
+    await noteSetupFinished(tx, input.orgId, input.actorUserId, input.approveTemplates === true);
     await recordAudit(tx, {
       tenantId: input.orgId,
       actorType: "user",
