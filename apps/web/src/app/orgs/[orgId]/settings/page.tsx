@@ -24,7 +24,7 @@ export default async function SettingsPage({ params, searchParams }: { params: P
   return (
     <div className="flex flex-col gap-6">
       <PageTitle>Settings</PageTitle>
-      <Card title="Reading and color">
+      <Card title="Appearance">
         <div className="flex flex-col gap-4">
           <p className="text-base text-muted">Reading size starts at 18px. It is saved in this browser only.</p>
           <TextSizeToggle />

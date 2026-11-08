@@ -12,4 +12,4 @@ An industry accent changes only the accent hue. The paper, ink, and type stay th
 
 ## Type, space, motion
 
-Body type is 18px, with a reading-size control in the profile menu and in Settings for 18, 20, and 22. The choice is stored in this browser and applied before first paint. Small labels stay at least 16px. Controls stay at least 44px. The chat-first layout keeps its wide gaps. Motion is a short rise with no fade. `prefers-reduced-motion` still turns animation off.
+Body type is 18px. Settings, under Appearance, offers 18, 20, and 22 next to light and dark. The choice is stored in this browser and applied before first paint. Small labels stay at least 16px. Controls stay at least 44px. The chat-first layout keeps its wide gaps. Motion is a short rise with no fade. `prefers-reduced-motion` still turns animation off.

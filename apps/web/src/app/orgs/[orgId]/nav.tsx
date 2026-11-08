@@ -3,7 +3,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import { BrandMark } from "../../brand-mark";
 import { SignOutButton } from "../../sign-out-button";
-import { RAIL_KEY, TextSizeToggle, ThemeToggle } from "../../theme";
+import { RAIL_KEY, ThemeToggle } from "../../theme";
 import { CommandPalette, openPalette, ShortcutHint, TOGGLE_RAIL } from "./command-palette";
 import { Icon } from "./icons";
 import { isActive, moreGroups, primaryItems, type NavGroup, type NavItem, type ShellData } from "./nav-model";
@@ -211,8 +211,6 @@ function ProfileItems({ d, onNavigate }: { d: ShellData; onNavigate?: () => void
       <a href={`/orgs/${d.orgId}/settings`} onClick={onNavigate} className={menuItem}>Settings</a>
       <a href="/help" onClick={onNavigate} className={menuItem}>Help &amp; install</a>
       <div className="flex flex-col gap-2 px-2 py-2">
-        <p className="px-1 text-sm text-muted">Reading size</p>
-        <TextSizeToggle />
         <ThemeToggle />
       </div>
       <div className="px-1 pt-1 pb-1 [&_button]:w-full [&_button]:justify-center"><SignOutButton /></div>
