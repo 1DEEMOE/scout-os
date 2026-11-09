@@ -119,3 +119,7 @@ All forced RLS with the standard tenant policy, composite FKs, seeded in the iso
 `packages/db/proposed/0020_workspace_brand_and_watch.sql` (rollback alongside). Adds `organizations.brand_accent` (fixed palette) and `routines.watch_topics` (subset of briefing section keys; must include `pending_approvals`). Additive only. No code reads these columns yet. See `docs/design/plug-and-play.md`.
 
 No schema change was needed for plug and play itself: provisioning reuses `organizations` (name, industry, timezone, plan) and `organization_invitations` (role `owner`), and Google sign-in reuses `auth_accounts`.
+
+### Proposed migration 0021 — signal feeds and insurance claims (NOT APPLIED; for SQL review)
+
+`packages/db/proposed/0021_signal_feeds_and_claims.sql` (rollback alongside; it refuses if any rows use the new kinds). New source kinds `mock_storm_feed`, `mock_permit_feed` and `county_permits`; signal kind `permit`; table `job_claims` (tenant-scoped, forced RLS, policy `job_claims_tenant`, app_user SELECT/INSERT/UPDATE only). No code reads these yet. Job notes need no schema change: they're stored as `text/plain` items in `job_photos`, inside the same hash chain.
