@@ -10,7 +10,7 @@ Multi-tenant SaaS where small businesses hire AI employees (Scout, Inbox, Pipeli
 
 Needs Node 22+, pnpm 10, and PostgreSQL 16.
 
-1. Create roles and databases once, as a Postgres superuser: `psql -U postgres -f scripts/setup-local-db.sql` (local passwords only).
+1. Start Postgres with `docker compose up -d` (creates the roles and databases on first start), or with your own Postgres 16 run `psql -U postgres -f scripts/setup-local-db.sql` once as a superuser. Local passwords only.
 2. `cp .env.example apps/web/.env.local`, then set `BETTER_AUTH_SECRET` and `WOS_SECRETS_KEY`. For a demo without any external accounts, also set `WOS_MOCK_MODE=1`.
 3. `pnpm install`
 4. `DATABASE_URL_OWNER=postgres://wos_owner:owner_dev_pw@localhost:5432/wos_dev pnpm db:migrate`
