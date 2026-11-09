@@ -318,12 +318,14 @@ export async function applyPaymentDestinationChange(
     approvalRequestId = change.approvalRequestId;
   }
 
+  // The new destination's id is the binding for its ciphertext, so it can be opened later.
+  const destId = crypto.randomUUID();
   if (!changeId) {
     // Direct apply path (should be rare; still requires prior approval via tool tier).
-    const provisionalId = input.destinationId ?? crypto.randomUUID();
+    // Bound to destId (it used to be bound to a throwaway id, which made the stored copy unreadable).
     const sealed = sealPaymentSecret(
       { accountNumber: input.accountNumber, routingNumber: input.routingNumber },
-      { tenantId: input.tenantId, bindingId: provisionalId },
+      { tenantId: input.tenantId, bindingId: destId },
     );
     ciphertext = sealed.ciphertext;
     accountLast4 = sealed.accountLast4;
@@ -337,7 +339,6 @@ export async function applyPaymentDestinationChange(
       .where(and(eq(paymentDestinations.id, input.destinationId), eq(paymentDestinations.status, "active")));
   }
 
-  const destId = crypto.randomUUID();
   // Re-bind ciphertext to the destination id so decrypt stays possible without the approval id.
   if (changeId && ciphertext) {
     const opened = openPaymentSecret(ciphertext, { tenantId: input.tenantId, bindingId: changeId });
