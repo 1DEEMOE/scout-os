@@ -47,7 +47,9 @@ test("Scout pages: DEMO labels, explanations, no damage claims, labelled analyti
   for (const t of ["Why identified", "Why it may be relevant", "What's missing", "Recommended next step", "How sure"]) await expect(page.getByText(t, { exact: true })).toBeVisible();
   await expect(page.getByText("Heuristic score from fixed rules. It is not a probability.")).toBeVisible();
   await expect(page.getByText(/not evidence of damage to this property/).first()).toBeVisible();
-  await expect(page.getByText(/Source: NOAA SPC local storm report/).first()).toBeVisible();
+  // Demo storm data never claims a real source.
+  await expect(page.getByText(/Source: invented sample storm report \(DEMO\)/).first()).toBeVisible();
+  await expect(page.getByText(/Source: NOAA SPC/)).toHaveCount(0);
   await expect(page.getByText("not recorded")).toBeVisible(); // no permission to email
   await expect(page.locator("body")).not.toContainText(/roof (is|was) damaged|damaged roof/i);
   await shot("opportunity");

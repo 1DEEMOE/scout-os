@@ -156,7 +156,7 @@ export async function uploadStormReports(input: User & { csv: string; filename?:
     const inserted = await tx.insert(signalObservations).values(parsed.signals.map((s) => ({
       tenantId: input.orgId, sourceId: src!.id, kind: s.kind, eventAt: s.eventAt, location: s.location, county: s.county, state: s.state,
       lat: s.lat, lon: s.lon, magnitude: s.magnitude, magnitudeUnit: s.magnitudeUnit, comments: s.comments,
-      confidence: SPC_CONFIDENCE, limitations: SPC_LIMITATIONS, externalRef: s.externalRef, demo: !!input.demo,
+      confidence: input.demo ? "Invented sample data (DEMO). Not a real storm report." : SPC_CONFIDENCE, limitations: SPC_LIMITATIONS, externalRef: s.externalRef, demo: !!input.demo,
     }))).onConflictDoNothing().returning({ id: signalObservations.id });
     await tx.update(intelligenceSources).set({ rowCount: inserted.length }).where(eq(intelligenceSources.id, src!.id));
     const result = { reportDay: day, added: inserted.length, duplicates: parsed.signals.length - inserted.length, rejected: parsed.rejected };
@@ -321,7 +321,7 @@ export async function runScoutScan(tx: Tx, tenantId: string, actor: { type: "age
     const evidence = scored.slice(0, 10).map((m) => ({
       signalId: m.s.id, kind: m.s.kind, description: v.describeSignal({ kind: m.s.kind, magnitude: m.s.magnitude === null ? null : Number(m.s.magnitude), magnitudeUnit: m.s.magnitudeUnit }),
       place: `${m.s.location}, ${m.s.county} County, ${m.s.state}`, distanceMiles: m.d === null ? null : Math.round(m.d * 10) / 10,
-      eventAt: m.s.eventAt.toISOString(), source: "NOAA SPC local storm report", confidence: m.s.confidence, demo: m.s.demo,
+      eventAt: m.s.eventAt.toISOString(), source: m.s.demo ? "invented sample storm report (DEMO), not real weather data" : "NOAA SPC local storm report", confidence: m.s.confidence, demo: m.s.demo,
     }));
     const canEmail = !!p.email && permitted.has(p.email) && !suppressed.has(p.email);
     const missing = [

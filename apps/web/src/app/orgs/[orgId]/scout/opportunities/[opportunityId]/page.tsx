@@ -67,7 +67,7 @@ export default async function OpportunityPage({ params }: { params: Promise<{ or
                     {ev.demo && <DemoBadge />}
                   </div>
                   <div className="text-xs text-muted">{ev.place} · <Utc date={ev.eventAt} /></div>
-                  <div className="text-xs text-muted">Source: {ev.source}, preliminary and not quality-controlled.</div>
+                  <div className="text-xs text-muted">Source: {ev.demo ? ev.source : `${ev.source}, preliminary and not quality-controlled`}.</div>
                 </li>
               ))}
             </ul>
