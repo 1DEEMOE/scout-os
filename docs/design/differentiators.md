@@ -16,6 +16,7 @@ Status: built and tested on `feat/differentiators`, not merged. Clean-room: no c
 - The new owner-only rule only tightens. It's enforced in `decideApproval` before any other check and audited as `owner_only` denials.
 - First outreach uses the front desk's proven pattern: one pre-planned step plus its approval row, bound by an action digest. **No agent was given new permissions.** At send time the tool re-checks the do-not-contact list and recorded permission, so a stale approval can't get around them.
 - No migration was applied. Proposed 0020 and 0024 are in `packages/db/proposed/` for Darian's SQL review, dry-run applied and rolled back on a throwaway database.
+- **Booking origin check (decision for review):** main added a same-origin check to `POST /bookings` that also rejected requests with *no* Origin header, which blocked every server-to-server caller, i.e. exactly the AI assistants #5 is for. The endpoint is anonymous and cookie-free, so there's no session for a cross-site request to ride on. Now: a request **with** a foreign Origin (another site's page in a visitor's browser) is still blocked (403, e2e-tested); a request **without** Origin is allowed and goes through rate limits, validation, the AI-identification rule and the approval queue.
 - Demo data never claims a real source: DEMO storm evidence now reads "invented sample storm report (DEMO), not real weather data".
 
 ## Tests

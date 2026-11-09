@@ -69,7 +69,7 @@ test("Scout pages: DEMO labels, explanations, no damage claims, labelled analyti
   // Storm reports: provenance and no map
   await page.goto(`${base}/scout/signals`);
   await expect(page.getByRole("heading", { level: 1, name: "Storm reports" })).toBeVisible();
-  await expect(page.getByText("1.75 in.")).toBeVisible();
+  await expect(page.getByText("1.75 in.").first()).toBeVisible(); // other specs may add more reports to this shared demo workspace
   await expect(page.getByText(/No map is shown/)).toBeVisible();
   await shot("signals");
 

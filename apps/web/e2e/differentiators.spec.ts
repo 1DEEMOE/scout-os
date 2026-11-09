@@ -222,6 +222,9 @@ test.describe("differentiators", () => {
     expect(slots.slots.length).toBeGreaterThan(0);
     const anon = await request.post(`/api/front-desk/${token}/bookings`, { data: { slotId: slots.slots[0]!.id, requesterKind: "ai_agent", disclosureAck: true, customerName: "Dana Field", customerEmail: "dana@field.test" } });
     expect(anon.status()).toBe(400); // assistants must say who they are
+    // Another website's page can't post bookings from a visitor's browser.
+    const crossSite = await request.post(`/api/front-desk/${token}/bookings`, { headers: { origin: "https://evil.example" }, data: { slotId: slots.slots[0]!.id, requesterKind: "person", disclosureAck: true, customerName: "X", customerEmail: "x@x.test" } });
+    expect(crossSite.status()).toBe(403);
     const res = await request.post(`/api/front-desk/${token}/bookings`, {
       data: { slotId: slots.slots[0]!.id, requesterKind: "ai_agent", agentName: "Helpful Assistant (e2e)", agentProvider: "Example AI", disclosureAck: true, customerName: "Dana Field", customerEmail: "dana@field.test", notes: "Leak over the kitchen", clientRef: `e2e-${Date.now()}` },
     });
