@@ -1,6 +1,6 @@
--- 0021 (PROPOSED, NOT APPLIED): signal feeds for the opportunity finder, and
+-- 0024 (PROPOSED, NOT APPLIED): signal feeds for the opportunity finder, and
 -- insurance-claim details on jobs. Additive only.
--- Rollback: 0021_signal_feeds_and_claims.down.sql
+-- Rollback: 0024_signal_feeds_and_claims.down.sql
 -- Review notes:
 --  * Today the finder stores MOCK storm reports as kind 'noaa_spc_storm_reports'
 --    with demo=true (labelled DEMO), and turns MOCK permits into imported

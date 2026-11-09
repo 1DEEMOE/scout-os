@@ -1,4 +1,4 @@
-import { getBusinessProfile, getOnboardingState, listIntegrations } from "@wos/core";
+import { getBusinessProfile, getOnboardingState, listIntegrations, listPacks } from "@wos/core";
 import { redirect } from "next/navigation";
 import { orgContext } from "@/server/org-context";
 import { stepFromOnboarding } from "./progress";
@@ -26,6 +26,7 @@ export default async function WelcomePage({ params, searchParams }: { params: Pr
       step={step}
       name={state.orgName}
       industry={state.industry ?? "roofing"}
+      packs={listPacks().map((p) => ({ id: p.id, label: p.label, group: p.group, summary: p.summary, watchLine: p.watchLine, weather: p.signals.includes("weather") }))}
       zip={(sp.zip ?? "").replace(/\D/g, "").slice(0, 5)}
       serviceArea={serviceArea}
       hasDemoData={state.hasDemoData}

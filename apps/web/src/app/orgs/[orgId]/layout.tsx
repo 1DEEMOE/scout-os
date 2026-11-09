@@ -1,9 +1,12 @@
 import { headers } from "next/headers";
-import { approvalsForReview, getPauseState, listAgents, listMyOrgs, listRoutines, listThreads, planSummary } from "@wos/core";
+import { approvalsForReview, getPack, getPauseState, listAgents, listMyOrgs, listRoutines, listThreads, planSummary, readPackId } from "@wos/core";
+import { withTenant } from "@wos/db";
 import { getSessionUser } from "@/server/auth";
 import { isPlatformAdmin } from "@/server/platform-admin";
 import { orgContext } from "@/server/org-context";
 import { modelStatus } from "@/server/engine";
+import { accentForGroup } from "../../accents";
+import { PackAccent } from "../../pack-accent";
 import { Shell } from "./nav";
 
 export const dynamic = "force-dynamic";
@@ -23,6 +26,8 @@ export default async function OrgLayout({ children, params }: { children: React.
     getSessionUser(await headers()),
   ]);
   const model = modelStatus();
+  const packId = await withTenant(orgId, (tx) => readPackId(tx));
+  const accent = accentForGroup(getPack(packId ?? "general").group);
   const banners = (
     <div className="mb-8 flex flex-col gap-3 empty:hidden">
       {pause.paused && (
@@ -61,6 +66,7 @@ export default async function OrgLayout({ children, params }: { children: React.
         isPlatformAdmin: isPlatformAdmin(user),
       }}
     >
+      <PackAccent accent={accent} />
       {children}
     </Shell>
   );

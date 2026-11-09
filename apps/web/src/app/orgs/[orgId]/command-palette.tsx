@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { authClient } from "@/lib/auth-client";
 import { apply as applyTheme } from "../../theme";
@@ -31,7 +31,8 @@ export function ShortcutHint({ className = "" }: { className?: string }) {
 /**
  * Cmd/Ctrl-K: jump to any page or run any action without a crowded menu.
  * A modal dialog with a combobox and a grouped listbox (WAI-ARIA combobox
- * pattern): arrows move, Enter runs, Escape closes and returns focus.
+ * pattern): arrows move, Enter runs, Escape closes from anywhere in the dialog
+ * and returns focus.
  */
 export function CommandPalette({ data }: { data: ShellData }) {
   const router = useRouter();
@@ -61,18 +62,28 @@ export function CommandPalette({ data }: { data: ShellData }) {
     };
   }, []);
 
-  useEffect(() => {
-    if (open) {
-      returnTo.current = document.activeElement as HTMLElement | null;
-      setQuery("");
-      setActive(0);
-      requestAnimationFrame(() => inputRef.current?.focus());
-      document.body.style.overflow = "hidden";
-      return () => {
-        document.body.style.overflow = "";
-        returnTo.current?.focus?.();
-      };
-    }
+  useLayoutEffect(() => {
+    if (!open) return;
+    const previous = document.activeElement;
+    if (previous instanceof HTMLElement && previous !== inputRef.current) returnTo.current = previous;
+    setQuery("");
+    setActive(0);
+    inputRef.current?.focus();
+    document.body.style.overflow = "hidden";
+    // Escape must close even when focus has not reached the input yet
+    // (Search + Enter, or a click on the list). Capture so it wins over the page.
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      e.preventDefault();
+      e.stopPropagation();
+      setOpen(false);
+    };
+    document.addEventListener("keydown", onKey, true);
+    return () => {
+      document.removeEventListener("keydown", onKey, true);
+      document.body.style.overflow = "";
+      returnTo.current?.focus?.();
+    };
   }, [open]);
 
   useEffect(() => setActive(0), [query]);

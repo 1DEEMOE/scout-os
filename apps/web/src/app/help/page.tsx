@@ -65,7 +65,10 @@ export default function HelpPage() {
         </dl>
       </section>
 
-      <p><a className="inline-flex min-h-11 items-center font-medium text-accent underline underline-offset-4" href="/orgs">Back to your workspaces</a></p>
+      <p className="flex flex-col gap-3">
+        <a className="inline-flex min-h-11 items-center font-medium text-accent underline underline-offset-4" href="/trust">How decisions are kept</a>
+        <a className="inline-flex min-h-11 items-center font-medium text-accent underline underline-offset-4" href="/orgs">Back to your workspaces</a>
+      </p>
     </div>
   );
 }

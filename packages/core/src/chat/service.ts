@@ -3,7 +3,7 @@ import { z } from "zod";
 import { chatDelegations, chatMessages, chatThreads, isUuid, tasks, users, type Tx } from "@wos/db";
 import { recordAudit } from "../audit";
 import { AppError } from "../errors";
-import { logger } from "../logger";
+import { logger, scrubPii } from "../logger";
 import { ANY_ROLE, auditDenied, inOrg, requireRole, STAFF } from "../org/access";
 import { agentsPaused } from "../org/pause";
 import { loadAgent } from "../engine/agents";
@@ -11,6 +11,17 @@ import { getEngine } from "../engine/runtime";
 import { insertTask } from "../engine/tasks";
 import { externalData, SAFETY_PREAMBLE } from "../engine/orchestrator";
 import { DELEGATE_TOOL, delegateArgs, LEAD_BOT_SYSTEM, MAX_DELEGATION_DEPTH, MAX_DELEGATIONS_PER_TURN, type DelegableKind } from "./lead";
+import { applyChatCommand } from "../kimi/round1";
+import { workspaceSnapshot } from "./read";
+
+/** A model tool call that names another tenant is refused before any read. */
+export function classifyToolCall(orgId: string, call: { name: string; input: unknown }): "read" | "delegate" | "foreign_tenant" | "unknown" {
+  const requested = call.input && typeof call.input === "object" && "tenantId" in call.input ? String((call.input as { tenantId?: unknown }).tenantId ?? "") : "";
+  if (requested && requested !== orgId) return "foreign_tenant";
+  if (call.name === "read.workspace") return "read";
+  if (call.name === "delegate") return "delegate";
+  return "unknown";
+}
 
 export type ChatThreadRow = typeof chatThreads.$inferSelect;
 export type ChatMessageRow = typeof chatMessages.$inferSelect;
@@ -84,6 +95,7 @@ export interface SendResult {
   taskIds: string[];
   duplicate: boolean;
   mock: boolean;
+  chip?: { kind: "remembered"; memoryId: string; text: string } | { kind: "routine"; routineId: string; text: string } | null;
 }
 
 /**
@@ -127,6 +139,17 @@ export async function sendMessage(input: { actorUserId: string; orgId: string; t
   const { router } = getEngine();
   if (stored.duplicate) return { messageId: stored.id, replyId: null, taskIds: [], duplicate: true, mock: router.isMock };
 
+  const command = await applyChatCommand({ actorUserId: input.actorUserId, orgId: input.orgId, text: content.data });
+  if (command) {
+    const replyId = await inOrg(input.orgId, async (tx) => {
+      const [r] = await tx.insert(chatMessages).values({ tenantId: input.orgId, threadId: input.threadId, authorType: "lead", content: command.reply, mock: false }).returning({ id: chatMessages.id });
+      await recordAudit(tx, { tenantId: input.orgId, actorType: "agent", actorId: "lead", action: "chat.lead.reply", target: `chat_message:${r!.id}`, tier: 0, outcome: "success", metadata: { via: "plain_command", mock: false } });
+      await tx.update(chatThreads).set({ updatedAt: new Date() }).where(eq(chatThreads.id, input.threadId));
+      return r!.id;
+    });
+    return { messageId: stored.id, replyId, taskIds: [], duplicate: false, mock: false, chip: command.chip };
+  }
+
   // Kill switch: no model call, no hand-offs. Say so plainly.
   if (stored.paused) {
     const replyId = await inOrg(input.orgId, async (tx) => {
@@ -154,11 +177,11 @@ export async function sendMessage(input: { actorUserId: string; orgId: string; t
           content: [earlier.length ? externalData("chat_history", earlier.map((m) => `${m.authorType}: ${m.content}`).join("\n")) : "", `Request from the business user:\n${content.data}`].filter(Boolean).join("\n\n"),
         },
       ],
-      tools: [DELEGATE_TOOL],
+      tools: [DELEGATE_TOOL, { name: "read.workspace", description: "Read-only counts across leads, jobs, inbox, invoices and approvals for this workspace. Cannot send, pay, or change anything.", inputSchema: { type: "object", properties: {} } }],
       maxTokens: 1024,
     });
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
+    const message = String(scrubPii(err instanceof Error ? err.message : String(err)) ?? "error");
     logger.warn({ tenantId: input.orgId, threadId: input.threadId, err: message }, "lead bot model call failed");
     const replyId = await inOrg(input.orgId, async (tx) => {
       const [r] = await tx.insert(chatMessages).values({ tenantId: input.orgId, threadId: input.threadId, authorType: "lead", content: `I couldn't reach the AI model, so nothing was handed off. (${message.slice(0, 300)})` }).returning({ id: chatMessages.id });
@@ -174,7 +197,16 @@ export async function sendMessage(input: { actorUserId: string; orgId: string; t
     await requireRole(tx, input.orgId, input.actorUserId, STAFF, "chat.message.send");
     const accepted: { agent: DelegableKind; request: string }[] = [];
     const refused: { name: string; reason: string }[] = [];
+    let snapshot = "";
     for (const call of res.toolCalls) {
+      if (classifyToolCall(input.orgId, call) === "foreign_tenant") {
+        refused.push({ name: call.name, reason: "foreign_tenant" });
+        continue;
+      }
+      if (call.name === "read.workspace") {
+        snapshot = await workspaceSnapshot(tx, input.orgId);
+        continue;
+      }
       const parsed = call.name === "delegate" ? delegateArgs.safeParse(call.input) : null;
       if (!parsed?.success) refused.push({ name: call.name, reason: call.name === "delegate" ? "invalid_arguments" : "unknown_tool" });
       else if (accepted.some((a) => a.agent === parsed.data.agent)) refused.push({ name: parsed.data.agent, reason: "one_task_per_agent_per_turn" });
@@ -183,7 +215,7 @@ export async function sendMessage(input: { actorUserId: string; orgId: string; t
       else accepted.push(parsed.data);
     }
     const note = refused.length ? `\n\n(${refused.length} hand-off${refused.length > 1 ? "s" : ""} refused: ${refused.map((r) => `${r.name}: ${r.reason.replaceAll("_", " ")}`).join("; ")})` : "";
-    const text = (res.text.trim() || (accepted.length ? `Handed to ${accepted.map((a) => a.agent).join(", ")}.` : "No hand-offs.")).slice(0, 7000) + note;
+    const text = ((res.text.trim() || (accepted.length ? `Handed to ${accepted.map((a) => a.agent).join(", ")}.` : "No hand-offs.")) + (snapshot ? `\n\n${snapshot}` : "")).slice(0, 7000) + note;
     const [reply] = await tx
       .insert(chatMessages)
       .values({ tenantId: input.orgId, threadId: input.threadId, authorType: "lead", content: text, provider: res.provider, model: res.model, mock: router.isMock })

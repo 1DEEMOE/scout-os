@@ -46,11 +46,12 @@ import {
   uploadJobPhoto,
 } from "@wos/core";
 import { seedMorningBriefing } from "./briefing-seed";
+import { evidenceDir } from "./evidence-dir";
 import { withTenant } from "@wos/db";
 import { getAuth } from "../src/server/auth";
 import { resetDb } from "../../../packages/db/test/helpers";
 
-const OUT = process.env.DEMO_DIR || "/workspace/scout-os/demo";
+const OUT = process.env.DEMO_DIR ? path.resolve(path.resolve(import.meta.dirname, "../../.."), process.env.DEMO_DIR) : evidenceDir("demo");
 const PHOTO_DIR = process.env.WOS_JOB_PHOTO_DIR || path.join(OUT, "job-photos");
 const EMAIL = process.env.DEMO_EMAIL || "jordan@peachtree.example.test";
 const PASSWORD = process.env.DEMO_PASSWORD || "sample-peachtree-2026";

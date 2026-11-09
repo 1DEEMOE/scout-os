@@ -1,4 +1,4 @@
-import { approvalsForReview, getEngine, type ApprovalForReview } from "@wos/core";
+import { approvalsForReview, approvalCard, getEngine, type ApprovalForReview } from "@wos/core";
 import { orgContext } from "@/server/org-context";
 import { ActionButton } from "../../../actions";
 import { fieldList } from "../../../field-labels";
@@ -20,6 +20,7 @@ const STATUS_LABEL: Record<string, string> = {
 function OpenCard({ item, orgId, mockTool }: { item: ApprovalForReview; orgId: string; mockTool: boolean }) {
   const a = item.approval;
   const r = item.reviewer;
+  const card = approvalCard({ summary: item.headline, tier: a.tier, toolName: a.toolName, who: item.requestedByName });
   return (
     <Card>
       <div className="flex flex-col gap-5">
@@ -29,7 +30,14 @@ function OpenCard({ item, orgId, mockTool }: { item: ApprovalForReview; orgId: s
           {item.ownerOnly && <OwnerOnlyBadge />}
           {mockTool && <MockBadge />}
         </div>
-        <h2 className="text-xl font-semibold leading-snug tracking-tight">{item.headline}</h2>
+        <h2 className="text-xl font-semibold leading-snug tracking-tight">{card.line}</h2>
+        {card.badges.length > 0 && (
+          <ul className="flex flex-wrap gap-2">
+            {card.badges.map((badge) => (
+              <li key={badge}><Badge tone={badge === "money" || badge === "can't be undone" ? "danger" : "warn"}>{badge}</Badge></li>
+            ))}
+          </ul>
+        )}
 
         {/* Always-visible safety facts: what / who / amount / source context */}
         <ul className="space-y-2 text-base">
@@ -74,10 +82,15 @@ function OpenCard({ item, orgId, mockTool }: { item: ApprovalForReview; orgId: s
               <ActionButton
                 path="approval.decide"
                 input={{ orgId, approvalId: a.id, decision: "approve" }}
-                label={a.tier === 4 ? "OK (needs second person)" : "OK"}
+                label={a.tier === 4 ? "Approve once (needs a second owner)" : "Approve once"}
                 variant="primary"
               />
-              <ActionButton path="approval.decide" input={{ orgId, approvalId: a.id, decision: "reject" }} label="Decline" />
+              {card.alwaysAllowBlocked ? (
+                <p className="text-base text-muted">{card.alwaysAllowBlocked}</p>
+              ) : (
+                <ActionButton path="kimi.saveRule" input={{ orgId, text: card.suggestedRule ?? card.line, tier: a.tier, toolName: a.toolName }} label="Always allow" />
+              )}
+              <ActionButton path="approval.decide" input={{ orgId, approvalId: a.id, decision: "reject" }} label="Not now" />
             </div>
           </div>
         )}

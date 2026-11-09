@@ -26,7 +26,8 @@ export async function rememberFact(input: { actorUserId: string; orgId: string; 
 export async function listOrgMemory(input: { actorUserId: string; orgId: string }) {
   return inOrg(input.orgId, async (tx) => {
     await requireRole(tx, input.orgId, input.actorUserId, ANY_ROLE, "memory.list");
-    return tx.select().from(memoryRecords).where(eq(memoryRecords.layer, "org")).orderBy(desc(memoryRecords.createdAt)).limit(500);
+    // speed:* rows are operational records (templates, lead timing), not memories a person wrote.
+    return tx.select().from(memoryRecords).where(and(eq(memoryRecords.layer, "org"), sql`${memoryRecords.scopeRef} NOT LIKE 'speed:%'`)).orderBy(desc(memoryRecords.createdAt)).limit(500);
   });
 }
 

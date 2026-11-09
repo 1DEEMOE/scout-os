@@ -73,6 +73,7 @@ function useRail(): [boolean, (v: boolean) => void] {
 
 const row = "group relative flex min-h-11 items-center gap-3 rounded-xl px-3 text-small transition-colors duration-150";
 const quiet = "text-muted hover:bg-soft hover:text-ink";
+const chromeQuiet = "text-chrome-muted hover:bg-chrome-soft hover:text-chrome-ink";
 const current = "bg-accent-soft font-medium text-ink";
 /** In the rail, a label becomes a tooltip: still the link's accessible name, shown on hover or focus. */
 const railTip =
@@ -87,14 +88,14 @@ function Badge({ n }: { n: number }) {
   );
 }
 
-function NavLink({ base, path, item, onNavigate, railable }: { base: string; path: string; item: NavItem; onNavigate?: () => void; railable?: boolean }) {
+function NavLink({ base, path, item, onNavigate, railable, onChrome = true }: { base: string; path: string; item: NavItem; onNavigate?: () => void; railable?: boolean; onChrome?: boolean }) {
   const active = isActive(path, base, item);
   return (
     <a
       href={base + item.href}
       onClick={onNavigate}
       aria-current={active ? "page" : undefined}
-      className={`${row} ${active ? current : quiet} ${railable ? "rail:justify-center rail:px-0" : ""}`}
+      className={`${row} ${active ? current : onChrome ? chromeQuiet : quiet} ${railable ? "rail:justify-center rail:px-0" : ""}`}
     >
       {item.icon && <Icon name={item.icon} className={`h-5 w-5 ${active ? "text-accent" : ""}`} />}
       <span className={`min-w-0 truncate ${railable ? railTip : ""}`}>{item.label}</span>
@@ -104,22 +105,22 @@ function NavLink({ base, path, item, onNavigate, railable }: { base: string; pat
 }
 
 /** A collapsible group under More: closed by default, remembered, open while you're on one of its pages. */
-function Group({ group, base, path, onNavigate }: { group: NavGroup; base: string; path: string; onNavigate?: () => void }) {
+function Group({ group, base, path, onNavigate, onChrome = true }: { group: NavGroup; base: string; path: string; onNavigate?: () => void; onChrome?: boolean }) {
   const inside = group.items.some((i) => isActive(path, base, i));
   const [open, toggle] = useRemembered(`scout-nav-group:${group.id}`, inside);
   const panel = `nav-group-${group.id}`;
   return (
     <li>
-      <button type="button" onClick={toggle} aria-expanded={open} aria-controls={panel} className={`${row} w-full ${quiet}`}>
-        <Icon name={group.icon} className="h-5 w-5" />
-        <span className="flex-1 text-left">{group.title}</span>
-        <Icon name="chevron" className={`h-4 w-4 transition-transform duration-200 ${open ? "rotate-180" : ""}`} />
+      <button type="button" onClick={toggle} aria-expanded={open} aria-controls={panel} className={`${row} w-full ${onChrome ? "text-chrome-ink hover:bg-chrome-soft" : "text-ink hover:bg-soft"}`}>
+        <Icon name={group.icon} className={`h-5 w-5 ${onChrome ? "text-chrome-muted group-hover:text-chrome-ink" : "text-muted group-hover:text-ink"}`} />
+        <span className="min-w-0 flex-1 text-left">{group.title}</span>
+        <Icon name="chevron" className={`h-4 w-4 transition-transform duration-200 ${open ? "rotate-180" : ""} ${onChrome ? "text-chrome-muted group-hover:text-chrome-ink" : "text-muted group-hover:text-ink"}`} />
       </button>
       {open && (
-        <ul id={panel} className="motion-rise mt-2 ml-5 flex flex-col gap-2 border-l border-line pl-3">
+        <ul id={panel} className={`motion-rise mt-2 ml-5 flex flex-col gap-2 border-l pl-3 ${onChrome ? "border-chrome-line" : "border-line"}`}>
           {group.items.map((i) => (
             <li key={i.href}>
-              <NavLink base={base} path={path} item={i} onNavigate={onNavigate} />
+              <NavLink base={base} path={path} item={i} onNavigate={onNavigate} onChrome={onChrome} />
             </li>
           ))}
         </ul>
@@ -174,7 +175,7 @@ function Popover({
         {button}
       </button>
       {open && (
-        <div id={panelId} role="group" aria-label={label} className={`motion-pop absolute z-50 flex flex-col gap-1 rounded-2xl border border-line bg-surface p-2 shadow-[var(--shadow-raised)] ${panelClass}`}>
+        <div id={panelId} role="group" aria-label={label} className={`motion-pop absolute z-50 flex flex-col gap-1 rounded-2xl border border-line bg-surface p-2 text-ink shadow-[var(--shadow-raised)] ${panelClass}`}>
           {children(() => setOpen(false))}
         </div>
       )}
@@ -204,12 +205,14 @@ function ProfileItems({ d, onNavigate }: { d: ShellData; onNavigate?: () => void
   return (
     <>
       <div className="px-3 pt-2 pb-3">
-        <p className="truncate font-medium">{d.user.name}</p>
+        <p className="truncate font-medium text-ink">{d.user.name}</p>
         <p className="truncate text-sm text-muted">{d.user.email}</p>
       </div>
       <a href={`/orgs/${d.orgId}/settings`} onClick={onNavigate} className={menuItem}>Settings</a>
       <a href="/help" onClick={onNavigate} className={menuItem}>Help &amp; install</a>
-      <div className="px-2 py-2"><ThemeToggle /></div>
+      <div className="flex flex-col gap-2 px-2 py-2">
+        <ThemeToggle />
+      </div>
       <div className="px-1 pt-1 pb-1 [&_button]:w-full [&_button]:justify-center"><SignOutButton /></div>
     </>
   );
@@ -223,12 +226,12 @@ function FooterRow({ d }: { d: ShellData }) {
         <Popover
           label="Switch workspace"
           named={false}
-          buttonClass={`${row} ${quiet} w-full rail:justify-center rail:px-0`}
+          buttonClass={`${row} ${chromeQuiet} w-full rail:justify-center rail:px-0`}
           panelClass="bottom-full left-0 mb-2 w-64 rail:bottom-0 rail:left-full rail:mb-0 rail:ml-3"
           button={
             <>
-              <span aria-hidden className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-soft text-sm font-semibold text-ink">{initial(d.orgName)}</span>
-              <span className="min-w-0 flex-1 truncate text-left text-ink rail:sr-only">{d.orgName}</span>
+              <span aria-hidden className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-chrome-soft text-sm font-semibold text-chrome-ink">{initial(d.orgName)}</span>
+              <span className="min-w-0 flex-1 truncate text-left text-chrome-ink rail:sr-only">{d.orgName}</span>
               <span className="sr-only">, switch workspace</span>
             </>
           }
@@ -267,7 +270,7 @@ function Sidebar({ d, path }: { d: ShellData; path: string }) {
           aria-label={rail ? "Expand sidebar" : "Collapse sidebar"}
           aria-controls="sidebar"
           aria-expanded={!rail}
-          className="grid h-11 w-11 place-items-center rounded-xl text-muted hover:bg-soft hover:text-ink"
+          className="grid h-11 w-11 place-items-center rounded-xl text-chrome-muted hover:bg-chrome-soft hover:text-chrome-ink"
         >
           <Icon name="rail" />
         </button>
@@ -297,7 +300,7 @@ function Sidebar({ d, path }: { d: ShellData; path: string }) {
             }}
             aria-expanded={rail ? false : more}
             aria-controls="sidebar-more"
-            className={`${row} ${quiet} rail:justify-center rail:px-0`}
+            className={`${row} ${chromeQuiet} rail:justify-center rail:px-0`}
           >
             <Icon name="more" />
             <span className={`flex-1 text-left ${railTip}`}>More</span>
@@ -312,7 +315,7 @@ function Sidebar({ d, path }: { d: ShellData; path: string }) {
       </nav>
 
       <div className="mt-auto flex flex-col gap-3">
-        <span className="px-3 text-sm text-muted rail:hidden">Development build</span>
+        <span className="px-3 text-sm text-chrome-muted rail:hidden">Development build</span>
         <FooterRow d={d} />
       </div>
     </div>
@@ -325,7 +328,7 @@ function Sidebar({ d, path }: { d: ShellData; path: string }) {
 function BottomTabs({ d, path }: { d: ShellData; path: string }) {
   const base = `/orgs/${d.orgId}`;
   return (
-    <nav aria-label="Primary" className="fixed inset-x-0 bottom-0 z-30 border-t border-line bg-surface/95 backdrop-blur lg:hidden" style={{ paddingBottom: "env(safe-area-inset-bottom)" }}>
+    <nav aria-label="Primary" className="fixed inset-x-0 bottom-0 z-30 border-t border-chrome-line bg-chrome lg:hidden" style={{ paddingBottom: "env(safe-area-inset-bottom)" }}>
       <ul className="mx-auto flex max-w-lg items-stretch justify-between gap-1 px-2 py-1.5">
         {primaryItems(d).map((t) => {
           const active = isActive(path, base, t);
@@ -334,9 +337,9 @@ function BottomTabs({ d, path }: { d: ShellData; path: string }) {
               <a
                 href={base + t.href}
                 aria-current={active ? "page" : undefined}
-                className={`relative flex min-h-14 flex-col items-center justify-center gap-1 rounded-2xl px-1 text-xs transition-colors duration-150 ${active ? "font-semibold text-accent" : "text-muted"}`}
+                className={`relative flex min-h-14 flex-col items-center justify-center gap-1 rounded-2xl px-1 text-xs transition-colors duration-150 ${active ? "font-semibold text-chrome-accent" : "text-chrome-muted"}`}
               >
-                <span className={`grid h-7 w-12 place-items-center rounded-full ${active ? "bg-accent-soft" : ""}`}>
+                <span className={`grid h-7 w-12 place-items-center rounded-full ${active ? "bg-chrome-soft" : ""}`}>
                   <Icon name={t.icon!} className="h-5 w-5" />
                 </span>
                 {t.label}
@@ -401,7 +404,7 @@ function MoreSheet({ d, path, onClose }: { d: ShellData; path: string; onClose: 
         </button>
         <nav aria-label="More pages">
           <ul className="flex flex-col gap-2">
-            {moreGroups(d).map((g) => <Group key={g.id} group={g} base={base} path={path} onNavigate={onClose} />)}
+            {moreGroups(d).map((g) => <Group key={g.id} group={g} base={base} path={path} onNavigate={onClose} onChrome={false} />)}
           </ul>
         </nav>
         <section aria-label="Workspace" className="mt-8 flex flex-col gap-1">
@@ -434,18 +437,18 @@ export function Shell({ data, banners, children }: { data: ShellData; banners: R
 
   return (
     <div className="min-h-screen lg:grid lg:grid-cols-[var(--sidebar-w)_1fr] lg:transition-[grid-template-columns] lg:duration-200">
-      <a href="#main" className="sr-only z-50 rounded-full bg-accent px-5 py-3 font-medium text-on-accent focus:not-sr-only focus:fixed focus:top-3 focus:left-3">Skip to content</a>
-      <aside id="sidebar" className="sticky top-0 hidden h-screen overflow-y-auto border-r border-line bg-paper lg:block rail:overflow-visible">
+      <a href="#main" className="accent-fill sr-only z-50 rounded-full bg-accent px-5 py-3 font-medium text-on-accent focus:not-sr-only focus:fixed focus:top-3 focus:left-3">Skip to content</a>
+      <aside id="sidebar" className="sticky top-0 hidden h-screen overflow-y-auto border-r border-chrome-line bg-chrome text-chrome-ink lg:block rail:overflow-visible">
         <Sidebar d={data} path={path} />
       </aside>
 
-      <header className="sticky top-0 z-20 flex items-center justify-between gap-3 border-b border-line bg-surface/95 px-4 py-2.5 backdrop-blur lg:hidden">
+      <header className="sticky top-0 z-20 flex items-center justify-between gap-3 border-b border-chrome-line bg-chrome px-4 py-2.5 text-chrome-ink lg:hidden">
         <span className="min-w-0 truncate font-medium">{data.orgName}</span>
         <div className="flex items-center gap-2">
-          <button type="button" onClick={openPalette} aria-label="Search" className="grid h-11 w-11 place-items-center rounded-full border border-line">
+          <button type="button" onClick={openPalette} aria-label="Search" className="grid h-11 w-11 place-items-center rounded-full border border-chrome-line text-chrome-ink">
             <Icon name="search" />
           </button>
-          <button ref={moreRef} type="button" onClick={() => setSheet(true)} aria-expanded={sheet} className="inline-flex min-h-11 items-center gap-2 rounded-full border border-line px-4">
+          <button ref={moreRef} type="button" onClick={() => setSheet(true)} aria-expanded={sheet} className="inline-flex min-h-11 items-center gap-2 rounded-full border border-chrome-line px-4 text-chrome-ink">
             <Icon name="more" /> More
           </button>
         </div>

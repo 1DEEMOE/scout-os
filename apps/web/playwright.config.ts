@@ -10,12 +10,14 @@ const env = {
   DATABASE_URL: db,
   BETTER_AUTH_SECRET: "e2e-secret-e2e-secret-e2e-secret-000",
   BETTER_AUTH_URL: `http://localhost:${port}`,
+  APP_ORIGIN: `http://localhost:${port}`,
   WOS_MOCK_MODE: "1",
   WOS_SECRETS_KEY: Buffer.alloc(32, 7).toString("base64"),
   ANTHROPIC_API_KEY: "",
   LOG_LEVEL: "warn",
   // The operator account that may create client workspaces (seeded with a verified email).
-  WOS_PLATFORM_ADMIN_EMAILS: "ops@e2e.test",
+  // MOCK operator only. owner@e2e.test is a normal demo user and is not listed here.
+  WOS_PLATFORM_ADMIN_EMAILS: "mock-admin@e2e.test",
 };
 Object.assign(process.env, env);
 

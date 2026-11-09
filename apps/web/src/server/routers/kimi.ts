@@ -1,0 +1,51 @@
+import { z } from "zod";
+import {
+  activityFeed,
+  firstRunFor,
+  handBack,
+  listArtifacts,
+  listGoals,
+  memoryPanel,
+  moneySnapshot,
+  notifyPrefs,
+  opportunitiesFor,
+  pauseTask,
+  readArtifactByToken,
+  saveArtifact,
+  saveChatRoutine,
+  saveGoal,
+  saveMoneyCap,
+  saveNotifyPrefs,
+  saveSuggestedRule,
+  startChipAction,
+  takeOverDraft,
+  undoPracticeMemory,
+  watchTask,
+} from "@wos/core";
+import { protectedProcedure, router } from "../trpc";
+
+const orgId = z.string().max(64);
+
+export const kimiRouter = router({
+  firstRun: protectedProcedure.input(z.object({ orgId, businessName: z.string().max(120).optional(), packId: z.string().max(40).optional() })).query(({ ctx, input }) => firstRunFor({ actorUserId: ctx.userId, orgId: input.orgId, businessName: input.businessName || "Your business", packId: input.packId || "general" })),
+  feed: protectedProcedure.input(z.object({ orgId })).query(({ ctx, input }) => activityFeed({ actorUserId: ctx.userId, orgId: input.orgId })),
+  watch: protectedProcedure.input(z.object({ orgId, taskId: z.string().max(64).optional() })).query(({ ctx, input }) => watchTask({ actorUserId: ctx.userId, orgId: input.orgId, taskId: input.taskId || "00000000-0000-4000-8000-000000000000" })),
+  pause: protectedProcedure.input(z.object({ orgId, taskId: z.string().max(64).optional() })).mutation(({ ctx, input }) => pauseTask({ actorUserId: ctx.userId, orgId: input.orgId, taskId: input.taskId || "00000000-0000-4000-8000-000000000000" })),
+  takeOver: protectedProcedure.input(z.object({ orgId, taskId: z.string().max(64).optional(), text: z.string().max(1500).optional() })).mutation(({ ctx, input }) => takeOverDraft({ actorUserId: ctx.userId, orgId: input.orgId, taskId: input.taskId || "00000000-0000-4000-8000-000000000000", text: input.text || "Draft" })),
+  handBack: protectedProcedure.input(z.object({ orgId, taskId: z.string().max(64).optional() })).mutation(({ ctx, input }) => handBack({ actorUserId: ctx.userId, orgId: input.orgId, taskId: input.taskId || "00000000-0000-4000-8000-000000000000" })),
+  memory: protectedProcedure.input(z.object({ orgId })).query(({ ctx, input }) => memoryPanel({ actorUserId: ctx.userId, orgId: input.orgId })),
+  saveRule: protectedProcedure.input(z.object({ orgId, text: z.string().max(300).optional(), tier: z.number().int().optional(), toolName: z.string().max(80).optional() })).mutation(({ ctx, input }) => saveSuggestedRule({ actorUserId: ctx.userId, orgId: input.orgId, text: input.text || "note", toolName: input.toolName || "memory.note" })),
+  chip: protectedProcedure.input(z.object({ orgId, taskId: z.string().max(64).optional(), kind: z.string().max(40).optional(), label: z.string().max(200).optional() })).mutation(({ ctx, input }) => startChipAction({ actorUserId: ctx.userId, orgId: input.orgId, taskId: input.taskId, kind: input.kind === "note" ? "note" : "follow_up", label: input.label })),
+  routine: protectedProcedure.input(z.object({ orgId, text: z.string().max(500).optional() })).mutation(({ ctx, input }) => saveChatRoutine({ actorUserId: ctx.userId, orgId: input.orgId, text: input.text || "every Friday, list open jobs" })),
+  opportunities: protectedProcedure.input(z.object({ orgId, packId: z.string().max(40).optional() })).query(({ ctx, input }) => opportunitiesFor({ actorUserId: ctx.userId, orgId: input.orgId, packId: input.packId || "general" })),
+  notify: protectedProcedure.input(z.object({ orgId })).query(({ ctx, input }) => notifyPrefs({ actorUserId: ctx.userId, orgId: input.orgId })),
+  notifySave: protectedProcedure.input(z.object({ orgId, quietStart: z.coerce.number().optional(), quietEnd: z.coerce.number().optional(), cap: z.coerce.number().optional() })).mutation(({ ctx, input }) => saveNotifyPrefs({ actorUserId: ctx.userId, orgId: input.orgId, quietStart: input.quietStart, quietEnd: input.quietEnd, cap: input.cap })),
+  money: protectedProcedure.input(z.object({ orgId })).query(({ ctx, input }) => moneySnapshot({ actorUserId: ctx.userId, orgId: input.orgId })),
+  moneyCap: protectedProcedure.input(z.object({ orgId, weeklyCapDollars: z.coerce.number().optional(), weeklyCapCents: z.coerce.number().optional() })).mutation(({ ctx, input }) => saveMoneyCap({ actorUserId: ctx.userId, orgId: input.orgId, weeklyCapDollars: input.weeklyCapDollars, weeklyCapCents: input.weeklyCapCents })),
+  goals: protectedProcedure.input(z.object({ orgId })).query(({ ctx, input }) => listGoals({ actorUserId: ctx.userId, orgId: input.orgId })),
+  goal: protectedProcedure.input(z.object({ orgId, text: z.string().max(200).optional() })).mutation(({ ctx, input }) => saveGoal({ actorUserId: ctx.userId, orgId: input.orgId, text: input.text || "Fill Thursday afternoon" })),
+  artifacts: protectedProcedure.input(z.object({ orgId })).query(({ ctx, input }) => listArtifacts({ actorUserId: ctx.userId, orgId: input.orgId })),
+  artifact: protectedProcedure.input(z.object({ orgId, title: z.string().max(120).optional() })).mutation(({ ctx, input }) => saveArtifact({ actorUserId: ctx.userId, orgId: input.orgId, title: input.title || "Weekly note" })),
+  undoPractice: protectedProcedure.input(z.object({ orgId, memoryId: z.string().max(64).optional() })).mutation(({ ctx, input }) => undoPracticeMemory({ actorUserId: ctx.userId, orgId: input.orgId, memoryId: input.memoryId })),
+  artifactRead: protectedProcedure.input(z.object({ orgId, token: z.string().max(80).optional() })).query(({ ctx, input }) => readArtifactByToken({ actorUserId: ctx.userId, orgId: input.orgId, token: input.token || "missing" })),
+});

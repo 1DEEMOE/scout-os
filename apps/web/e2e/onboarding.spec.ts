@@ -1,9 +1,10 @@
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { expect, test, type Page } from "@playwright/test";
+import { evidenceDir } from "./evidence-dir";
 
 const seed = JSON.parse(readFileSync(path.resolve(import.meta.dirname, ".seed.json"), "utf8")) as { password: string };
-const shots = path.resolve("/workspace/scout-os/onboarding/shots");
+const shots = evidenceDir("onboarding");
 
 async function signIn(page: Page, email: string) {
   for (let attempt = 0; ; attempt++) {
@@ -23,7 +24,6 @@ async function signIn(page: Page, email: string) {
 
 test("guided setup: create org → DEMO → first Morning Briefing under 15 minutes", async ({ page }) => {
   test.setTimeout(180_000);
-  mkdirSync(shots, { recursive: true });
   await signIn(page, "owner@e2e.test");
 
   const t0 = Date.now();

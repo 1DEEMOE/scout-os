@@ -40,10 +40,17 @@ export interface NavGroup {
   items: NavItem[];
 }
 
+/** Page path of a href, ignoring an in-page anchor (`/settings#team` → `/settings`). */
+function pagePath(base: string, href: string): string {
+  return base + href.split("#")[0]!;
+}
+
 export function isActive(path: string, base: string, l: NavItem): boolean {
-  if (l.exact) return path === base + l.href || (l.also ?? []).some((h) => path === base + h || path.startsWith(base + h + "/"));
+  // Anchors are current only on their own page. `/settings#team` must not light up on `/settings/front-desk`.
+  if (l.href.includes("#")) return path === pagePath(base, l.href);
+  if (l.exact) return path === pagePath(base, l.href) || (l.also ?? []).some((h) => path === pagePath(base, h) || path.startsWith(pagePath(base, h) + "/"));
   const href = l.href.split("#")[0]!;
-  return [href, ...(l.also ?? [])].some((h) => path === base + h || path.startsWith(base + h + "/"));
+  return [href, ...(l.also ?? [])].some((h) => path === pagePath(base, h) || path.startsWith(pagePath(base, h) + "/"));
 }
 
 /** The five calm primary destinations, in order. */
@@ -97,6 +104,10 @@ export function moreGroups(d: ShellData): NavGroup[] {
       icon: "workspace",
       items: [
         { href: "/settings", label: "Settings", exact: true, keywords: "preferences pause agents" },
+        { href: "/settings/notifications", label: "Notifications", keywords: "quiet hours alerts cap" },
+        { href: "/settings/money", label: "Money digest", keywords: "invoices cap autopay spending" },
+        { href: "/goals", label: "This week", keywords: "goals weekly outcome" },
+        { href: "/library", label: "Library", keywords: "artifacts notes documents" },
         { href: "/settings#team", label: "Team", keywords: "members invite people roles" },
         { href: "/settings#connections", label: "Integrations", keywords: "connect gmail google hubspot stripe apps" },
         { href: "/settings/front-desk", label: "Front desk", keywords: "booking link appointments" },
@@ -107,7 +118,14 @@ export function moreGroups(d: ShellData): NavGroup[] {
             ]
           : []),
         { href: "/billing", label: "Plan & billing", keywords: "usage subscription payment" },
-        ...(d.isManager ? [{ href: "/audit", label: "Audit log", keywords: "history security" }] : []),
+        { href: "/first-run", label: "First 10 minutes", keywords: "onboarding tour demo" },
+        { href: "/memory", label: "What Scout knows", keywords: "memory facts forget" },
+        ...(d.isViewer ? [] : [{ href: "/opportunities", label: "Opportunities", keywords: "reviews schedule weather drafts" }]),
+        ...(d.isManager ? [
+          { href: "/activity", label: "Activity", keywords: "feed lineage what scout did" },
+          { href: "/audit", label: "Audit log", keywords: "history security" },
+          { href: "/recovery", label: "Recovery", keywords: "dead letter replay failures" },
+        ] : []),
         { href: "/setup", label: "Guided setup", keywords: "onboarding checklist getting started" },
       ],
     },

@@ -1,11 +1,12 @@
 import { mkdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { expect, test, type Page } from "@playwright/test";
+import { evidenceDir } from "./evidence-dir";
 
 // Independent verification pass: every nav page for each role, plus key flows.
 const seed = JSON.parse(readFileSync(path.resolve(import.meta.dirname, ".seed.json"), "utf8")) as { orgId: string; scoutOrgId: string; password: string };
-const shots = process.env.VERIFY_SHOTS ?? path.resolve(import.meta.dirname, "../../../shots");
-const NAV = ["", "/scout", "/scout/signals", "/scout/contacts", "/scout/setup", "/routines", "/routines/briefing", "/chat", "/approvals", "/tasks", "/inbox", "/sales", "/finance", "/analytics", "/agents", "/audit", "/billing", "/settings"];
+const shots = process.env.VERIFY_SHOTS ? path.resolve(path.resolve(import.meta.dirname, "../../.."), process.env.VERIFY_SHOTS) : evidenceDir("verify");
+const NAV = ["", "/scout", "/scout/signals", "/scout/contacts", "/scout/setup", "/routines", "/routines/briefing", "/chat", "/approvals", "/tasks", "/inbox", "/sales", "/finance", "/analytics", "/agents", "/audit", "/recovery", "/billing", "/settings"];
 
 async function signIn(page: Page, email: string, password = seed.password) {
   for (let attempt = 0; ; attempt++) {
@@ -57,7 +58,7 @@ for (const [email, role, orgs] of [
         // Hidden-by-role pages answer 404 by design; anything else must be 200.
         expect([200, 404], `${role} ${p}`).toContain(status);
         if (role === "viewer" && (p === "/audit" || p.startsWith("/scout") || p === "/analytics")) expect(status, `${role} ${p}`).toBe(404);
-        if (role === "viewer") await expect(page.getByRole("navigation", { name: "Organization" }).getByRole("link", { name: /^(Scout|Analytics|Audit log)$/ })).toHaveCount(0);
+        if (role === "viewer") await expect(page.getByRole("navigation", { name: "Organization" }).getByRole("link", { name: /^(Scout|Analytics|Audit log|Recovery)$/ })).toHaveCount(0);
         if (status === 200) {
           await expect(page.getByText(/Application error|Something went wrong|Internal Server Error/i)).toHaveCount(0);
           await expect(page.getByRole("heading").first()).toBeVisible();
@@ -113,7 +114,7 @@ test("member creates a task; second owner rejects a pending tier-2 request", asy
   await signIn(page, "owner2@e2e.test");
   await page.goto(`/orgs/${seed.orgId}/approvals`);
   const card = page.locator("section", { hasText: "Email bank@example.test: New account" }).last();
-  await card.getByRole("button", { name: "Decline" }).click();
+  await card.getByRole("button", { name: "Not now" }).click();
   await expect(page.locator("section", { hasText: "Recently decided" })).toContainText("Email bank@example.test: New account");
   await page.goto(`/orgs/${seed.orgId}/audit`);
   await expect(page.getByText(/reject/i).first()).toBeVisible();

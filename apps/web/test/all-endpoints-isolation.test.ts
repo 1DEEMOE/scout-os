@@ -25,6 +25,7 @@ const input = () => ({
   userId: "mallory",
   token: "probe-token-value",
   approvalId: NIL,
+  auditId: NIL,
   conversationId: NIL,
   memoryId: NIL,
   threadId: NIL,
@@ -91,6 +92,7 @@ const input = () => ({
   text: "probe note",
   subject: "probe subject",
   body: "probe body probe body probe body",
+  words: "probe trade",
 });
 
 beforeAll(async () => {

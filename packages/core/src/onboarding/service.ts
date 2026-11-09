@@ -28,6 +28,8 @@ import { importProspects, reviewBusinessProfile, saveBusinessProfile, uploadStor
 import { runScoutScan } from "../scout/service";
 import { recordPermission } from "../scout/lifecycle";
 import { applyCsvMapping, proposeCsvMapping, type LeadField } from "./csv-map";
+import { readPackId, requirePack, legacyColumn, writePackId } from "../industries/store";
+import { noteSetupStarted } from "../pilot/metrics";
 import { getPreset, ONBOARDING_STEPS, type IndustryId, type OnboardingStepId } from "./presets";
 import { lookupZip, normalizeZip } from "./zip-to-county";
 
@@ -56,8 +58,12 @@ export interface OnboardingState {
 type Actor = { actorUserId: string; orgId: string };
 
 function parseIndustry(v: string | null | undefined): IndustryId | null {
-  if (v === "roofing" || v === "general") return v;
-  return null;
+  if (!v) return null;
+  try {
+    return requirePack(v).id;
+  } catch {
+    return null;
+  }
 }
 
 async function loadOrg(tx: Parameters<Parameters<typeof inOrg>[1]>[0], orgId: string) {
@@ -135,7 +141,7 @@ export async function getOnboardingState(input: Actor): Promise<OnboardingState>
     return {
       orgId: org.id,
       orgName: org.name,
-      industry: parseIndustry(org.industry),
+      industry: (await readPackId(tx)) ?? parseIndustry(org.industry),
       timezone: org.timezone,
       step: (org.onboardingStep as OnboardingStepId | null) ?? null,
       completedAt: org.onboardingCompletedAt?.toISOString() ?? null,
@@ -150,15 +156,19 @@ export async function getOnboardingState(input: Actor): Promise<OnboardingState>
 }
 
 export async function chooseIndustry(input: Actor & { industry: IndustryId }): Promise<OnboardingState> {
-  const preset = getPreset(input.industry);
+  const pack = requirePack(input.industry);
+  const preset = getPreset(pack.id);
   await inOrg(input.orgId, async (tx) => {
     await requireRole(tx, input.orgId, input.actorUserId, MANAGERS, "onboarding.industry");
     const org = await loadOrg(tx, input.orgId);
     if (org.onboardingCompletedAt) throw new AppError("CONFLICT", "Setup is already finished. Change industry from Settings later.");
+    const pack = requirePack(input.industry);
     await tx
       .update(organizations)
-      .set({ industry: input.industry, onboardingStep: "basics" })
+      .set({ industry: legacyColumn(pack), onboardingStep: "basics" })
       .where(eq(organizations.id, input.orgId));
+    await writePackId(tx, input.orgId, pack.id, input.actorUserId);
+    await noteSetupStarted(tx, input.orgId, input.actorUserId);
     await applyPlan(tx, input.orgId, preset.trialPlan, { type: "system", id: "onboarding" }, `onboarding trial: ${input.industry} by user:${input.actorUserId}`);
     await recordAudit(tx, {
       tenantId: input.orgId,

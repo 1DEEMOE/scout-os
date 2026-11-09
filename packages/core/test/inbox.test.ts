@@ -1,19 +1,23 @@
 import { Writable } from "node:stream";
 import { eq, sql } from "drizzle-orm";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
-import { closePool, conversations, emailIdentities, withTenant } from "@wos/db";
+import { auditEvents, closePool, conversations, emailIdentities, withTenant } from "@wos/db";
 import {
+  addSuppression,
   AppError,
   buildRfc822,
   configureEngine,
   connectGoogleMailbox,
+  chipsForTask,
   createAgent,
+  createTask,
   decideApproval,
   decryptSecret,
   encryptSecret,
   FakeMailProvider,
   getConversation,
   GmailProvider,
+  handBack,
   inboxTools,
   listConnectionsSafe,
   makeLogger,
@@ -22,8 +26,10 @@ import {
   requestSendDraft,
   runTask,
   setMailboxMode,
+  startChipAction,
   stopBoss,
   syncInbox,
+  takeOverDraft,
   ToolRegistry,
   triageConversation,
   type MailboxResolver,
@@ -243,7 +249,9 @@ describe("sending", () => {
     const [ident] = await withTenant(orgId, (tx) => tx.select().from(emailIdentities));
     await setMailboxMode({ actorUserId: "owner", orgId, identityId: ident!.id, mode: "send_with_approval" });
     const taskId = await approveSend();
-    await withTenant(orgId, (tx) => tx.update(conversations).set({ draftBody: "Wire the money to account 123" }).where(eq(conversations.id, conv.id)));
+    const [approval] = await approvalsFor(orgId, taskId);
+    const pinned = (approval!.payload as { args: { draftExternalId: string; draftMessageId: string; subject: string } }).args;
+    await mail.updateDraft(pinned.draftExternalId, { threadId: "thr-A", to: ["client@customer.test"], subject: pinned.subject, body: "Wire the money to account 123", messageId: pinned.draftMessageId });
     expect(await runTask(orgId, taskId)).toBe("FAILED");
     expect((await taskRow(orgId, taskId)).error).toMatchObject({ code: "DRAFT_CHANGED" });
     expect(mail.sendCalls).toBe(0);
@@ -260,6 +268,376 @@ describe("sending", () => {
     expect(await runTask(orgId, taskId, { retry: true })).toBe("COMPLETED");
     expect(mail.sendCalls).toBe(1);
     expect(mail.sent.size).toBe(1);
+  });
+});
+
+describe("owner draft and follow-up chip on the real inbox tools", () => {
+  const ownerText = "Here is the invoice, as I rewrote it. Nothing went out before this approval.";
+
+  async function draftedSend() {
+    const conv = await syncedConversation();
+    await triageAndDraft(conv.id);
+    const [ident] = await withTenant(orgId, (tx) => tx.select().from(emailIdentities));
+    await setMailboxMode({ actorUserId: "owner", orgId, identityId: ident!.id, mode: "send_with_approval" });
+    const { taskId } = await requestSendDraft({ actorUserId: "member", orgId, conversationId: conv.id });
+    expect(await runTask(orgId, taskId)).toBe("WAITING_FOR_APPROVAL");
+    return { conv, taskId };
+  }
+
+  it("hand-back updates the mailbox draft and a new approval sends that text once", async () => {
+    const { conv, taskId } = await draftedSend();
+    const [old] = await approvalsFor(orgId, taskId);
+    await takeOverDraft({ actorUserId: "owner", orgId, taskId, text: ownerText });
+    const back = await handBack({ actorUserId: "owner", orgId, taskId });
+    expect(back).toMatchObject({ sent: false, bound: true });
+    const { conversation } = await getConversation({ actorUserId: "owner", orgId, conversationId: conv.id });
+    expect(conversation.draftBody).toBe(ownerText);
+    expect([...mail.drafts.values()][0]?.body).toBe(ownerText);
+    await expect(decideApproval({ actorUserId: "owner", orgId, approvalId: old!.id, decision: "approve" })).rejects.toMatchObject({ code: "CONFLICT" });
+    const rows = await approvalsFor(orgId, taskId);
+    expect(rows.find((row) => row.id === old!.id)?.status).toBe("expired");
+    const fresh = rows.find((row) => row.status === "pending");
+    expect(fresh!.payload).toMatchObject({ args: { body: ownerText, to: ["client@customer.test"], conversationId: conv.id } });
+    await decideApproval({ actorUserId: "owner", orgId, approvalId: fresh!.id, decision: "approve" });
+    expect(await runTask(orgId, taskId)).toBe("COMPLETED");
+    expect(mail.sendCalls).toBe(1);
+    expect([...mail.sent.values()][0]?.body).toBe(ownerText);
+    expect([...mail.sent.values()][0]?.to).toEqual(["client@customer.test"]);
+  });
+
+  it("hides the follow-up chip without a conversation and sends the real thread after approval", async () => {
+    const conv = await syncedConversation();
+    const [ident] = await withTenant(orgId, (tx) => tx.select().from(emailIdentities));
+    await setMailboxMode({ actorUserId: "owner", orgId, identityId: ident!.id, mode: "send_with_approval" });
+    const bare = await createTask({ actorUserId: "owner", orgId, intent: "Say hello" });
+    expect(await chipsForTask({ actorUserId: "owner", orgId, taskId: bare.taskId })).toEqual([]);
+    await expect(startChipAction({ actorUserId: "owner", orgId, taskId: bare.taskId, kind: "follow_up" })).rejects.toMatchObject({ code: "CONFLICT" });
+
+    const { taskId: sourceId } = await triageConversation({ actorUserId: "member", orgId, conversationId: conv.id });
+    const chips = await chipsForTask({ actorUserId: "owner", orgId, taskId: sourceId });
+    expect(chips.map((chip) => chip.kind)).toContain("follow_up");
+    expect(chips.find((chip) => chip.kind === "follow_up")?.label).not.toMatch(/drafts@example\.test|00000000-0000-4000-8000/);
+    const started = await startChipAction({ actorUserId: "member", orgId, taskId: sourceId, kind: "follow_up" });
+    expect(started).toMatchObject({ tool: "inbox.send_draft", tier: 2 });
+    expect(await runTask(orgId, started.taskId)).toBe("WAITING_FOR_APPROVAL");
+    const [approval] = await approvalsFor(orgId, started.taskId);
+    expect(approval!.payload).toMatchObject({ args: { conversationId: conv.id, to: ["client@customer.test"] } });
+    expect(approval!.payload).not.toMatchObject({ args: { conversationId: "00000000-0000-4000-8000-000000000000" } });
+    await decideApproval({ actorUserId: "owner", orgId, approvalId: approval!.id, decision: "approve" });
+    expect(await runTask(orgId, started.taskId)).toBe("COMPLETED");
+    expect(mail.sendCalls).toBe(1);
+    expect([...mail.sent.values()][0]?.to).toEqual(["client@customer.test"]);
+  });
+
+  it("a later inbound reply gets its own draft, and a deleted draft is not a completed send", async () => {
+    const conv = await syncedConversation();
+    const [ident] = await withTenant(orgId, (tx) => tx.select().from(emailIdentities));
+    await setMailboxMode({ actorUserId: "owner", orgId, identityId: ident!.id, mode: "send_with_approval" });
+    const { taskId: sourceId } = await triageConversation({ actorUserId: "member", orgId, conversationId: conv.id });
+    const first = await startChipAction({ actorUserId: "member", orgId, taskId: sourceId, kind: "follow_up" });
+    expect(await runTask(orgId, first.taskId)).toBe("WAITING_FOR_APPROVAL");
+    const [firstApproval] = await approvalsFor(orgId, first.taskId);
+    const firstDraft = (firstApproval!.payload as { args: { draftExternalId: string; draftMessageId: string } }).args;
+    await decideApproval({ actorUserId: "owner", orgId, approvalId: firstApproval!.id, decision: "approve" });
+    expect(await runTask(orgId, first.taskId)).toBe("COMPLETED");
+    expect(mail.sendCalls).toBe(1);
+
+    mail.inbox.push(inbound(2, "thr-A", "Any update on that invoice?"));
+    await syncInbox({ actorUserId: "member", orgId });
+    const second = await startChipAction({ actorUserId: "member", orgId, taskId: sourceId, kind: "follow_up" });
+    expect(await runTask(orgId, second.taskId)).toBe("WAITING_FOR_APPROVAL");
+    const [secondApproval] = await approvalsFor(orgId, second.taskId);
+    const secondDraft = (secondApproval!.payload as { args: { draftExternalId: string; draftMessageId: string } }).args;
+    expect(secondDraft.draftMessageId).not.toBe(firstDraft.draftMessageId);
+    expect(secondDraft.draftExternalId).not.toBe(firstDraft.draftExternalId);
+    await decideApproval({ actorUserId: "owner", orgId, approvalId: secondApproval!.id, decision: "approve" });
+    expect(await runTask(orgId, second.taskId)).toBe("COMPLETED");
+    expect(mail.sendCalls).toBe(2);
+    expect(mail.sent.size).toBe(2);
+
+    await withTenant(orgId, (tx) => tx.update(conversations).set({
+      draftExternalId: firstDraft.draftExternalId,
+      draftMessageId: firstDraft.draftMessageId,
+      draftBody: "This draft was already sent.",
+    }).where(eq(conversations.id, conv.id)));
+    const { taskId: staleId } = await requestSendDraft({ actorUserId: "member", orgId, conversationId: conv.id });
+    expect(await runTask(orgId, staleId)).toBe("FAILED");
+    expect((await taskRow(orgId, staleId)).error).toMatchObject({ code: "DRAFT_MISMATCH" });
+    expect(mail.sendCalls).toBe(2);
+    expect(mail.sent.size).toBe(2);
+  });
+
+  it("hand-back after approval invalidates the unconsumed approval and sends the edited text once", async () => {
+    const { conv, taskId } = await draftedSend();
+    const [old] = await approvalsFor(orgId, taskId);
+    await decideApproval({ actorUserId: "owner", orgId, approvalId: old!.id, decision: "approve" });
+    await takeOverDraft({ actorUserId: "owner", orgId, taskId, text: ownerText });
+    await handBack({ actorUserId: "owner", orgId, taskId });
+    const rows = await approvalsFor(orgId, taskId);
+    expect(rows.find((row) => row.id === old!.id)?.status).toBe("expired");
+    const fresh = rows.find((row) => row.status === "pending");
+    expect(fresh!.payload).toMatchObject({ args: { body: ownerText, conversationId: conv.id } });
+    expect(await runTask(orgId, taskId)).toBe("WAITING_FOR_APPROVAL");
+    await decideApproval({ actorUserId: "owner", orgId, approvalId: fresh!.id, decision: "approve" });
+    expect(await runTask(orgId, taskId)).toBe("COMPLETED");
+    expect(mail.sendCalls).toBe(1);
+    expect([...mail.sent.values()][0]?.body).toBe(ownerText);
+  });
+
+  it("a planned send resolves substituted draft ids, and a changed provider draft is not sent", async () => {
+    const conv = await syncedConversation();
+    await triageAndDraft(conv.id);
+    const [ident] = await withTenant(orgId, (tx) => tx.select().from(emailIdentities));
+    await setMailboxMode({ actorUserId: "owner", orgId, identityId: ident!.id, mode: "send_with_approval" });
+    const legitimate = [...mail.drafts.entries()][0]!;
+    const rogue = await mail.createDraft({
+      threadId: "thr-A",
+      to: ["other@customer.test"],
+      subject: "Re: Invoice question",
+      body: legitimate[1].body,
+      messageId: "<rogue-follow-up@workforce-os.invalid>",
+    });
+    plan = {
+      toolCalls: [{
+        name: "inbox.send_draft",
+        input: {
+          conversationId: conv.id,
+          to: ["client@customer.test"],
+          subject: "Re: Invoice question",
+          body: legitimate[1].body,
+          draftExternalId: rogue.draftId,
+          draftMessageId: "<rogue-follow-up@workforce-os.invalid>",
+        },
+      }],
+    };
+    const { taskId } = await createTask({ actorUserId: "member", orgId, intent: "Send the drafted reply", input: { agentKind: "inbox", conversationId: conv.id } });
+    expect(await runTask(orgId, taskId)).toBe("FAILED");
+    expect((await taskRow(orgId, taskId)).error).toMatchObject({ code: "DRAFT_MISMATCH" });
+    expect(mail.sendCalls).toBe(0);
+    expect([...mail.sent.values()].some((m) => m.to.includes("other@customer.test"))).toBe(false);
+
+    plan = {
+      toolCalls: [{
+        name: "inbox.send_draft",
+        input: {
+          conversationId: conv.id,
+          to: ["client@customer.test"],
+          subject: "Re: Invoice question",
+          body: legitimate[1].body,
+          draftExternalId: legitimate[0],
+          draftMessageId: legitimate[1].messageId,
+        },
+      }],
+    };
+    const honest = await createTask({ actorUserId: "member", orgId, intent: "Send the real reply", input: { agentKind: "inbox", conversationId: conv.id } });
+    expect(await runTask(orgId, honest.taskId)).toBe("WAITING_FOR_APPROVAL");
+    const [approved] = await approvalsFor(orgId, honest.taskId);
+    expect(approved!.summary).toContain("client@customer.test");
+    const pinned = (approved!.payload as { args: { draftExternalId: string; draftMessageId: string; subject: string; body: string } }).args;
+    await mail.updateDraft(pinned.draftExternalId, {
+      threadId: "thr-A",
+      to: ["other@customer.test"],
+      subject: pinned.subject,
+      body: pinned.body,
+      messageId: pinned.draftMessageId,
+    });
+    await decideApproval({ actorUserId: "owner", orgId, approvalId: approved!.id, decision: "approve" });
+    expect(await runTask(orgId, honest.taskId)).toBe("FAILED");
+    expect((await taskRow(orgId, honest.taskId)).error).toMatchObject({ code: "DRAFT_CHANGED" });
+    expect(mail.sendCalls).toBe(0);
+  });
+
+  it("editing an older draft leaves the newer generation's conversation body", async () => {
+    const conv = await syncedConversation();
+    const [ident] = await withTenant(orgId, (tx) => tx.select().from(emailIdentities));
+    await setMailboxMode({ actorUserId: "owner", orgId, identityId: ident!.id, mode: "send_with_approval" });
+    const { taskId: sourceId } = await triageConversation({ actorUserId: "member", orgId, conversationId: conv.id });
+    const older = await startChipAction({ actorUserId: "member", orgId, taskId: sourceId, kind: "follow_up" });
+    expect(await runTask(orgId, older.taskId)).toBe("WAITING_FOR_APPROVAL");
+    const newer = await startChipAction({ actorUserId: "member", orgId, taskId: sourceId, kind: "follow_up" });
+    expect(await runTask(orgId, newer.taskId)).toBe("WAITING_FOR_APPROVAL");
+    const [newerApproval] = await approvalsFor(orgId, newer.taskId);
+    const newerArgs = (newerApproval!.payload as { args: { body: string; draftExternalId: string } }).args;
+    await takeOverDraft({ actorUserId: "owner", orgId, taskId: older.taskId, text: "Older edit only" });
+    await handBack({ actorUserId: "owner", orgId, taskId: older.taskId });
+    const { conversation } = await getConversation({ actorUserId: "owner", orgId, conversationId: conv.id });
+    expect(conversation.draftBody).toBe(newerArgs.body);
+    expect(conversation.draftExternalId).toBe(newerArgs.draftExternalId);
+    await decideApproval({ actorUserId: "owner", orgId, approvalId: newerApproval!.id, decision: "approve" });
+    expect(await runTask(orgId, newer.taskId)).toBe("COMPLETED");
+    expect([...mail.sent.values()].at(-1)?.body).toBe(newerArgs.body);
+  });
+
+  it("three concurrent runs send once and the task is completed", async () => {
+    const { taskId } = await draftedSend();
+    const [approval] = await approvalsFor(orgId, taskId);
+    await decideApproval({ actorUserId: "owner", orgId, approvalId: approval!.id, decision: "approve" });
+    const states = await Promise.all([runTask(orgId, taskId), runTask(orgId, taskId), runTask(orgId, taskId)]);
+    expect(mail.sendCalls).toBe(1);
+    expect(mail.sent.size).toBe(1);
+    expect(states).not.toContain("FAILED");
+    expect((await taskRow(orgId, taskId)).state).toBe("COMPLETED");
+    expect((await taskRow(orgId, taskId)).error).toBeNull();
+    const skipped = await withTenant(orgId, (tx) =>
+      tx.select({ metadata: auditEvents.metadata, outcome: auditEvents.outcome }).from(auditEvents).where(eq(auditEvents.action, "task.step.skipped")),
+    );
+    expect(skipped.length).toBeGreaterThan(0);
+    const reasons = skipped.map((row) => (row.metadata as { reason?: string }).reason);
+    expect(reasons.every((reason) => reason === "in_flight" || reason === "deferred" || reason === "already_completed")).toBe(true);
+  });
+
+  it("a cc or bcc added on the provider draft after approval is not sent", async () => {
+    const conv = await syncedConversation();
+    await triageAndDraft(conv.id);
+    const [ident] = await withTenant(orgId, (tx) => tx.select().from(emailIdentities));
+    await setMailboxMode({ actorUserId: "owner", orgId, identityId: ident!.id, mode: "send_with_approval" });
+    const legitimate = [...mail.drafts.entries()][0]!;
+    plan = {
+      toolCalls: [{
+        name: "inbox.send_draft",
+        input: {
+          conversationId: conv.id,
+          to: ["client@customer.test"],
+          subject: "Re: Invoice question",
+          body: legitimate[1].body,
+          draftExternalId: legitimate[0],
+          draftMessageId: legitimate[1].messageId,
+        },
+      }],
+    };
+    const { taskId } = await createTask({ actorUserId: "member", orgId, intent: "Send the drafted reply", input: { agentKind: "inbox", conversationId: conv.id } });
+    expect(await runTask(orgId, taskId)).toBe("WAITING_FOR_APPROVAL");
+    const [approved] = await approvalsFor(orgId, taskId);
+    const pinned = (approved!.payload as { args: { draftExternalId: string; draftMessageId: string; subject: string; body: string; to: string[] } }).args;
+    await mail.updateDraft(pinned.draftExternalId, {
+      threadId: "thr-A",
+      to: pinned.to,
+      cc: ["copy@hidden.test"],
+      bcc: ["blind@hidden.test"],
+      subject: pinned.subject,
+      body: pinned.body,
+      messageId: pinned.draftMessageId,
+    });
+    await decideApproval({ actorUserId: "owner", orgId, approvalId: approved!.id, decision: "approve" });
+    expect(await runTask(orgId, taskId)).toBe("FAILED");
+    expect((await taskRow(orgId, taskId)).error).toMatchObject({ code: "DRAFT_CHANGED" });
+    expect(mail.sendCalls).toBe(0);
+    expect(mail.sent.size).toBe(0);
+  });
+
+  async function draftWithCopies(convId: string, copies: { cc?: string[]; bcc?: string[]; replyTo?: string[] }) {
+    await triageAndDraft(convId);
+    const [ident] = await withTenant(orgId, (tx) => tx.select().from(emailIdentities));
+    await setMailboxMode({ actorUserId: "owner", orgId, identityId: ident!.id, mode: "send_with_approval" });
+    const legitimate = [...mail.drafts.entries()][0]!;
+    await mail.updateDraft(legitimate[0], {
+      threadId: "thr-A",
+      to: legitimate[1].to,
+      ...copies,
+      subject: legitimate[1].subject,
+      body: legitimate[1].body,
+      messageId: legitimate[1].messageId,
+    });
+    return legitimate;
+  }
+
+  it("does not plan a send when cc, bcc, or reply-to is on the do-not-contact list", async () => {
+    const conv = await syncedConversation();
+    const legitimate = await draftWithCopies(conv.id, { cc: ["copy@hidden.test"], bcc: ["blind@hidden.test"], replyTo: ["reply@hidden.test"] });
+    for (const email of ["copy@hidden.test", "blind@hidden.test", "reply@hidden.test"]) {
+      await addSuppression({ actorUserId: "member", orgId, email, reason: "opt_out" });
+    }
+    plan = {
+      toolCalls: [{
+        name: "inbox.send_draft",
+        input: {
+          conversationId: conv.id,
+          to: ["client@customer.test"],
+          subject: "Re: Invoice question",
+          body: legitimate[1].body,
+          draftExternalId: legitimate[0],
+          draftMessageId: legitimate[1].messageId,
+        },
+      }],
+    };
+    const { taskId } = await createTask({ actorUserId: "member", orgId, intent: "Send the drafted reply", input: { agentKind: "inbox", conversationId: conv.id } });
+    expect(await runTask(orgId, taskId)).toBe("FAILED");
+    expect((await taskRow(orgId, taskId)).error).toMatchObject({ code: "SUPPRESSED" });
+    expect(await approvalsFor(orgId, taskId)).toHaveLength(0);
+    expect(mail.sendCalls).toBe(0);
+    expect(mail.sent.size).toBe(0);
+    const blocked = await withTenant(orgId, (tx) =>
+      tx.select({ metadata: auditEvents.metadata, outcome: auditEvents.outcome }).from(auditEvents).where(eq(auditEvents.action, "inbox.send.blocked")),
+    );
+    const named = blocked.map((row) => (row.metadata as { recipient?: string }).recipient);
+    expect(blocked.every((row) => row.outcome === "denied")).toBe(true);
+    expect(named).toEqual(expect.arrayContaining(["copy@hidden.test", "blind@hidden.test", "reply@hidden.test"]));
+  });
+
+  it("refuses the whole send when cc or bcc is suppressed after approval", async () => {
+    const conv = await syncedConversation();
+    const legitimate = await draftWithCopies(conv.id, { cc: ["copy@hidden.test"], bcc: ["blind@hidden.test"] });
+    plan = {
+      toolCalls: [{
+        name: "inbox.send_draft",
+        input: {
+          conversationId: conv.id,
+          to: ["client@customer.test"],
+          subject: "Re: Invoice question",
+          body: legitimate[1].body,
+          draftExternalId: legitimate[0],
+          draftMessageId: legitimate[1].messageId,
+        },
+      }],
+    };
+    const { taskId } = await createTask({ actorUserId: "member", orgId, intent: "Send the drafted reply", input: { agentKind: "inbox", conversationId: conv.id } });
+    expect(await runTask(orgId, taskId)).toBe("WAITING_FOR_APPROVAL");
+    await addSuppression({ actorUserId: "member", orgId, email: "copy@hidden.test", reason: "opt_out" });
+    await addSuppression({ actorUserId: "member", orgId, email: "blind@hidden.test", reason: "opt_out" });
+    const [approved] = await approvalsFor(orgId, taskId);
+    await decideApproval({ actorUserId: "owner", orgId, approvalId: approved!.id, decision: "approve" });
+    expect(await runTask(orgId, taskId)).toBe("FAILED");
+    expect((await taskRow(orgId, taskId)).error).toMatchObject({ code: "SUPPRESSED" });
+    expect(mail.sendCalls).toBe(0);
+    expect(mail.sent.size).toBe(0);
+    expect([...mail.sent.values()].some((m) => (m.cc ?? []).includes("copy@hidden.test") || (m.bcc ?? []).includes("blind@hidden.test"))).toBe(false);
+    const blocked = await withTenant(orgId, (tx) =>
+      tx.select({ metadata: auditEvents.metadata }).from(auditEvents).where(eq(auditEvents.action, "inbox.send.blocked")),
+    );
+    const named = blocked.map((row) => (row.metadata as { recipient?: string }).recipient);
+    expect(named).toEqual(expect.arrayContaining(["copy@hidden.test", "blind@hidden.test"]));
+  });
+
+  it("requestSendDraft refuses a provider draft that copies a suppressed address", async () => {
+    const conv = await syncedConversation();
+    await draftWithCopies(conv.id, { cc: ["copy@hidden.test"], bcc: ["blind@hidden.test"] });
+    await addSuppression({ actorUserId: "member", orgId, email: "copy@hidden.test", reason: "opt_out" });
+    await addSuppression({ actorUserId: "member", orgId, email: "blind@hidden.test", reason: "opt_out" });
+    await expectCode(requestSendDraft({ actorUserId: "member", orgId, conversationId: conv.id }), "CONFLICT");
+    expect(mail.sendCalls).toBe(0);
+  });
+
+  it("an in-flight send that fails does not record already_completed", async () => {
+    const { taskId } = await draftedSend();
+    const [approval] = await approvalsFor(orgId, taskId);
+    await decideApproval({ actorUserId: "owner", orgId, approvalId: approval!.id, decision: "approve" });
+    let releaseSend!: () => void;
+    mail.sendGate = new Promise((resolve) => { releaseSend = resolve; });
+    mail.rejectSend = true;
+    const winner = runTask(orgId, taskId);
+    for (let i = 0; i < 50 && mail.sendCalls < 1; i++) await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(mail.sendCalls).toBe(1);
+    const peers = await Promise.all([runTask(orgId, taskId), runTask(orgId, taskId)]);
+    releaseSend();
+    expect(await winner).toBe("RETRY_SCHEDULED");
+    expect(peers).not.toContain("FAILED");
+    expect(mail.sent.size).toBe(0);
+    const skipped = await withTenant(orgId, (tx) =>
+      tx.select({ metadata: auditEvents.metadata }).from(auditEvents).where(eq(auditEvents.action, "task.step.skipped")),
+    );
+    const reasons = skipped.map((row) => (row.metadata as { reason?: string }).reason);
+    expect(reasons).not.toContain("already_completed");
+    expect(reasons.filter((reason) => reason === "in_flight").length).toBeGreaterThan(0);
   });
 });
 
@@ -282,10 +660,10 @@ describe("prompt injection in an email", () => {
     expect(await runTask(orgId, taskId)).toBe("WAITING_FOR_APPROVAL");
     expect(mail.sendCalls).toBe(0);
     const [ap] = await approvalsFor(orgId, taskId);
-    // The approval screen shows the attacker address plainly.
     expect(ap!.summary).toContain("attacker@evil.test");
     await decideApproval({ actorUserId: "owner", orgId, approvalId: ap!.id, decision: "approve" });
-    expect(await runTask(orgId, taskId)).toBe("FAILED");
+    const after = await runTask(orgId, taskId);
+    expect(after === "FAILED" || after === "COMPENSATING").toBe(true);
     expect(mail.sendCalls).toBe(0);
     // The draft that did get created is addressed to the thread's sender, not the attacker.
     expect([...mail.drafts.values()][0]!.to).toEqual(["mallory@customer.test"]);
@@ -314,6 +692,78 @@ describe("Gmail adapter request shape (no network)", () => {
     expect(raw).not.toMatch(/\r\nBcc:/); // header injection neutralised
     expect(await g.findSent("<wos-1@workforce-os.invalid>")).toEqual({ externalId: "sent-1" });
     expect(calls.at(-1)!.params.q).toBe("in:sent rfc822msgid:<wos-1@workforce-os.invalid>");
+  });
+
+  it("reads recipients, subject, and body from the provider draft", async () => {
+    const api = {
+      users: {
+        drafts: {
+          list: async () => ({ data: { drafts: [{ id: "r-1" }] } }),
+          get: async (params: Record<string, unknown>) => ({
+            data: {
+              id: "r-1",
+              message: {
+                payload: {
+                  mimeType: "text/plain",
+                  headers: [
+                    { name: "To", value: "a@b.test" },
+                    { name: "Subject", value: "Hi" },
+                  ],
+                  body: { data: Buffer.from("Body").toString("base64url") },
+                },
+              },
+            },
+            params,
+          }),
+        },
+      },
+    };
+    const g = new GmailProvider({} as never, "office@acme.test", api as never);
+    expect(await g.findDraft("<wos-1@workforce-os.invalid>")).toEqual({ draftId: "r-1", to: ["a@b.test"], subject: "Hi", body: "Body" });
+  });
+
+  it("reads cc, bcc, reply-to, and attachments from the provider draft", async () => {
+    const { createHash } = await import("node:crypto");
+    const file = Buffer.from("secret");
+    const api = {
+      users: {
+        drafts: {
+          list: async () => ({ data: { drafts: [{ id: "r-2" }] } }),
+          get: async () => ({
+            data: {
+              id: "r-2",
+              message: {
+                payload: {
+                  mimeType: "multipart/mixed",
+                  headers: [
+                    { name: "To", value: "A Person <a@b.test>" },
+                    { name: "Cc", value: "cc@b.test" },
+                    { name: "Bcc", value: "Hidden <bcc@b.test>" },
+                    { name: "Reply-To", value: "reply@b.test" },
+                    { name: "Subject", value: "Hi" },
+                  ],
+                  parts: [
+                    { mimeType: "text/plain", body: { data: Buffer.from("Body").toString("base64url") } },
+                    { filename: "note.txt", mimeType: "text/plain", body: { data: file.toString("base64url") } },
+                  ],
+                },
+              },
+            },
+          }),
+        },
+      },
+    };
+    const g = new GmailProvider({} as never, "office@acme.test", api as never);
+    expect(await g.findDraft("<wos-2@workforce-os.invalid>")).toEqual({
+      draftId: "r-2",
+      to: ["a@b.test"],
+      cc: ["cc@b.test"],
+      bcc: ["bcc@b.test"],
+      replyTo: ["reply@b.test"],
+      subject: "Hi",
+      body: "Body",
+      attachments: [{ filename: "note.txt", contentType: "text/plain", sha256: createHash("sha256").update(file).digest("hex"), size: file.length }],
+    });
   });
 
   it("builds a valid plain-text message", () => {

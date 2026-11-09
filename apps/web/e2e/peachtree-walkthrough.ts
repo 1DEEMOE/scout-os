@@ -6,8 +6,9 @@ import { mkdirSync, readFileSync, writeFileSync, copyFileSync, existsSync } from
 import { execFileSync } from "node:child_process";
 import path from "node:path";
 import { chromium, type Browser, type Page } from "@playwright/test";
+import { evidenceDir } from "./evidence-dir";
 
-const OUT = process.env.DEMO_DIR || "/workspace/scout-os/demo";
+const OUT = process.env.DEMO_DIR ? path.resolve(path.resolve(import.meta.dirname, "../../.."), process.env.DEMO_DIR) : evidenceDir("demo");
 const BASE = process.env.BETTER_AUTH_URL || "http://localhost:3800";
 const seed = JSON.parse(readFileSync(path.join(OUT, "seed-info.json"), "utf8")) as {
   orgId: string;

@@ -6,12 +6,14 @@
  * consent, suppression, or tier gates.
  */
 
-export type IndustryId = 'roofing' | 'general';
+import { getPack, isPackId, type IndustryPack } from "../industries/packs";
+
+export type IndustryId = IndustryPack["id"];
 
 export type ConnectorId = 'gmail' | 'hubspot' | 'stripe' | 'quickbooks';
 
 export interface IndustryPreset {
-  id: IndustryId;
+  id: string;
   label: string;
   tagline: string;
   /** Plan applied during trial onboarding (audited). Never free for roofing Scout. */
@@ -31,7 +33,7 @@ export interface IndustryPreset {
   steps: Array<'industry' | 'basics' | 'data' | 'connect' | 'invite' | 'finish'>;
 }
 
-export const INDUSTRY_PRESETS: Record<IndustryId, IndustryPreset> = {
+export const INDUSTRY_PRESETS: Record<"roofing" | "general", IndustryPreset> = {
   roofing: {
     id: 'roofing',
     label: 'Roofing',
@@ -74,7 +76,19 @@ export const INDUSTRY_PRESETS: Record<IndustryId, IndustryPreset> = {
 };
 
 export function getPreset(industry: IndustryId): IndustryPreset {
-  return INDUSTRY_PRESETS[industry];
+  if (industry === "roofing" || industry === "general") return INDUSTRY_PRESETS[industry];
+  if (!isPackId(industry)) return INDUSTRY_PRESETS.general;
+  const pack = getPack(industry);
+  return {
+    ...INDUSTRY_PRESETS.general,
+    id: industry,
+    label: pack.label,
+    tagline: pack.summary,
+    trialPlan: pack.trialPlan,
+    pipelineStages: [...pack.pipeline],
+    defaultServicesOffered: pack.services.map((s) => s.id),
+    idealCustomerNotes: pack.summary,
+  };
 }
 
 export const ONBOARDING_STEPS = [

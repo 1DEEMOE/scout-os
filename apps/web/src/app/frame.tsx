@@ -13,11 +13,11 @@ export function Frame({ children }: { children: React.ReactNode }) {
   if (/^\/orgs\/[^/]+/.test(path)) return <>{children}</>;
   return (
     <>
-      <header className="border-b border-line bg-surface">
-        <div className="mx-auto flex max-w-5xl items-center justify-between gap-4 px-6 py-4 sm:px-8">
+      <header className="border-b border-chrome-line bg-chrome text-chrome-ink">
+        <div className="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-3 px-6 py-4 sm:px-8">
           <a href="/orgs" aria-label={`${BRAND.name} home`} className="rounded-lg"><BrandMark /></a>
-          <div className="flex items-center gap-3">
-            <span className="hidden rounded-full border border-line px-3 py-1 text-sm text-muted sm:inline">Development build</span>
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <span className="hidden rounded-full border border-chrome-line px-3 py-1 text-sm text-chrome-muted sm:inline">Development build</span>
             <ThemeToggle />
           </div>
         </div>

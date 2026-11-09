@@ -1,11 +1,11 @@
-import { mkdirSync, readFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import path from "node:path";
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Page } from "@playwright/test";
+import { evidenceDir } from "./evidence-dir";
 
 const seed = JSON.parse(readFileSync(path.resolve(import.meta.dirname, ".seed.json"), "utf8")) as { orgId: string; scoutOrgId: string; password: string };
-const shots = path.resolve(import.meta.dirname, "../../../docs/plans/evidence/chat-first");
-mkdirSync(shots, { recursive: true });
+const shots = evidenceDir("chat-first");
 
 async function signIn(page: Page, email = "owner@e2e.test") {
   // Sign-in is rate limited per IP: retry after the window.
@@ -167,7 +167,7 @@ test.describe("chat-first Scout OS", () => {
     await page.getByRole("group", { name: "Theme" }).getByRole("button", { name: "Dark" }).click();
     await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
     const bg = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
-    expect(bg).toBe("rgb(15, 18, 22)");
+    expect(bg).toBe("rgb(16, 14, 20)");
     await page.reload();
     // Applied before first paint by the inline boot script, so no light flash.
     await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
@@ -187,7 +187,7 @@ test.describe("chat-first Scout OS", () => {
     const page = await ctx.newPage();
     await page.goto("/sign-in");
     const bg = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
-    expect(bg).toBe("rgb(15, 18, 22)");
+    expect(bg).toBe("rgb(16, 14, 20)");
     await expectAccessible(page, "sign-in (system dark)");
     await ctx.close();
   });

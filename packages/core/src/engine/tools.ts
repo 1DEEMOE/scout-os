@@ -35,6 +35,10 @@ export interface ToolDefinition<Args = unknown, Out = unknown> {
   description: string;
   tier: Tier;
   args: z.ZodType<Args>;
+  /** Checked after execute. A mismatch fails the step and does not retry. */
+  output?: z.ZodType<Out>;
+  /** Optional per-tenant sliding window. Exceeding it fails the step closed. */
+  rate?: { limit: number; windowMs: number };
   /** One line a human reads on the approval screen. */
   summarize(args: Args): string;
   /** Labelled true when the tool talks to a fake provider, so the UI can show MOCK. */
@@ -46,6 +50,9 @@ export interface ToolDefinition<Args = unknown, Out = unknown> {
    */
   reconcile?(ctx: ToolContext, args: Args): Promise<Out | undefined>;
 }
+
+/** Accepts a JSON object. Stricter tools replace this. */
+export const objectResult = z.object({}).passthrough();
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export type AnyTool = ToolDefinition<any, any>;

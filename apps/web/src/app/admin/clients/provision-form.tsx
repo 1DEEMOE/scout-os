@@ -5,7 +5,7 @@ import { buttonCls, ErrorText, inputCls, quietButtonCls } from "../../ui";
 
 const label = "flex flex-col gap-2 text-base font-medium";
 
-export function ProvisionForm() {
+export function ProvisionForm({ packs }: { packs: { id: string; label: string; group: string }[] }) {
   const [timezone, setTimezone] = useState("America/New_York");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -25,7 +25,7 @@ export function ProvisionForm() {
     try {
       const r = await trpc.onboarding.provisionWorkspace.mutate({
         name,
-        industry: String(form.get("industry")) === "general" ? "general" : "roofing",
+        industry: String(form.get("industry") ?? "roofing"),
         clientEmail,
         confirmEmail: String(form.get("confirmEmail") ?? ""),
         ...(zip ? { zip } : {}),
@@ -81,8 +81,9 @@ export function ProvisionForm() {
       <label className={label}>
         Trade
         <select name="industry" defaultValue="roofing" className={inputCls}>
-          <option value="roofing">Roofing (storm leads with Scout)</option>
-          <option value="general">Other small business</option>
+          {packs.map((p) => (
+            <option key={p.id} value={p.id}>{p.label}</option>
+          ))}
         </select>
       </label>
       <label className={label}>

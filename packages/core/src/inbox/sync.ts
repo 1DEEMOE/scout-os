@@ -1,6 +1,8 @@
 import { eq } from "drizzle-orm";
 import { conversations, emailIdentities, messages, QUEUES, type Tx } from "@wos/db";
 import { recordAudit } from "../audit";
+import { produceIntegration } from "../events/produce";
+import { fetchNwsAlerts } from "../speed/nws";
 import { getBoss } from "../engine/queue";
 import { getEngine } from "../engine/runtime";
 import { AppError } from "../errors";
@@ -67,7 +69,12 @@ async function resolveMailbox(orgId: string): Promise<Mailbox | null> {
 }
 
 async function pullFromMailbox(orgId: string, box: Mailbox, actor: { type: "user" | "system"; id: string }, max: number): Promise<{ newMessages: number; mock: boolean }> {
-  const { messages: incoming, cursor } = await box.provider.listRecent({ cursor: box.identity.syncCursor, max });
+  const { messages: incoming, cursor } = await produceIntegration({
+    tenantId: orgId,
+    integration: "mail",
+    idempotencyKey: `mail-sync:${box.identity.id}:${box.identity.syncCursor ?? "start"}:${Date.now()}`,
+    effect: (ctx) => ctx.once(() => box.provider.listRecent({ cursor: box.identity.syncCursor, max })),
+  });
   const added = await inOrg(orgId, async (tx) => {
     let n = 0;
     for (const m of incoming) n += await upsertMessage(tx, orgId, box.identity.id, m);
@@ -76,6 +83,13 @@ async function pullFromMailbox(orgId: string, box: Mailbox, actor: { type: "user
     return n;
   });
   logger.info({ tenantId: orgId, fetched: incoming.length, added, background: actor.type === "system" }, "inbox synced");
+  // Weather is one integration on the same bus. A failure is dead-lettered and does not fail the sync.
+  const weatherFetch = process.env.WOS_MOCK_MODE === "1"
+    ? (async () => new Response(JSON.stringify({ features: [] }), { status: 200, headers: { "content-type": "application/json" } }))
+    : undefined;
+  await fetchNwsAlerts({ tenantId: orgId, fetchImpl: weatherFetch }).catch((err) => {
+    logger.warn({ tenantId: orgId, err: err instanceof Error ? err.name : "weather" }, "weather refresh failed");
+  });
   return { newMessages: added, mock: box.provider.mock };
 }
 

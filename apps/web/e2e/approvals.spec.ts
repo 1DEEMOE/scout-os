@@ -53,7 +53,7 @@ test.describe.serial("approval center", () => {
     await card.getByText("Technical details").click();
     await expect(card.getByText("Level 2 · Talks to customers")).toBeVisible();
     await expect(card.locator("pre")).toContainText('"to": "client@customer.test"');
-    await card.getByRole("button", { name: "OK", exact: true }).click();
+    await card.getByRole("button", { name: "Approve once", exact: true }).click();
     await expect(page.locator("section", { hasText: "Recently decided" })).toContainText("Email client@customer.test: Your invoice");
     await page.goto(`/orgs/${seed.orgId}/tasks/${seed.emailTaskId}`);
     await expect(async () => {
@@ -70,7 +70,7 @@ test.describe.serial("approval center", () => {
     await expect(card.getByText(/a different owner gives the second confirmation/)).toBeVisible();
     await card.getByText("Technical details").click();
     await expect(card.getByText("Level 4 · Delete or change access")).toBeVisible();
-    await card.getByRole("button", { name: "OK (needs second person)" }).click();
+    await card.getByRole("button", { name: "Approve once (needs a second owner)" }).click();
     await expect(card.getByText("You gave the first approval. A different owner has to give the second confirmation.")).toBeVisible();
     await expect(card.getByRole("button", { name: "Confirm and run" })).toHaveCount(0);
 
