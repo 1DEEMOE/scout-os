@@ -14,7 +14,7 @@ export default async function RecoveryPage({ params }: { params: Promise<{ orgId
   const rows = await listDeadLetters({ actorUserId: userId, orgId });
   return (
     <div className="flex flex-col gap-8">
-      <PageTitle sub="When an integration keeps failing, the event waits here. Replay tries the same tier 0–1 step again. It does not send email, texts, or payments.">
+      <PageTitle sub="When an integration keeps failing, the event waits here. Replay tries the same level 0–1 step again. It does not send email, texts, or payments.">
         Recovery
       </PageTitle>
       {rows.length === 0 ? (

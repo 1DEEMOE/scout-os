@@ -32,6 +32,8 @@ export default async function AgentsPage({ params }: { params: Promise<{ orgId: 
               <span className="flex flex-wrap items-center gap-2">
                 {a.displayName} <Badge>{AGENT_ROLE_NAME[a.kind] ?? a.kind}</Badge>
                 {a.status !== "active" && <Badge tone="danger">{a.status}</Badge>}
+                <span className="text-sm text-muted">up to</span>
+                <TierBadge tier={maxTier} />
                 <NeedOkBadge tier={maxTier} />
               </span>
             }
@@ -49,7 +51,7 @@ export default async function AgentsPage({ params }: { params: Promise<{ orgId: 
                 ))}
               </ul>
               <p className="mt-3 text-sm text-muted">
-                Risk level 2+ always needs a person. Level 4 also needs a second owner&apos;s confirmation.
+                Level 2 and up always waits for a person&apos;s OK. Level 4 also needs a different owner to confirm. <a className="inline-flex min-h-6 items-center underline underline-offset-4" href="/help#levels">What the levels mean</a>
               </p>
             </details>
           </Card>

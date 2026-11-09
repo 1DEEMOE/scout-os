@@ -52,7 +52,7 @@ test.describe("chat-first Scout OS", () => {
     await expect(card).toBeVisible();
     await expect(card.getByText(/Needs your OK|Needs two people to OK/).first()).toBeVisible();
     await card.getByText("Exact action and expiry").click();
-    await expect(card.getByText("Risk level")).toBeVisible();
+    await expect(card.getByText("Approval level")).toBeVisible();
     // The sidebar is calm: five primary destinations; the rest waits behind "More".
     const nav = page.getByRole("navigation", { name: "Organization" });
     await expect(nav.getByRole("list", { name: "Main" }).getByRole("link")).toHaveCount(5);

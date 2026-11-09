@@ -100,7 +100,7 @@ export function ApprovalCard({ item, orgId }: { item: ApprovalForReview; orgId: 
           <dl className="mt-2 grid gap-x-4 gap-y-1.5 sm:grid-cols-[9rem_1fr]">
             <dt className="text-muted">Task</dt>
             <dd><a className="inline-flex min-h-6 items-center underline decoration-line underline-offset-4 hover:decoration-accent" href={`/orgs/${orgId}/tasks/${item.taskId}`}>{item.taskTitle}</a></dd>
-            <dt className="text-muted">Risk level</dt>
+            <dt className="text-muted">Approval level</dt>
             <dd>{a.tier}</dd>
             <dt className="text-muted">Expires</dt>
             <dd><When date={a.expiresAt} /></dd>
