@@ -5,7 +5,7 @@ import { recordAudit } from "../audit";
 import { AppError } from "../errors";
 import { logger } from "../logger";
 import { ANY_ROLE, inOrg, MANAGERS, requireRole } from "../org/access";
-import { decryptSecret, encryptSecret, SECRET_KEY_ID } from "../secrets";
+import { currentSecretKeyId, decryptSecret, encryptSecret } from "../secrets";
 
 export type ConnectionRow = typeof integrationConnections.$inferSelect;
 
@@ -23,14 +23,14 @@ export async function upsertConnection(
   if (existing) {
     const [row] = await tx
       .update(integrationConnections)
-      .set({ secretCiphertext, secretRef: SECRET_KEY_ID, scopes: c.scopes, status: "active", updatedAt: new Date() })
+      .set({ secretCiphertext, secretRef: currentSecretKeyId(), scopes: c.scopes, status: "active", updatedAt: new Date() })
       .where(eq(integrationConnections.id, id))
       .returning();
     return row!;
   }
   const [row] = await tx
     .insert(integrationConnections)
-    .values({ id, tenantId: c.tenantId, provider: c.provider, accountLabel: c.accountLabel, scopes: c.scopes, secretRef: SECRET_KEY_ID, secretCiphertext, createdBy: c.createdBy })
+    .values({ id, tenantId: c.tenantId, provider: c.provider, accountLabel: c.accountLabel, scopes: c.scopes, secretRef: currentSecretKeyId(), secretCiphertext, createdBy: c.createdBy })
     .returning();
   return row!;
 }

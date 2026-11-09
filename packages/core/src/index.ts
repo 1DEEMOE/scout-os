@@ -109,3 +109,4 @@ export { frontDeskTools, forgeryTools, registerFrontDeskTools } from "./tools/fr
 export * from "./finder/adapters";
 export * from "./finder/service";
 export * from "./tools/outreach";
+export * from "./secrets-rotate";

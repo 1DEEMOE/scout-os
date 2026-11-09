@@ -26,3 +26,16 @@ export async function adminQuery<R extends pg.QueryResultRow>(
     await c.end();
   }
 }
+
+/** One admin connection for a maintenance job (e.g. secrets rotation). Caller manages BEGIN/COMMIT. */
+export async function withAdminClient<T>(fn: (q: <R extends pg.QueryResultRow>(text: string, params?: unknown[]) => Promise<R[]>) => Promise<T>): Promise<T> {
+  const url = adminUrl();
+  if (!url) throw new Error("DATABASE_URL_ADMIN is not set; cross-tenant maintenance is disabled");
+  const c = new pg.Client({ connectionString: url });
+  await c.connect();
+  try {
+    return await fn(async (text, params = []) => (await c.query(text, params)).rows);
+  } finally {
+    await c.end();
+  }
+}
