@@ -1,3 +1,4 @@
+import { CLIENT_IP_HEADER } from "./public-api";
 import { betterAuth } from "better-auth";
 import { nextCookies } from "better-auth/next-js";
 import { getAuthPool } from "@wos/db";
@@ -31,6 +32,8 @@ function build() {
   if (!secret || secret.length < 32) throw new Error("BETTER_AUTH_SECRET must be at least 32 characters");
   return betterAuth({
     database: getAuthPool(),
+    // Client IP for rate limits comes only from our own resolved header (see withResolvedClientIp).
+    advanced: { ipAddress: { ipAddressHeaders: [CLIENT_IP_HEADER] } },
     secret,
     baseURL: process.env.BETTER_AUTH_URL,
     ...(googleSignInEnabled()

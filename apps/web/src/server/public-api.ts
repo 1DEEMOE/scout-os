@@ -20,6 +20,27 @@ export function clientIp(headers: Headers): string {
   return chain[Math.max(0, chain.length - hops)]!;
 }
 
+/**
+ * Header the auth handler reads the client IP from. Set only by
+ * `withResolvedClientIp`, which first deletes any copy the caller sent.
+ */
+export const CLIENT_IP_HEADER = "x-wos-client-ip";
+
+/**
+ * Gives better-auth the same trusted client IP as the booking API. Without
+ * trusted-proxy settings it reads X-Forwarded-For and, whenever there's more
+ * than one entry (normal behind Render or a CDN), gives up and puts every
+ * caller in ONE shared sign-in bucket, so a single attacker could lock
+ * everyone out. Spoofed copies of the header are always removed.
+ */
+export function withResolvedClientIp(req: Request): Request {
+  const headers = new Headers(req.headers);
+  headers.delete(CLIENT_IP_HEADER);
+  const ip = clientIp(req.headers);
+  if (ip !== "unknown") headers.set(CLIENT_IP_HEADER, ip);
+  return new Request(req, { headers });
+}
+
 /** Largest JSON body a public endpoint accepts (a booking is well under 2 KB). */
 export const PUBLIC_MAX_BODY_BYTES = 16_384;
 
