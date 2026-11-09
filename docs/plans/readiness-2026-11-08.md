@@ -24,13 +24,25 @@
 | Medium (honesty, Law 2) | DEMO storm evidence said "Source: NOAA SPC local storm report". | It now reads "invented sample storm report (DEMO), not real weather data". An e2e test asserts no NOAA source appears on DEMO data. |
 | Low | My proposed migration number collided with `main`'s 0021. | Renumbered to 0024, with its own rolled-back isolation test. |
 
+## Second pass (same day): gaps closed without the owner
+
+| Severity | Finding | Fix |
+|---|---|---|
+| **High (data loss)** | Bank details saved through the direct path were encrypted against a throwaway id but stored under a new row id, so the saved copy **could never be decrypted**. | Sealed to the stored row's id. A regression test fails on the old code and passes now. |
+| **High (security ops)** | The secrets key couldn't be rotated: every ciphertext was hard-wired to key `v1`, so swapping a leaked key would have made every stored credential unreadable. | Two-key ring (current plus previous), `pnpm --filter @wos/core rotate-secrets -- --confirm <id> [--dry-run]` re-seals all three tables. Unreadable rows are left untouched and reported, with a tier-4 audit per workspace. Runbook: `secrets-rotation-runbook.md`. |
+| Medium (product) | Storm data was MOCK only. | Live **NOAA SPC** feed behind the same adapter, opt-in with `WOS_STORM_FEED=noaa`: the shop's states only, stored as real data, and MOCK permits switched off so they never mix with real weather. Managers are now checked before any outside call. The live network call is **UNVERIFIED** from this sandbox (tested against a fake network). |
+| Low (consistency) | "Risk level" and "tier 0–1" wording left on two screens from `main`. | One wording everywhere, plus a guard test. |
+| Known, not fixed | `inbox.test.ts` "three concurrent runs send once…" fails about 1 run in 8 under full-suite load. The **send-once guarantee holds**; one racing run schedules a retry instead of standing aside, and the retry then completes the task. | It's `main`'s engine code and I couldn't reproduce it on demand. Suggested fix: in `orchestrator.execute`, treat database lock or unique-violation errors from a concurrent run as "already in flight" rather than retryable. Needs a deliberate test with forced lock contention. |
+
+After this pass: lint and typecheck 0, unit **864 passed** (clean runs), isolation **20**, e2e **56**. CI green on the pushed head.
+
 ## Scores
 
 | Area | 11-05 | Now | What moves it to 9+ |
 |---|---|---|---|
 | Architecture & data model | 8.5 | 8 | **Down on purpose:** five proposed migrations (0020–0024) are unapplied, so several features keep state in `memory_records`. Reviewing and applying them is the biggest structural gain. |
 | Safety system (tiers, approvals) | 8.5 | **9** | Owner-only holds, levels shown everywhere, consent re-checked at send time, no agent permission widening. Needs an independent review of the engine. |
-| Security operations | 7.5 | **8** | External pen test; a secrets rotation runbook; a reconciler role with only BYPASSRLS. |
+| Security operations | 7.5 | **8.5** | Key rotation and its runbook are done. Still needed: an external pen test and a reconciler role with only BYPASSRLS. |
 | Product completeness | 5.5 | **7.5** | Finder, owner-approved outreach, claim packet PDF, AI visibility, AI booking, plug-and-play setup, plus `main`'s industry packs and speed-to-lead. Held back by **live integrations being unverified** (Gmail, SMTP, Stripe) and **MOCK** feeds (storms, permits, AI visibility). |
 | UX & accessibility | – | **8.5** | Calm chat-first UI, command palette, phone parity, axe-clean flows. Needs real-user sessions. |
 | Engineering discipline | 8 | **8.5** | CI on every push, small commits, ADRs. Keep `main` green and require CI before merge (branch protection: a repo setting Darian controls). |
@@ -49,6 +61,5 @@
 
 ## Next engineering steps I can take without you
 
-- A live NOAA SPC storm adapter behind the existing interface (the data is US-government work, public domain). Needs a network allowance or a scheduled fetch outside this sandbox.
-- A shared rate-limit store for the public booking API (sign-in already uses the database).
-- A pass to merge `main`'s inbox/recovery screens with the new levels so every page uses the same `TierBadge`.
+- Fix the intermittent concurrent-run retry (see the table above) with a forced-contention test.
+- Verify the live NOAA feed once the app runs somewhere with outbound network (staging).
