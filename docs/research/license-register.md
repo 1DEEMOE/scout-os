@@ -79,3 +79,9 @@ No new dependencies were added. The CSV reader (`packages/core/src/scout/csv.ts`
 | @fontsource-variable/schibsted-grotesk | 5.3.0 | OFL-1.1 (font), MIT (package) | Self-hosted interface typeface |
 | @axe-core/playwright | 4.14.0 | MPL-2.0 | Accessibility checks in e2e tests only (dev dependency, not shipped) |
 | pdf-lib | 1.17.1 | MIT | Claim packet PDF export (server side) |
+
+## Data sources
+
+| Source | Terms | Use |
+|---|---|---|
+| NOAA Storm Prediction Center filtered local storm reports (`spc.noaa.gov/climo/reports/YYMMDD_rpts_filtered.csv`) | Work of the US federal government, public domain in the US | Live storm signals for the opportunity finder, only when `WOS_STORM_FEED=noaa`. Preliminary and not quality-controlled; never presented as evidence of property damage. |

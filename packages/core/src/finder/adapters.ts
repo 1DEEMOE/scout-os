@@ -136,3 +136,86 @@ export const mockPermitAdapter: SignalAdapter<PermitRecord> = {
 };
 
 export const SIGNAL_ADAPTERS = [mockStormAdapter, mockPermitAdapter] as const;
+
+/* ------------------------------------------------------------------ live */
+
+/** Where a live day's filtered storm reports live (one file per SPC report day). */
+export function spcCsvUrl(day: string): string {
+  const [y, m, d] = day.split("-");
+  return `https://www.spc.noaa.gov/climo/reports/${y!.slice(2)}${m}${d}_rpts_filtered.csv`;
+}
+
+export const SPC_MAX_BYTES = 2 * 1024 * 1024;
+const SPC_TIMEOUT_MS = 10_000;
+
+type Fetcher = (url: string, init: { signal: AbortSignal; headers: Record<string, string> }) => Promise<{ ok: boolean; status: number; headers: { get(n: string): string | null }; text(): Promise<string> }>;
+let fetcher: Fetcher = (url, init) => fetch(url, init);
+/** Tests only: replace the network call. */
+export function setSpcFetchForTests(f: Fetcher | null): void {
+  fetcher = f ?? ((url, init) => fetch(url, init));
+}
+
+export class StormFeedError extends Error {}
+
+/**
+ * Keeps only the rows for the workspace's states (section headers stay), so a
+ * whole-US day doesn't flood one shop's data. State is the 5th column.
+ */
+export function filterSpcCsvToStates(csv: string, states: Set<string>): { csv: string; rows: number } {
+  const out: string[] = [];
+  let pendingHeader: string | null = null;
+  let rows = 0;
+  for (const line of csv.split(/\r?\n/)) {
+    if (!line.trim()) continue;
+    if (/^time,/i.test(line)) {
+      pendingHeader = line;
+      continue;
+    }
+    // Quoted commas only occur in Comments (the last column), so the first fields split safely.
+    const state = line.split(",")[4]?.trim().toUpperCase();
+    if (state && states.has(state)) {
+      if (pendingHeader) {
+        out.push(pendingHeader);
+        pendingHeader = null;
+      }
+      out.push(line);
+      rows++;
+    }
+  }
+  return { csv: out.join("\n"), rows };
+}
+
+/**
+ * LIVE: NOAA Storm Prediction Center filtered local storm reports for one
+ * report day. US-government work, public domain. Preliminary and not
+ * quality-controlled; a report says weather happened near a place, never that
+ * a property was damaged. A missing file (404) means no reports that day.
+ */
+export async function fetchSpcDay(day: string): Promise<string> {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), SPC_TIMEOUT_MS);
+  try {
+    const res = await fetcher(spcCsvUrl(day), { signal: ctrl.signal, headers: { "user-agent": "ScoutOS/1.0 storm-feed", accept: "text/csv,text/plain" } });
+    if (res.status === 404) return "";
+    if (!res.ok) throw new StormFeedError(`NOAA storm reports answered ${res.status} for ${day}`);
+    const type = (res.headers.get("content-type") ?? "").toLowerCase();
+    if (type && !/(text\/(csv|plain)|application\/(csv|octet-stream))/.test(type)) throw new StormFeedError(`NOAA storm reports for ${day} weren't CSV (${type})`);
+    const declared = Number(res.headers.get("content-length") ?? "0");
+    if (declared > SPC_MAX_BYTES) throw new StormFeedError(`NOAA storm reports for ${day} are larger than expected`);
+    const text = await res.text();
+    if (text.length > SPC_MAX_BYTES) throw new StormFeedError(`NOAA storm reports for ${day} are larger than expected`);
+    if (text.trim() && !/^time,/im.test(text)) throw new StormFeedError(`NOAA storm reports for ${day} didn't look like an SPC file`);
+    return text;
+  } catch (err) {
+    if (err instanceof StormFeedError) throw err;
+    throw new StormFeedError(ctrl.signal.aborted ? `NOAA storm reports timed out for ${day}` : `Couldn't reach NOAA storm reports for ${day}`);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+export type StormFeedMode = "mock" | "noaa";
+/** WOS_STORM_FEED=noaa turns on the live feed. Anything else (or unset) keeps the MOCK feed. */
+export function stormFeedMode(): StormFeedMode {
+  return process.env.WOS_STORM_FEED === "noaa" ? "noaa" : "mock";
+}

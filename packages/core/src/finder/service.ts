@@ -4,8 +4,10 @@
  * fresh storm damage into prospects, scores them with Scout's existing rules,
  * and drafts a first outreach message that only an owner can approve.
  *
- * Today every adapter is MOCK, so everything it creates is demo=true and
- * labelled; "Remove sample data" clears it. Nothing is sent from here: the
+ * Storm reports come from the MOCK feed by default (demo=true, labelled), or
+ * from NOAA SPC when WOS_STORM_FEED=noaa (real, not demo). The permit feed is
+ * MOCK only, so it's switched off in live mode: invented permits never sit
+ * next to real weather. "Remove sample data" clears everything MOCK. Nothing is sent from here: the
  * message becomes a tier-2, owner-only approval, and consent plus the
  * do-not-contact list are checked again at send time.
  */
@@ -21,7 +23,7 @@ import { inOrg, MANAGERS, requireRole, STAFF } from "../org/access";
 import { requireFeature } from "../billing/plans";
 import { checkEmailAllowed } from "../scout/consent";
 import { getBusinessProfile, importProspects, runScoutScan, uploadStormReports } from "../scout/service";
-import { mockPermitAdapter, mockStormAdapter, type Area, type PermitRecord, type StormReport } from "./adapters";
+import { fetchSpcDay, filterSpcCsvToStates, mockPermitAdapter, mockStormAdapter, spcCsvUrl, StormFeedError, stormFeedMode, type Area, type PermitRecord, type StormReport } from "./adapters";
 
 type Actor = { actorUserId: string; orgId: string };
 
@@ -73,6 +75,9 @@ export async function runOpportunityFinder(input: Actor & { now?: Date }): Promi
   if (!profile || profile.status !== "reviewed" || !counties.length) {
     throw new AppError("CONFLICT", "Set and review your service area in Scout setup first, so the finder knows where to look.");
   }
+  // Managers only, checked before any outside call is made.
+  await inOrg(input.orgId, (tx) => requireRole(tx, input.orgId, input.actorUserId, MANAGERS, "finder.run"));
+  if (stormFeedMode() === "noaa") return runLiveFinder(input, now, counties);
   const day = new Date(now.getTime() - 3 * 86_400_000).toISOString().slice(0, 10);
   let storms: StormReport[] = [];
   let permits: PermitRecord[] = [];
@@ -126,6 +131,66 @@ export async function runOpportunityFinder(input: Actor & { now?: Date }): Promi
     prospectsAdded,
     opportunities: openOpps,
     skippedRecentPermits: skippedRecent,
+  };
+}
+
+/** Report days to read, newest first: an SPC day runs 12:00–11:59 UTC, so start from yesterday's. */
+export const LIVE_LOOKBACK_DAYS = 3;
+
+async function runLiveFinder(input: Actor, now: Date, counties: Area[]): Promise<FinderResult> {
+  const states = new Set(counties.map((c) => c.state.toUpperCase()));
+  let fetched = 0;
+  let kept = 0;
+  let added = 0;
+  const failures: string[] = [];
+  for (let i = 1; i <= LIVE_LOOKBACK_DAYS; i++) {
+    const day = new Date(now.getTime() - i * 86_400_000).toISOString().slice(0, 10);
+    let csv: string;
+    try {
+      csv = await fetchSpcDay(day);
+    } catch (err) {
+      failures.push(err instanceof StormFeedError ? err.message : `Couldn't read NOAA storm reports for ${day}`);
+      continue;
+    }
+    const all = csv.split(/\r?\n/).filter((l) => l.trim() && !/^time,/i.test(l)).length;
+    fetched += all;
+    const mine = filterSpcCsvToStates(csv, states);
+    kept += mine.rows;
+    if (!mine.rows) continue;
+    const r = await uploadStormReports({ ...input, csv: mine.csv, filename: spcCsvUrl(day).split("/").pop()!, demo: false });
+    added += r.added;
+  }
+  if (failures.length === LIVE_LOOKBACK_DAYS) throw new AppError("CONFLICT", `${failures[0]}. Nothing was changed; try again in a few minutes.`);
+  const scan = await withTenant(input.orgId, (tx) => runScoutScan(tx, input.orgId, { type: "user", id: input.actorUserId }, now));
+  const openOpps = await inOrg(input.orgId, async (tx) => {
+    await recordAudit(tx, {
+      tenantId: input.orgId,
+      actorType: "user",
+      actorId: input.actorUserId,
+      action: "finder.run",
+      target: `organization:${input.orgId}`,
+      tier: 1,
+      outcome: "success", // partial days are listed in metadata.failures
+      metadata: { adapters: ["noaa-spc-filtered"], mock: false, states: [...states], fetched, kept, added, failures, scan: scan as unknown as Record<string, unknown> },
+    });
+    return (await tx.select({ id: opportunities.id }).from(opportunities)).length;
+  });
+  return {
+    sources: [
+      {
+        id: "noaa-spc-filtered",
+        label: "Storm reports (NOAA SPC, live)",
+        kind: "storm",
+        mock: false,
+        records: fetched,
+        used: kept,
+        note: `Last ${LIVE_LOOKBACK_DAYS} report days, kept ${[...states].join(", ")} only (${added} new). Preliminary and not quality-controlled; a report says weather happened near a place, not that any roof was damaged.${failures.length ? ` Couldn't read: ${failures.join("; ")}.` : ""}`,
+      },
+      { id: mockPermitAdapter.id, label: "Building permits (not connected)", kind: "permit", mock: true, records: 0, used: 0, note: "Only a MOCK permit feed exists, so it's off while live storm reports are on. Real storms are matched to the customers and leads you've imported." },
+    ],
+    prospectsAdded: 0,
+    opportunities: openOpps,
+    skippedRecentPermits: 0,
   };
 }
 

@@ -1,4 +1,4 @@
-import { getBusinessProfile, listOpportunities, listSignals, planSummary } from "@wos/core";
+import { getBusinessProfile, listOpportunities, listSignals, planSummary, stormFeedMode } from "@wos/core";
 import { orgContext } from "@/server/org-context";
 import { ActionButton } from "../../../actions";
 import { FinderCard } from "./finder-card";
@@ -32,7 +32,7 @@ export default async function ScoutPage({ params, searchParams }: { params: Prom
     <div>
       {title}
       <ScoutTabs orgId={orgId} active="feed" role={org.role} />
-      {ready && <FinderCard orgId={orgId} canRun={isManager} />}
+      {ready && <FinderCard orgId={orgId} canRun={isManager} live={stormFeedMode() === "noaa"} />}
       {!ready && (
         <div role="status" className="mb-4 rounded-md border border-warn/40 bg-warn/10 px-3 py-2 text-sm">
           {profile ? "Your business profile is a draft." : "Set up your business profile first."} Scout won&apos;t scan until a manager reviews it.{" "}
