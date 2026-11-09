@@ -74,7 +74,7 @@ test.describe("differentiators", () => {
       const p2 = await (await browser.newContext({ storageState: ownerState })).newPage();
       await p2.goto(href);
       const card = p2.getByRole("region", { name: "First message" });
-      if ((await card.count()) && (await card.getByText(/^To:/).count())) {
+      if ((await card.count()) && (await card.locator("p", { hasText: /^To:/ }).count())) {
         found = true;
         await page.goto(href);
         await p2.context().close();
@@ -87,7 +87,7 @@ test.describe("differentiators", () => {
     await expect(card.getByText("Level 2 · Talks to customers")).toBeVisible();
     await expect(card.getByText("Owner only")).toBeVisible();
     await expect(card.getByLabel("Message")).toHaveValue(/reply "stop"/);
-    const to = ((await card.getByText(/^To:/).textContent()) ?? "").replace("To:", "").trim();
+    const to = ((await card.locator("p", { hasText: /^To:/ }).textContent()) ?? "").replace("To:", "").trim();
     expect(to).toMatch(/@example\.test$/);
     await page.screenshot({ path: path.join(shots, "2-first-message.png"), fullPage: true });
     await axe(page, "opportunity with first message");
@@ -111,7 +111,7 @@ test.describe("differentiators", () => {
     // On Approvals: the level and "Owner only" are visible, and the legend explains all five levels.
     await page.goto(`${scout}/approvals`);
     const ap = page.locator("section, article").filter({ hasText: `Send a first email to ${to}` }).first();
-    await expect(ap.getByText("Level 2 · Talks to customers")).toBeVisible();
+    await expect(ap.getByText("Level 2 · Talks to customers").first()).toBeVisible();
     await expect(ap.getByText("Owner only")).toBeVisible();
     await page.getByText("What the approval levels mean").click();
     const legend = page.getByRole("list", { name: "Approval levels" });
@@ -146,7 +146,7 @@ test.describe("differentiators", () => {
     await page.goto(`${main}/approvals`);
     const held = page.locator("section, article").filter({ hasText: "Acme Roofing Supply" }).first();
     await expect(held.getByText("Owner only")).toBeVisible();
-    await expect(held.getByText("Level 3 · Money & contracts")).toBeVisible();
+    await expect(held.getByText("Level 3 · Money & contracts").first()).toBeVisible();
   });
 
   test("3. claim packet: photo and note hashed into one chain; PDF downloads with a fingerprint", async ({ browser }) => {
@@ -232,7 +232,7 @@ test.describe("differentiators", () => {
     const card = page.locator("section, article").filter({ hasText: "Dana Field" }).first();
     await expect(card).toBeVisible();
     await expect(card.getByText(/AI assistant/).first()).toBeVisible();
-    await expect(card.getByText("Level 2 · Talks to customers")).toBeVisible();
+    await expect(card.getByText("Level 2 · Talks to customers").first()).toBeVisible();
     await page.screenshot({ path: path.join(shots, "7-ai-booking-approval.png"), fullPage: true });
   });
 });
