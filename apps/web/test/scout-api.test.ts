@@ -18,6 +18,7 @@ let orgId: string;
 const input = () => ({
   orgId, opportunityId: NIL, csv: "name,county,state\nA,Dallas,TX\n", reportDay: "2026-11-01", label: "probe", usageRights: "Our own customer records.",
   attest: true, evidence: "probe evidence", reason: "opt_out", basis: "existing_customer", answers: {}, email: "probe@example.test",
+  subject: "probe subject", body: "probe body probe body probe body",
   profile: { vertical: "roofing", services: [], serviceArea: { states: ["TX"], counties: [], center: null } },
 });
 
@@ -36,7 +37,7 @@ const scoutProcedures = Object.keys(appRouter._def.procedures).filter((p) => p.s
 
 describe("Scout API on a plan without Scout", () => {
   it("covers every Scout procedure", () => {
-    expect(scoutProcedures.length).toBe(19);
+    expect(scoutProcedures.length).toBe(22); // + findOpportunities, draftOutreach, requestOutreach
   });
 
   it.each(scoutProcedures.filter((p) => !ALWAYS_ALLOWED.has(p)))("%s is refused with PAYMENT_REQUIRED", async (path) => {

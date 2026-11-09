@@ -88,6 +88,7 @@ const input = () => ({
   briefingHour: 7,
   samples: false,
   // finder outreach
+  text: "probe note",
   subject: "probe subject",
   body: "probe body probe body probe body",
 });

@@ -198,10 +198,11 @@ export async function draftFirstOutreach(input: Actor & { opportunityId: string 
  * re-checks consent at send time. No agent gains new permissions.
  */
 export async function requestOutreachApproval(input: Actor & { opportunityId: string; subject: string; body: string }): Promise<{ taskId: string; approvalId: string }> {
+  // Plan and access first (draftFirstOutreach checks the Scout feature), then the message itself.
+  const draft = await draftFirstOutreach(input);
   const subject = input.subject.replace(/[\r\n]+/g, " ").trim().slice(0, 200);
   const body = input.body.trim().slice(0, 5000);
   if (subject.length < 3 || body.length < 20) throw new AppError("VALIDATION", "Give the message a subject and a few sentences.");
-  const draft = await draftFirstOutreach(input);
   if (!draft.canRequest || !draft.to) throw new AppError("CONFLICT", draft.blockedReason ?? "This message can't be sent.");
   return inOrg(input.orgId, async (tx) => {
     await requireRole(tx, input.orgId, input.actorUserId, MANAGERS, "finder.outreach.request");
