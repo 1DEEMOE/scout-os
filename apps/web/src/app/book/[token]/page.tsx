@@ -4,7 +4,15 @@ import { AppError, listAvailability } from "@wos/core";
 import { BookingForm } from "./booking-form";
 
 export const dynamic = "force-dynamic";
-export const metadata: Metadata = { title: "Book a time", robots: { index: false, follow: false } };
+/** Tells AI assistants where the machine-readable booking description lives. */
+export async function generateMetadata({ params }: { params: Promise<{ token: string }> }): Promise<Metadata> {
+  const { token } = await params;
+  return {
+    title: "Book a time",
+    robots: { index: false, follow: false },
+    alternates: { types: { "application/vnd.oai.openapi+json": `/api/front-desk/${encodeURIComponent(token)}/openapi.json` } },
+  };
+}
 
 /**
  * Public booking page for a front-desk link. No sign-in. Shows open times in

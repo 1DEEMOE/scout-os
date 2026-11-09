@@ -1,7 +1,7 @@
 import { listFrontDeskChannels, listFrontDeskSlots, listPendingFrontDeskBookings } from "@wos/core";
 import { orgContext } from "@/server/org-context";
 import { ActionButton } from "../../../../actions";
-import { Badge, Card, Empty, PageTitle, When } from "../../../../ui";
+import { Badge, Card, Empty, PageTitle, TierBadge, When } from "../../../../ui";
 import { AddSlots, EnableDesk, RotateLink } from "./desk-client";
 
 export const dynamic = "force-dynamic";
@@ -51,6 +51,23 @@ export default async function FrontDeskPage({ params }: { params: Promise<{ orgI
               </p>
               <p className="text-muted">What customers are told: &ldquo;{ch.disclosure}&rdquo;</p>
               {isManager && <RotateLink orgId={orgId} channelId={ch.id} />}
+            </div>
+          </Card>
+
+          <Card title={<span className="flex flex-wrap items-center gap-2">For AI assistants <TierBadge tier={2} /></span>}>
+            <div className="flex flex-col gap-4">
+              <p>
+                Other AI assistants (the ones your customers already use) can find your free times and request one for a customer. They must say who they are, and every request waits here for your OK, exactly like a person&apos;s.
+              </p>
+              <dl className="grid gap-x-4 gap-y-2 text-small sm:grid-cols-[11rem_1fr]">
+                <dt className="text-muted">Description for assistants</dt>
+                <dd><code className="break-all">/api/front-desk/&lt;your link code&gt;/openapi.json</code></dd>
+                <dt className="text-muted">Free times</dt>
+                <dd><code className="break-all">GET /api/front-desk/&lt;your link code&gt;/availability</code></dd>
+                <dt className="text-muted">Ask for a time</dt>
+                <dd><code className="break-all">POST /api/front-desk/&lt;your link code&gt;/bookings</code></dd>
+              </dl>
+              <p className="text-small text-muted">Your link code is the part after /book/ in your booking link. Your booking page also points assistants to the description automatically. Requests are rate limited, and replacing the link stops the old code working.</p>
             </div>
           </Card>
 

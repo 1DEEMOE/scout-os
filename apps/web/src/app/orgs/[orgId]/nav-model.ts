@@ -81,7 +81,8 @@ export function moreGroups(d: ShellData): NavGroup[] {
       items: [
         { href: "/chat", label: "Conversations", keywords: "threads history chats" },
         ...(scout ? [{ href: "/inbox", label: "Inbox", keywords: "email messages" }] : []),
-        { href: "/finance", label: "Invoices", keywords: "billing money overdue finance payments" },
+        { href: "/finance", label: "Invoices", keywords: "billing money overdue finance payments forged check" },
+        { href: "/ai-visibility", label: "AI visibility", keywords: "chatgpt assistant answers recommended found search" },
         ...(scout
           ? [
               { href: "/analytics", label: "Analytics", keywords: "reports numbers" },
