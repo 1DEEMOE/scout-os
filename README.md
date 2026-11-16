@@ -10,14 +10,24 @@ Multi-tenant SaaS where small businesses hire AI employees (Scout, Inbox, Pipeli
 
 Needs Node 22+, pnpm 10, and PostgreSQL 16.
 
+One command does everything — env file with generated secrets, database roles, migrations, and a verification pass:
+
+```bash
+pnpm setup        # add --demo for synthetic demo accounts
+```
+
+It assumes a local superuser `postgres:postgres@localhost:5432`; point elsewhere with `--db-url postgres://user:pw@host:5432/postgres`. Re-running is safe. No local Postgres yet? Docker: `docker run -d -p 5432:5432 -e POSTGRES_PASSWORD=postgres postgres:16`, then `pnpm setup`.
+
+Then start the app: `pnpm --filter @wos/web dev` → http://localhost:3000, and the worker in a second terminal: `pnpm --filter @wos/web worker`.
+
+<details><summary>Manual steps (what <code>pnpm setup</code> does for you)</summary>
+
 1. Create roles and databases once, as a Postgres superuser: `psql -U postgres -f scripts/setup-local-db.sql` (local passwords only).
 2. `cp .env.example apps/web/.env.local`, then set `BETTER_AUTH_SECRET` and `WOS_SECRETS_KEY`. For a demo without any external accounts, also set `WOS_MOCK_MODE=1`.
 3. `pnpm install`
 4. `DATABASE_URL_OWNER=postgres://wos_owner:owner_dev_pw@localhost:5432/wos_dev pnpm db:migrate`
-5. Start the web app: `pnpm --filter @wos/web dev` → http://localhost:3000
-6. Start the worker in a second terminal (same env vars): `pnpm --filter @wos/web worker`
 
-On Windows, Docker works for step 1: `docker run -d -p 5432:5432 -e POSTGRES_PASSWORD=postgres postgres:16`, then run the SQL with `psql -h localhost -U postgres`.
+</details>
 
 Demo seed (synthetic accounts only): from `apps/web`, `npx tsx e2e/demo-seed.ts`. Logins: `owner@e2e.test` / `sam@e2e.test`, password `e2e-password-12345`.
 
