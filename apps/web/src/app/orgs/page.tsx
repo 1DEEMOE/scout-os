@@ -5,7 +5,8 @@ import { SignOutButton } from "../sign-out-button";
 
 export const dynamic = "force-dynamic";
 
-export default async function OrgsPage() {
+export default async function OrgsPage({ searchParams }: { searchParams: Promise<{ next?: string }> }) {
+  const { next } = await searchParams;
   const userId = await requireUserId();
   const orgs = await listMyOrgs({ actorUserId: userId });
   return (
@@ -27,7 +28,7 @@ export default async function OrgsPage() {
           </ul>
         )}
       </section>
-      <CreateOrgForm />
+      <CreateOrgForm next={next && next.startsWith("/") && !next.startsWith("//") ? next : undefined} />
     </div>
   );
 }

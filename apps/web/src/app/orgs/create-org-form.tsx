@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { errorMessage, trpc } from "@/lib/trpc";
 import { buttonCls, ErrorText, inputCls } from "../ui";
 
-export function CreateOrgForm() {
+export function CreateOrgForm({ next }: { next?: string }) {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -14,7 +14,8 @@ export function CreateOrgForm() {
     setError(null);
     try {
       const { orgId } = await trpc.org.create.mutate({ name: String(form.get("name") ?? "") });
-      router.push(`/orgs/${orgId}/setup`);
+      // `next` comes from the page, which already validated it is same-site.
+      router.push(next ?? `/orgs/${orgId}/setup`);
     } catch (err) {
       setError(errorMessage(err));
       setBusy(false);

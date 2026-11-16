@@ -45,6 +45,7 @@ export * from "./chat/service";
 export * from "./org/pause";
 export { initOtel, shutdownOtel } from "./otel";
 export * from "./billing/plans";
+export * from "./billing/pricing";
 export * from "./scout/service";
 export * from "./scout/spc";
 export * from "./scout/score";
