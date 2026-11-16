@@ -1,4 +1,4 @@
-# Scout OS — Handoff Brief
+# Ascend Software — Handoff Brief
 "Your AI workforce. Finding opportunities. Running operations." General AI operating system for small/mid-size businesses; first vertical: roofing.
 
 ## Stack

@@ -1,6 +1,6 @@
 # IP and Legal Flags (open)
 
-1. **Product name.** Customer-facing name is now **"Scout OS"** (owner directive, Session 6); "Workforce OS" remains in internal identifiers. "Scout" is a common word and likely crowded in software trademarks. **A trademark clearance search for "Scout OS" (classes 9 and 42) is required before public use.** Not done. Owner decision.
+1. **Product name.** Customer-facing name is now **"Ascend Software"** (owner directive, Session 6); "Workforce OS" remains in internal identifiers. "Scout" is a common word and likely crowded in software trademarks. **A trademark clearance search for "Ascend Software" (classes 9 and 42) is required before public use.** Not done. Owner decision.
 2. **Bops LICENSE file not read directly.** github.com was blocked from this session; terms come from the README summary. Read the actual LICENSE before relying on the two-year Apache conversion for anything.
 3. **Concept overlap.** A lead bot delegating to specialists, approval gates and per-agent inboxes are general industry patterns (also in Lindy, Relevance, CrewAI). We keep our own naming, UI and prompts. No Bops mascot-style branding, no "Boppy"-like lead-agent naming.
 4. ~~**Auth library.**~~ Resolved in Milestone 1: Better Auth (MIT). See docs/design/auth-adr.md.

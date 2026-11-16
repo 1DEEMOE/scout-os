@@ -82,7 +82,7 @@ const CAPTIONS: Record<string, { title: string; caption: string }> = {
   "01-setup-wizard": {
     title: "1. Setup wizard",
     caption:
-      "Jordan opens Scout OS and starts setup for Peachtree Roofing. The wizard asks what kind of business this is — Roofing sets up storm leads, a Morning Briefing, and a Scout Pro trial. Approval rules stay the same.",
+      "Jordan opens Ascend Software and starts setup for Peachtree Roofing. The wizard asks what kind of business this is — Roofing sets up storm leads, a Morning Briefing, and a Scout Pro trial. Approval rules stay the same.",
   },
   "02-today": {
     title: "2. Home screen (Today)",
@@ -112,7 +112,7 @@ const CAPTIONS: Record<string, { title: string; caption: string }> = {
   "07-flagged-invoice": {
     title: "7. Flagged invoice",
     caption:
-      "An incoming invoice from “SAMPLE: Apex Materials LLC” is flagged: the sender domain doesn’t match, the bank account isn’t on file, the amount is far outside the usual pattern, and the PDF metadata looks edited. Scout OS raises an approval and never pays it automatically.",
+      "An incoming invoice from “SAMPLE: Apex Materials LLC” is flagged: the sender domain doesn’t match, the bank account isn’t on file, the amount is far outside the usual pattern, and the PDF metadata looks edited. Ascend Software raises an approval and never pays it automatically.",
   },
   "08-job-photos": {
     title: "8. Job photos and claim packet",
@@ -172,7 +172,7 @@ function writeHtml() {
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
-  <title>Peachtree Roofing — Scout OS sample walkthrough</title>
+  <title>Peachtree Roofing — Ascend Software sample walkthrough</title>
   <style>
     :root { color-scheme: light; }
     body { font-family: Georgia, "Times New Roman", serif; max-width: 1120px; margin: 2rem auto 4rem; padding: 0 1.25rem; color: #1b1b1b; line-height: 1.5; }
@@ -193,7 +193,7 @@ function writeHtml() {
 </head>
 <body>
   <header>
-    <h1>Peachtree Roofing — a sample walk through Scout OS</h1>
+    <h1>Peachtree Roofing — a sample walk through Ascend Software</h1>
     <p class="lede">This is a local sample so you can see how the product flows. Every lead, job, invoice, booking and photo is invented and marked SAMPLE or DEMO. Nothing here is a real customer, and nothing was deployed or paid for.</p>
     <p class="note">Local demo server: <a href="${BASE}">${BASE}</a> · Sign in as ${seed.email}. This document is ${path.join(OUT, "walkthrough.html")}.</p>
   </header>
@@ -218,7 +218,7 @@ const d = await desktop.newPage();
 const video = d.video();
 await signIn(d);
 await d.goto(`${BASE}/orgs/${org}/setup`, { waitUntil: "networkidle" });
-await d.getByRole("heading", { name: /Set up Scout OS|What kind of business/ }).first().waitFor({ timeout: 20_000 }).catch(() => {});
+await d.getByRole("heading", { name: /Set up Ascend Software|What kind of business/ }).first().waitFor({ timeout: 20_000 }).catch(() => {});
 await shot(d, "desktop", "01-setup-wizard");
 
 // Mobile wizard screenshot while setup is still incomplete

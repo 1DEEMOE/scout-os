@@ -149,7 +149,7 @@ await importProspects({
   orgId,
   csv: prospects,
   label: "SAMPLE Peachtree homeowners",
-  usageRights: "Invented SAMPLE records for trying Scout OS. Not real people.",
+  usageRights: "Invented SAMPLE records for trying Ascend Software. Not real people.",
   attest: true,
   demo: true,
 });

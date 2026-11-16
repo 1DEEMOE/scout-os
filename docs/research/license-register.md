@@ -61,7 +61,7 @@ From `pnpm licenses list --prod`. Everything else is MIT, ISC, Apache-2.0, BSD, 
 | Bops (OrgoAI/bops) | FSL-1.1-ALv2 | **No code, assets, prompts or branding used.** We build a competing product, which the license forbids. Research used public behavior only. |
 | n8n | Sustainable Use License | Not a dependency. Do not embed or resell. |
 
-## Scout OS (Session 6)
+## Ascend Software (Session 6)
 
 No new dependencies were added. The CSV reader (`packages/core/src/scout/csv.ts`) and distance function are written in-house. Data source: NOAA Storm Prediction Center local storm reports — US government work, public domain in the US (see ip-flags #9).
 

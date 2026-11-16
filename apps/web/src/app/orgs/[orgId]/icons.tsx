@@ -1,5 +1,5 @@
 /**
- * Navigation icons: simple geometric line drawings made for Scout OS (24px
+ * Navigation icons: simple geometric line drawings made for Ascend Software (24px
  * grid, 1.75 stroke). Decorative only; every use sits next to a text label or
  * an accessible name.
  */

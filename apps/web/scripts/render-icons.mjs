@@ -1,6 +1,6 @@
 // Usage (from apps/web): node scripts/render-icons.mjs public/icons
 /* global process */
-// Renders the original Scout OS mark (rounded teal square + compass) to PNG app icons.
+// Renders the original Ascend Software mark (rounded teal square + compass) to PNG app icons.
 import { createRequire } from "node:module";
 const { chromium } = createRequire(process.cwd() + "/package.json")("@playwright/test");
 const out = process.argv[2];

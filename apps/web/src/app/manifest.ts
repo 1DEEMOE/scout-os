@@ -1,7 +1,7 @@
 import type { MetadataRoute } from "next";
 import { BRAND } from "@/brand";
 
-/** Lets people add Scout OS to a phone's home screen. Nothing to install from a store. */
+/** Lets people add Ascend Software to a phone's home screen. Nothing to install from a store. */
 export default function manifest(): MetadataRoute.Manifest {
   return {
     name: BRAND.name,

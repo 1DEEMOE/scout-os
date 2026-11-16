@@ -8,8 +8,8 @@ describe("SMTP platform email", () => {
   it("builds a real message with the configured sender address", async () => {
     // Stream transport renders the full RFC 5322 message without a network.
     const transport = nodemailer.createTransport({ streamTransport: true, buffer: true, newline: "unix" });
-    const sender = new SmtpMailSender(transport, "Scout OS <no-reply@scout.example>");
-    const out = await sender.send({ to: "dana@example.test", subject: "Reset your Scout OS password", text: "Reset: https://x/reset?token=abc" });
+    const sender = new SmtpMailSender(transport, "Ascend Software <no-reply@scout.example>");
+    const out = await sender.send({ to: "dana@example.test", subject: "Reset your Ascend Software password", text: "Reset: https://x/reset?token=abc" });
     expect(out.id).toBeTruthy();
     expect(sender.mock).toBe(false);
   });
@@ -18,7 +18,7 @@ describe("SMTP platform email", () => {
     expect(SmtpMailSender.fromEnv({})).toBeNull();
     expect(() => SmtpMailSender.fromEnv({ SMTP_URL: "smtp://u:p@mail.example:587" })).toThrow(/MAIL_FROM/);
     expect(() => SmtpMailSender.fromEnv({ SMTP_URL: "http://mail.example", MAIL_FROM: "a@b.c" })).toThrow(/smtp:\/\//);
-    expect(SmtpMailSender.fromEnv({ SMTP_URL: "smtps://u:p@mail.example:465", MAIL_FROM: "Scout OS <a@b.c>" })).toBeInstanceOf(SmtpMailSender);
+    expect(SmtpMailSender.fromEnv({ SMTP_URL: "smtps://u:p@mail.example:465", MAIL_FROM: "Ascend Software <a@b.c>" })).toBeInstanceOf(SmtpMailSender);
   });
 
   it("screens can tell whether email really goes out", () => {

@@ -1,8 +1,8 @@
-# Scout OS
+# Ascend Software
 
 Multi-tenant SaaS where small businesses hire AI employees (Scout, Inbox, Pipeline, Billing, Analyst, Coordinator) that find opportunities and run operations with human approval gates.
 
-**Customer-facing name:** Scout OS. Internal package names, env vars, and DB roles still use `@wos/*` / `WOS_*` / `wos_*` so existing installs and provider metadata stay intact. A trademark clearance search for "Scout OS" (classes 9 and 42) is still required before public use — see `docs/research/ip-flags.md`.
+**Customer-facing name:** Ascend Software. Internal package names, env vars, and DB roles still use `@wos/*` / `WOS_*` / `wos_*` so existing installs and provider metadata stay intact. A trademark clearance search for "Ascend Software" (classes 9 and 42) is still required before public use — see `docs/research/ip-flags.md`.
 
 **Status:** Phases 0–8 built and verified on synthetic data; Phase 9 adversarial testing in progress. Not deployed. Integrations with Gmail, HubSpot, Stripe and the AI model are built but **not yet verified against live accounts**; see `docs/plans/readiness-report.md` and `docs/plans/live-integration-runbook.md`. Clean-room rules apply (no copying of Bops).
 

@@ -7,9 +7,9 @@
  * installs and references stored at providers. See docs/design/scout-architecture.md §2.
  */
 export const BRAND = {
-  name: "Scout OS",
+  name: "Ascend Software",
   tagline: "Your AI workforce. Finding opportunities. Running operations.",
-  promise: "Scout OS helps businesses discover opportunities, manage customer relationships, coordinate work, and get paid.",
+  promise: "Ascend Software helps businesses discover opportunities, manage customer relationships, coordinate work, and get paid.",
 } as const;
 
 /** Directive roster names for each agent kind (display only; kinds are unchanged). */

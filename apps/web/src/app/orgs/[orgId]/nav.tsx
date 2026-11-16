@@ -263,7 +263,7 @@ function Sidebar({ d, path }: { d: ShellData; path: string }) {
   return (
     <div className="flex min-h-full flex-col gap-8 px-4 py-6 rail:items-stretch rail:px-3">
       <div className="flex items-center justify-between gap-2 px-1 rail:flex-col rail:px-0">
-        <a href="/orgs" className="inline-flex min-h-11 items-center rounded-lg" aria-label="Scout OS: all workspaces"><BrandMark railable /></a>
+        <a href="/orgs" className="inline-flex min-h-11 items-center rounded-lg" aria-label="Ascend Software: all workspaces"><BrandMark railable /></a>
         <button
           type="button"
           onClick={() => setRail(!rail)}

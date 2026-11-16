@@ -1,4 +1,4 @@
-# Scout OS — status (2026-11-05)
+# Ascend Software — status (2026-11-05)
 
 Repo at `/workspace/scout-os/repo`. Phase 9 self-assessment completed locally. Nothing deployed. No push. Clean-room rules intact.
 
@@ -6,7 +6,7 @@ Repo at `/workspace/scout-os/repo`. Phase 9 self-assessment completed locally. N
 | Phase | What |
 |---|---|
 | 0–1 | Discovery audit + architecture ADR-004 |
-| 2 | Customer-facing rebrand to Scout OS (`apps/web/src/brand.ts`); security headers |
+| 2 | Customer-facing rebrand to Ascend Software (`apps/web/src/brand.ts`); security headers |
 | 3 | Plans/entitlements/quotas; Stripe webhook plan updates |
 | 4–5 | Scout data model; roofing + NOAA SPC CSV; prospect import; heuristic score |
 | 6 | Scout agent + lifecycle + consent/suppression at send |
@@ -37,10 +37,10 @@ Repo at `/workspace/scout-os/repo`. Phase 9 self-assessment completed locally. N
 ## Not done / release decision: **NO-GO**
 - Independent audit not completed (this report is self-assessment only).
 - Live integrations unverified (Gmail, HubSpot, Stripe checkout/webhooks, Anthropic, live SPC fetch).
-- Trademark clearance for "Scout OS" not done.
+- Trademark clearance for "Ascend Software" not done.
 - Compliance review (CAN-SPAM / TCPA / state privacy / list licenses) not done.
 - Staging, monitoring, Phases 10–12 blocked pending owner authorization.
 - Open owner decisions: pricing, plan contents, member tier-3 tasks, single-owner tier-4 exception, launch channels (email vs email+SMS).
 
 ## Internal vs customer-facing names
-Customer-facing: **Scout OS**. Internal packages `@wos/*`, env `WOS_*`, DB roles `wos_*` kept on purpose.
+Customer-facing: **Ascend Software**. Internal packages `@wos/*`, env `WOS_*`, DB roles `wos_*` kept on purpose.

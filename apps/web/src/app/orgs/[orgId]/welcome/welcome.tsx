@@ -93,7 +93,7 @@ export function Welcome(props: {
     <div className="mx-auto flex max-w-xl flex-col gap-10">
       <header className="flex flex-col gap-6">
         <div>
-          <p className="text-muted">Welcome to Scout OS</p>
+          <p className="text-muted">Welcome to Ascend Software</p>
           <p className="mt-1 text-xl font-semibold">{props.name}</p>
         </div>
         <Progress step={step} />

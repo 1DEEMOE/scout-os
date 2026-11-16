@@ -110,7 +110,7 @@ export default async function OpportunityPage({ params }: { params: Promise<{ or
             </dl>
             {!d.suppressed && p.email && (
               <div className="mt-3">
-                <ActionButton path="scout.suppress" input={{ orgId, email: p.email, reason: "opt_out" }} label="Add to do-not-contact" variant="danger" confirm={`Never email ${p.email} from Scout OS?`} />
+                <ActionButton path="scout.suppress" input={{ orgId, email: p.email, reason: "opt_out" }} label="Add to do-not-contact" variant="danger" confirm={`Never email ${p.email} from Ascend Software?`} />
               </div>
             )}
           </Card>

@@ -408,7 +408,7 @@ export const chatDelegations = pgTable("chat_delegations", {
   createdAt: ts("created_at").notNull().defaultNow(),
 });
 
-// ---------- Scout OS: entitlements ----------
+// ---------- Ascend Software: entitlements ----------
 
 export const usageCounters = pgTable(
   "usage_counters",
@@ -422,7 +422,7 @@ export const usageCounters = pgTable(
   (t) => [primaryKey({ columns: [t.tenantId, t.metric, t.period] })],
 );
 
-// ---------- Scout OS: lead intelligence (migration 0011) ----------
+// ---------- Ascend Software: lead intelligence (migration 0011) ----------
 
 export const OPPORTUNITY_STAGES = ["prospect", "engaged", "qualified", "opportunity", "disqualified"] as const;
 export type OpportunityStage = (typeof OPPORTUNITY_STAGES)[number];

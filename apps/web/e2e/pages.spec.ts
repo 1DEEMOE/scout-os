@@ -43,5 +43,5 @@ test("every org page renders", async ({ page }) => {
     await page.screenshot({ path: path.join(shots, `page${suffix.replace("/", "-") || "-overview"}.png`), fullPage: true });
   }
   expect(errors).toEqual([]);
-  await expect(page).toHaveTitle(/Scout OS/);
+  await expect(page).toHaveTitle(/Ascend Software/);
 });

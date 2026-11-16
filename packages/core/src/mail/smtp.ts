@@ -6,7 +6,7 @@ import type { MailSender, OutboundMail } from "./sender";
  * Real platform email over SMTP (password resets, invitations, verification).
  * Provider-neutral: Postmark, SES, Resend, Mailgun and Google Workspace all
  * accept SMTP. Configure with SMTP_URL (smtps://user:pass@host:465 or
- * smtp://user:pass@host:587) and MAIL_FROM ("Scout OS <no-reply@yourdomain>").
+ * smtp://user:pass@host:587) and MAIL_FROM ("Ascend Software <no-reply@yourdomain>").
  *
  * UNVERIFIED against a live provider in this repository: covered by tests
  * through nodemailer's stream transport, not by a real send.

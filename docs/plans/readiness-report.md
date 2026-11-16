@@ -45,7 +45,7 @@ See `acceptance.md`. Summary of the final run: clean install, lint, typecheck, u
 6. ~~Escalated tasks have no retry~~: done in Session 5 (managers can retry from the task page).
 7. **Model prices** for metering are configuration (`MODEL_PRICE_*`); set them from the provider's price list.
 8. **Data-processing review**: customer emails, CRM and invoice data are sent to the model provider (ip-flags #8). Gmail restricted-scope verification is required before public launch (ip-flags #5).
-9. **Product name** customer-facing is **Scout OS**; internal identifiers remain wos/* / WOS_*. Trademark clearance for "Scout OS" is still required (ip-flags #1).
+9. **Product name** customer-facing is **Ascend Software**; internal identifiers remain wos/* / WOS_*. Trademark clearance for "Ascend Software" is still required (ip-flags #1).
 
 ## Pre-deploy gate — owner approval required
 
