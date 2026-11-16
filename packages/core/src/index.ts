@@ -91,6 +91,8 @@ export { INDUSTRY_PACKS, PACK_GROUPS, PACK_VERSION, closestPack, getPack, listPa
 export { handoffReliability } from "./integrations/reliability";
 export { readPilotMetrics } from "./pilot/metrics";
 export { readPackId } from "./industries/store";
+export { ELITE_PACKS, ELITE_VERSION, buildEstimate, disclosuresFor, elitePackSchema, getElitePack, hasElitePack, renderEstimateText, validateIntake } from "./industries/elite";
+export type { Answers as EliteAnswers, Estimate as EliteEstimate, ElitePack, ElitePackInput } from "./industries/elite";
 export {
   approveAllTemplates,
   findLeadByExternalKey,
