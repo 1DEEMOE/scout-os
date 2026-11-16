@@ -115,6 +115,7 @@ export * from "./kimi/round1";
 
 export * from "./front-desk/service";
 export * from "./ai-answers/provider";
+export * from "./ai-answers/live";
 export * from "./ai-answers/service";
 export * from "./job-photos/service";
 export * from "./documents/forgery";

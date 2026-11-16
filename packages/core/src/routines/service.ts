@@ -9,7 +9,7 @@ import { consumeQuota, entitlementsIn } from "../billing/plans";
 import { insertTask } from "../engine/tasks";
 import { buildMorningBriefing, MissingSourceError, type Briefing, type SourceReader } from "./briefing";
 import { aiAnswersPeriod } from "../ai-answers/service";
-import { getAiAnswersProvider } from "../ai-answers/provider";
+import { providerForAiAnswers } from "../ai-answers/live";
 import { describeSchedule, nextRunAfter, validateSchedule, type Schedule } from "./schedule";
 import { enqueueRoutineRun, type RoutineRunJob } from "./queue";
 
@@ -297,7 +297,7 @@ export async function executeRoutineRun(job: RoutineRunJob, deps: RunDeps = {}):
         const period = aiAnswersPeriod(at);
         if (prior.period !== period) {
           // runAiAnswersCheck opens its own inOrg txn — call provider inline instead.
-          const result = await getAiAnswersProvider().check({ trade: prior.trade, zip: prior.zip });
+          const result = await providerForAiAnswers().check({ trade: prior.trade, zip: prior.zip, tenantId: r.tenantId });
           const trendDelta = result.score - prior.score;
           await tx.insert(aiAnswerChecks).values({
             tenantId: r.tenantId,

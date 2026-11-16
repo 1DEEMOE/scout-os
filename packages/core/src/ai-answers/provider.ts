@@ -7,6 +7,8 @@ export interface AiAnswersQuery {
   trade: string;
   zip: string;
   businessName?: string;
+  /** Required by the live provider for metering, budget, and the event bus. */
+  tenantId?: string;
 }
 
 export interface AiAnswersResult {
