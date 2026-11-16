@@ -30,7 +30,7 @@ import { integrations } from "../src/events/breaker";
 import type { EffectContext } from "../src/events/bus";
 import { deadLetterIdempotencyKey } from "../src/events/journal";
 import { fetchAllowlisted, UnsafeUrlError } from "../src/security/ssrf";
-import { sameOrigin } from "../src/security/origin";
+import { publicClientAllowed, sameOrigin } from "../src/security/origin";
 import { crmTools } from "../src/tools/crm";
 import { financeTools } from "../src/tools/finance";
 import { FakeCrmProvider } from "../src/integrations/crm";
@@ -146,6 +146,25 @@ describe("redirects and origin", () => {
     expect(sameOrigin(req("http://scout.example"))).toBe(false);
     expect(sameOrigin(req("https://scout.example:444"))).toBe(false);
     expect(sameOrigin(req("https://evil.example", "scout.example"))).toBe(false);
+    if (prev === undefined) delete process.env.APP_ORIGIN;
+    else process.env.APP_ORIGIN = prev;
+  });
+
+  it("publicClientAllowed welcomes origin-less agents but still blocks foreign browsers", () => {
+    const prev = process.env.APP_ORIGIN;
+    process.env.APP_ORIGIN = "https://ascend.example";
+    const req = (origin: string | null) => ({
+      url: "https://ascend.example/api/front-desk/tok/bookings",
+      headers: { get: (n: string) => (n === "origin" ? origin : null) },
+    });
+    // Server-to-server AI booking agents send no Origin header.
+    expect(publicClientAllowed(req(null))).toBe(true);
+    // Our own booking page.
+    expect(publicClientAllowed(req("https://ascend.example"))).toBe(true);
+    // A browser driven by any other site is still refused.
+    expect(publicClientAllowed(req("https://evil.example"))).toBe(false);
+    expect(publicClientAllowed(req("http://ascend.example"))).toBe(false);
+    expect(publicClientAllowed(req("not a url"))).toBe(false);
     if (prev === undefined) delete process.env.APP_ORIGIN;
     else process.env.APP_ORIGIN = prev;
   });

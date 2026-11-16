@@ -91,7 +91,7 @@ export { produceIntegration, setIntegrationJournal } from "./events/produce";
 export { auditJournal, deadLetterIdempotencyKey } from "./events/journal";
 export { modelForPurpose } from "./engine/model-route";
 export { assertSafeOutbound } from "./security/ssrf";
-export { sameOrigin } from "./security/origin";
+export { publicClientAllowed, sameOrigin } from "./security/origin";
 export { secretFindings } from "./security/secrets";
 export { checkToolOutput, resetToolRates, takeToolRate } from "./engine/tool-guard";
 export { smsWindowOpen } from "./speed/hours";
