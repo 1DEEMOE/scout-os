@@ -27,7 +27,8 @@ import { syncHandoffs } from "./lifecycle";
 import { parseCsv, stripControl } from "./csv";
 import { milesBetween, normCounty } from "./geo";
 import { scoreMatch } from "./score";
-import { parseSpcCsv, reportDayFromFilename, SPC_CONFIDENCE, SPC_LIMITATIONS, SPC_USAGE_RIGHTS } from "./spc";
+import { parseSpcCsv, reportDayFromFilename } from "./spc";
+import { ingestSpcSignals } from "./signal-ingest";
 import { vertical } from "./verticals";
 
 export const SCOUT_DEFAULTS = { radiusMiles: 10, lookbackDays: 30, minScore: 30, retentionDays: 365 } as const;
@@ -149,19 +150,15 @@ export async function uploadStormReports(input: User & { csv: string; filename?:
       throw new AppError("VALIDATION", "The report day must be a real date in YYYY-MM-DD form.");
     }
     if (!parsed.signals.length) throw new AppError("VALIDATION", `No storm reports found in that file${parsed.rejected.length ? ` (${parsed.rejected.length} rows couldn't be read, first: line ${parsed.rejected[0]!.line}, ${parsed.rejected[0]!.reason})` : ""}.`);
-    const [src] = await tx.insert(intelligenceSources).values({
-      tenantId: input.orgId, kind: "noaa_spc_storm_reports", label: `SPC storm reports ${day}${input.demo ? " (DEMO)" : ""}`,
-      usageRights: SPC_USAGE_RIGHTS, createdBy: input.actorUserId, demo: !!input.demo,
-    }).returning({ id: intelligenceSources.id });
-    const inserted = await tx.insert(signalObservations).values(parsed.signals.map((s) => ({
-      tenantId: input.orgId, sourceId: src!.id, kind: s.kind, eventAt: s.eventAt, location: s.location, county: s.county, state: s.state,
-      lat: s.lat, lon: s.lon, magnitude: s.magnitude, magnitudeUnit: s.magnitudeUnit, comments: s.comments,
-      confidence: SPC_CONFIDENCE, limitations: SPC_LIMITATIONS, externalRef: s.externalRef, demo: !!input.demo,
-    }))).onConflictDoNothing().returning({ id: signalObservations.id });
-    await tx.update(intelligenceSources).set({ rowCount: inserted.length }).where(eq(intelligenceSources.id, src!.id));
-    const result = { reportDay: day, added: inserted.length, duplicates: parsed.signals.length - inserted.length, rejected: parsed.rejected };
-    await recordAudit(tx, { tenantId: input.orgId, actorType: "user", actorId: input.actorUserId, action: "scout.signals.upload", target: `intelligence_source:${src!.id}`, tier: 1, outcome: "success", metadata: { reportDay: day, added: result.added, duplicates: result.duplicates, rejected: parsed.rejected.length } });
-    return result;
+    return ingestSpcSignals(tx, {
+      tenantId: input.orgId,
+      day,
+      parsed,
+      sourceLabel: `SPC storm reports ${day}${input.demo ? " (DEMO)" : ""}`,
+      actor: { type: "user", id: input.actorUserId },
+      action: "scout.signals.upload",
+      demo: !!input.demo,
+    });
   });
 }
 

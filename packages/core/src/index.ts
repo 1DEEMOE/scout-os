@@ -56,6 +56,20 @@ export { checkEmailAllowed, normalizeAddress } from "./scout/consent";
 export { scoutTools, registerScoutTools } from "./scout/tools";
 export * from "./scout/analytics";
 export { loadScoutDemo } from "./scout/demo";
+export { ingestSpcSignals } from "./scout/signal-ingest";
+export {
+  currentSpcReportDay,
+  listStormSyncTenants,
+  resyncSpcDayDirect,
+  resetSpcSyncForTests,
+  setSpcFetchForTests,
+  spcCsvUrl,
+  spcDayFromKey,
+  spcSyncDays,
+  spcSyncKey,
+  syncSpcDay,
+  syncStormReportsAllTenants,
+} from "./scout/storm-sync";
 export { getMailSender, setMailSenderForTests, platformEmailConfigured, ConsoleMailSender, type MailSender, type OutboundMail } from "./mail/sender";
 export { SmtpMailSender } from "./mail/smtp";
 

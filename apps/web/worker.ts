@@ -4,10 +4,10 @@
 // worker that crashed. The web server doesn't need it.
 process.env.WOS_QUEUE_SUPERVISE ??= "1";
 
-import { executeRoutineRun, handleTaskRunJob, initOtel, logger, recoverLostRoutineRuns, shutdownOtel, startInboxSyncWorker, startRoutineWorker, startTaskWorker, stopBoss, stopInboxSyncWorker, stopRoutineWorker, stopTaskWorker } from "@wos/core";
+import { executeRoutineRun, handleTaskRunJob, initOtel, logger, recoverLostRoutineRuns, shutdownOtel, startInboxSyncWorker, startRoutineWorker, startTaskWorker, stopBoss, stopInboxSyncWorker, stopRoutineWorker, stopTaskWorker, syncStormReportsAllTenants } from "@wos/core";
 import { ensureEngine } from "./src/server/engine";
 
-await initOtel("scout-os-worker");
+await initOtel("ascend-worker");
 ensureEngine();
 await startTaskWorker(handleTaskRunJob);
 await startInboxSyncWorker();
@@ -34,11 +34,34 @@ if (process.env.DATABASE_URL_ADMIN) {
   logger.warn("routine reconciler idle: DATABASE_URL_ADMIN not set");
 }
 
+// Automatic NOAA SPC storm-report feed: every WOS_STORM_SYNC_SECONDS
+// (default 6h, minimum 15 min), for orgs with a reviewed Scout profile.
+// Cross-tenant listing needs DATABASE_URL_ADMIN, same as the reconciler.
+let stormTimer: ReturnType<typeof setInterval> | undefined;
+if (process.env.DATABASE_URL_ADMIN) {
+  const secs = Math.max(900, Number(process.env.WOS_STORM_SYNC_SECONDS ?? "21600"));
+  if (!Number.isFinite(secs)) throw new Error("WOS_STORM_SYNC_SECONDS must be a number");
+  const tick = async () => {
+    try {
+      const r = await syncStormReportsAllTenants();
+      if (r.ingested || r.failed) logger.info({ ...r }, "storm sync pass");
+    } catch (err) {
+      logger.error({ err }, "storm sync pass failed");
+    }
+  };
+  void tick();
+  stormTimer = setInterval(() => void tick(), secs * 1000);
+  logger.info({ intervalSeconds: secs }, "storm sync scheduled");
+} else {
+  logger.warn("storm sync idle: DATABASE_URL_ADMIN not set");
+}
+
 
 async function shutdown(signal: string) {
   logger.info({ signal }, "task worker stopping");
   await stopTaskWorker();
   if (reconcileTimer) clearInterval(reconcileTimer);
+  if (stormTimer) clearInterval(stormTimer);
   await stopRoutineWorker();
   await stopInboxSyncWorker();
   await stopBoss();

@@ -30,7 +30,7 @@ Tests use the `TEST_DATABASE_URL` / `TEST_DATABASE_URL_OWNER` / `TEST_DATABASE_U
 ## How it works
 
 - Agents **propose** actions; the platform decides. Tier 0–1 run; tier 2 (external), 3 (financial) and 4 (destructive) wait in Approvals. What a person approves is fingerprinted, so any change to the action voids the approval. Email/chat-origin data forces tier ≥ 2. The lead bot is capped at tier 3. Tier 4 needs a second confirmation from a different owner.
-- Scout finds roofing opportunities from attested prospect lists + NOAA SPC storm reports (CSV upload; live fetch not built). Consent and suppression are checked at send time.
+- Scout finds roofing opportunities from attested prospect lists + NOAA SPC storm reports. The worker syncs the current and previous SPC report days automatically every 6 hours (`WOS_STORM_SYNC_SECONDS`); manual CSV upload remains as a fallback. Consent and suppression are checked at send time.
 - Each organization's data is isolated by Postgres row-level security. Tests discover every table and every API endpoint to prove it.
 - Tasks run in a separate worker process via a Postgres-backed queue. Retries can't repeat a side effect: each step carries an idempotency key that the provider (or our records) can check.
 

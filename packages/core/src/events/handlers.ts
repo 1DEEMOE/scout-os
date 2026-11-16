@@ -1,10 +1,11 @@
 import { fetchNwsAlerts } from "../speed/nws";
+import { resyncSpcDayDirect, spcDayFromKey } from "../scout/storm-sync";
 import { registerBusHandler } from "./recovery";
 import { effectWasApplied } from "./bus";
 import { runMockRetry } from "./retry";
 
 /** Event types produceIntegration writes. Replay must register each of these. */
-export const PRODUCER_EVENT_TYPES = ["integration.nws", "integration.mail", "integration.crm", "integration.payments", "integration.model"] as const;
+export const PRODUCER_EVENT_TYPES = ["integration.nws", "integration.spc", "integration.mail", "integration.crm", "integration.payments", "integration.model"] as const;
 
 /**
  * Handlers for events the producers actually emit.
@@ -24,6 +25,20 @@ export function registerIntegrationHandlers(): void {
     maxTier: 0,
     decide: () => ({ act: true, reason: "refetch public alerts" }),
     act: async (event) => refetchWeather(event.tenantId, event.idempotencyKey),
+  });
+  // SPC storm days are read-only public data, so replay refetches the day named
+  // in the idempotency key; ingestion dedupes on (tenant_id, external_ref).
+  registerBusHandler({
+    type: "integration.spc",
+    maxTier: 0,
+    decide: () => ({ act: true, reason: "refetch the SPC report day" }),
+    act: async (event) => {
+      if (effectWasApplied(event.tenantId, event.idempotencyKey)) return { ok: true, duplicate: true };
+      const day = spcDayFromKey(event.idempotencyKey);
+      if (!day) return { ok: true, skipped: true };
+      const r = await resyncSpcDayDirect(event.tenantId, day);
+      return { ok: true, status: r.status, added: r.added };
+    },
   });
   for (const type of ["integration.mail", "integration.crm", "integration.payments", "integration.model"] as const) {
     registerBusHandler({
