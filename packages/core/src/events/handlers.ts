@@ -5,7 +5,7 @@ import { effectWasApplied } from "./bus";
 import { runMockRetry } from "./retry";
 
 /** Event types produceIntegration writes. Replay must register each of these. */
-export const PRODUCER_EVENT_TYPES = ["integration.nws", "integration.spc", "integration.mail", "integration.crm", "integration.payments", "integration.model"] as const;
+export const PRODUCER_EVENT_TYPES = ["integration.nws", "integration.spc", "integration.mail", "integration.crm", "integration.payments", "integration.model", "integration.sms"] as const;
 
 /**
  * Handlers for events the producers actually emit.
@@ -40,7 +40,10 @@ export function registerIntegrationHandlers(): void {
       return { ok: true, status: r.status, added: r.added };
     },
   });
-  for (const type of ["integration.mail", "integration.crm", "integration.payments", "integration.model"] as const) {
+  // SMS is in this group deliberately: replaying a dead-lettered send must not
+  // double-text the customer, so an unapplied key is skipped for a person to
+  // resend deliberately, never re-sent by the bus.
+  for (const type of ["integration.mail", "integration.crm", "integration.payments", "integration.model", "integration.sms"] as const) {
     registerBusHandler({
       type,
       maxTier: 0,

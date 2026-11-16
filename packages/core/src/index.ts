@@ -91,11 +91,49 @@ export { INDUSTRY_PACKS, PACK_GROUPS, PACK_VERSION, closestPack, getPack, listPa
 export { handoffReliability } from "./integrations/reliability";
 export { readPilotMetrics } from "./pilot/metrics";
 export { readPackId } from "./industries/store";
-export { approveAllTemplates, ingestLead, listTemplates, recordSmsConsent, speedSummary, stagePackTemplates } from "./speed/service";
+export {
+  approveAllTemplates,
+  findLeadByExternalKey,
+  findRecentSentToPhone,
+  inboundSmsReceived,
+  ingestLead,
+  ingestLeadCore,
+  listTemplates,
+  missedCallReceived,
+  recordSmsConsent,
+  speedSummary,
+  stagePackTemplates,
+  systemRecordSmsStart,
+  systemRecordSmsStop,
+  TEXTBACK_WINDOW_MS,
+  type InboundSmsInput,
+  type InboundSmsResult,
+  type IngestLeadInput,
+  type LeadRecord,
+  type MissedCallInput,
+  type MissedCallResult,
+} from "./speed/service";
+export { handleInboundSms, handleInboundVoice, handleVoiceRecording, voiceAnswerTwiml } from "./speed/missed-call";
 export { bookVisit, dueForRebook, setVisitStatus } from "./speed/appointments";
 export { collectSignals, seasonalHits } from "./signals/sources";
 export { NWS_USER_AGENT, fetchNwsAlerts, parseNwsPayload, resetNwsCache, setNwsFetchForTests } from "./speed/nws";
-export { isStopKeyword, normalizePhone, resetMockSms } from "./speed/sms";
+export {
+  expectedTwilioSignature,
+  isStartKeyword,
+  isStopKeyword,
+  mockSmsPort,
+  normalizePhone,
+  resetMockSms,
+  resetSmsPorts,
+  setSmsPortForTests,
+  smsPortForSend,
+  twilioConfigFromEnv,
+  twilioSmsPort,
+  validTwilioSignature,
+  type SmsPort,
+  type SmsSendResult,
+  type TwilioConfig,
+} from "./speed/sms";
 export { integrations } from "./events/breaker";
 export { correlation, logOp } from "./events/correlation";
 export { backoffMs, MemoryJournal, runEvent } from "./events/bus";

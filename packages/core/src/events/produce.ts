@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { MemoryJournal, runEvent, type EffectContext, type EventJournal } from "./bus";
 import { rememberMockRetry } from "./retry";
 
-export type IntegrationName = "nws" | "spc" | "mail" | "crm" | "payments" | "model";
+export type IntegrationName = "nws" | "spc" | "mail" | "crm" | "payments" | "model" | "sms";
 
 const fallbackJournal = new MemoryJournal();
 let journalOverride: EventJournal | undefined;
