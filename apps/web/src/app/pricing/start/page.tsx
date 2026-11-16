@@ -30,7 +30,7 @@ export default async function PricingStartPage({ searchParams }: { searchParams:
   if (!chosen) {
     return (
       <div className={card}>
-        <h1 className="text-xl font-semibold">Which workspace is this plan for?</h1>
+        <h1 className="text-display font-semibold">Which workspace is this plan for?</h1>
         <ul className="flex flex-col gap-2">
           {orgs.map((o) => (
             <li key={o.orgId}>
@@ -53,7 +53,7 @@ export default async function PricingStartPage({ searchParams }: { searchParams:
     if (err instanceof AppError) {
       return (
         <div className={card}>
-          <h1 className="text-xl font-semibold">Checkout isn&apos;t available</h1>
+          <h1 className="text-display font-semibold">Checkout isn&apos;t available</h1>
           <p className="text-sm leading-relaxed text-muted">{err.message}</p>
           <a className="inline-flex min-h-11 items-center font-medium text-accent underline underline-offset-4" href="/pricing">Back to plans</a>
         </div>

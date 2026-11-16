@@ -1,6 +1,25 @@
-# Ascend Software — status (2026-11-05)
+# Ascend Software — status (2026-11-17)
 
 Repo at `/workspace/scout-os/repo`. Phase 9 self-assessment completed locally. Nothing deployed. No push. Clean-room rules intact.
+
+## SMB launch-readiness gaps (2026-11-17 session)
+All seven gap-review items built and verified locally, one commit each (e94300b…2809ebb on top of main @ 439561d):
+
+| Gap | State |
+|---|---|
+| Booking API open to outside AI agents | Done — server-to-server callers (no Origin) accepted; browsers cross-site still blocked |
+| Customer-facing rebrand | Done — Ascend Software everywhere customer-facing |
+| Automatic NOAA SPC storm feed | Done — worker syncs current day + 2-day lookback per eligible tenant via the integration bus; manual CSV still works |
+| Pricing page + self-serve signup | Done — `/pricing` + `/pricing/start`, all prices from planCatalog/PRICING_DISPLAY_JSON, no numbers in code |
+| Live AI-visibility provider | Done — opt-in `AI_ANSWERS_PROVIDER=anthropic-websearch`, deterministic scoring, mock stays default |
+| Missed-call answering | Done — Twilio voice/SMS webhooks, signature-verified, consent ledger, one pre-approved text-back, voicemail task |
+| One-command setup | Done — `pnpm setup` (env secrets, roles/DBs, migrations, verification), idempotent |
+
+Verification: lint 0, typecheck 0, full suite **892** unit/integration tests, **19** isolation, webpack build clean, bootstrap run live against real Postgres 16 (idempotent + failure-path checked), **e2e 51/51** (Chrome, production build + real worker). Evidence: `QUALITY_GATE.md`; details: `docs/plans/session-log.md` session 8.
+
+**Still open (owner):** TCPA review of the text-back template · live-credential testing (Twilio/Anthropic/Stripe) · trademark clearance · independent audit · push/deploy authorization.
+
+
 
 ## Done (Phases 0–9 self-assessment)
 | Phase | What |

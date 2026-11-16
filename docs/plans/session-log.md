@@ -206,3 +206,26 @@ Directive: independent audit (docs/plans/audit-2026-11-06.md, overall 6/10) → 
 - Waves 2–3 (front-desk public booking page + settings UI, speed-to-lead autopilot, chat-as-OS tools, trust pages, nurture routines): designed in the audit doc, not built in this session.
 - Pricing/packaging numbers: owner decision per project rules.
 - Turbopack production build on low-memory machines (works on normal dev machines; untracked upstream).
+
+## Session 8 — SMB launch-readiness gaps (2026-11-17)
+
+Directive: close the seven launch-readiness gaps from the gap review (engineering 8/10, SMB launch readiness 4/10). User approved all seven, chose config-driven pricing (no numbers in code) and full Twilio integration (TCPA review stays an open owner task). Baseline: main @ 439561d. Nothing pushed, nothing deployed.
+
+### Changed (one commit per gap, in order)
+- `e94300b` Public booking API opened to outside AI agents: `publicClientAllowed` — server-to-server callers (no Origin header) are welcome; browsers driven by third-party sites still blocked. Endpoint stays sessionless, so no ambient authority to protect.
+- `efa4bd4` Customer-facing rebrand completed to Ascend Software (living docs + code); historical reports keep the old name on purpose.
+- `25fe47c` Automatic NOAA SPC storm feed: worker interval (default 6h) syncs the current report day plus a 2-day lookback for every eligible tenant (reviewed profile + Scout feature), through the integration bus (breaker, dead letters, `integration.spc` replay that refetches rather than rewrites). 404 (day not created) and headers-only (quiet day) are normal outcomes; the manual CSV upload still works and shares the same ingestion path.
+- `7843a88` Public `/pricing` + self-serve signup: plan cards render from `planCatalog` + `PRICING_DISPLAY_JSON` (validated; malformed config degrades to an unpriced page, never a wrong price); `/pricing/start` walks sign-in → workspace → Stripe checkout for the chosen plan via `STRIPE_PRICE_PLAN_MAP`; billing page gets a per-plan picker with a double-billing warning. No price numbers in code.
+- `880635c` Live AI-visibility provider (opt-in `AI_ANSWERS_PROVIDER=anthropic-websearch`): one web-search-grounded completion on the cheap classify model produces candidate names; parsing/matching/scoring/suggestions stay deterministic code — the model can lower a score, never fabricate one. Mock remains default and forced in WOS_MOCK_MODE; broken live setup degrades to mock, never breaks the briefing. `AnthropicProvider` gains `serverTools` passthrough.
+- `f16ce80` Twilio missed-call answering: voice/recording/SMS webhooks on the front-desk channel token, hard-gated on X-Twilio-Signature (HMAC-SHA1 over URL + sorted params, constant-time, forwarded-host candidates; 404 when unconfigured). Missed call → disclosure + voicemail, idempotent lead by CallSid, follow-up task, ONE pre-approved-template text-back from the number called. Inbound STOP/START update the consent ledger (START = express consent). Single reply to an inbound contact needs no prior consent and creates none; STOP, quiet hours, 24h text-back dedupe always apply; follow-ups still need recorded consent. Live sends go through the bus; replay never re-texts.
+- `4df5063` + `2809ebb` One-command setup: `pnpm setup` (scripts/bootstrap.mjs) — preflight, install, env file with generated secrets (0600), idempotent roles/DBs, migrations, least-privilege verification read; uses the repo's own `pg`, no psql needed; `--db-url` for non-default hosts, `--demo` for the seed. README leads with it.
+
+### Verified (how)
+- New tests: storm-sync 9, pricing 16, ai-answers-live 26, missed-call 17, twilio-webhook routes 8, booking-origin cases in verify-fixes/public-api.
+- `pnpm lint` 0 · `pnpm -r typecheck` 0 · full suite 892 tests (one type-scale fix: pricing h1 → `text-display`) · `pnpm test:isolation` 19 · `next build --webpack` clean (all new routes listed; one pre-existing otel dynamic-import warning) · bootstrap run live twice against a real Postgres 16 (idempotent) plus a forced-failure run.
+- e2e: see STATUS.md for the final count (running at log time).
+
+### Not done / still open
+- TCPA review of the missed-call text-back template (owner + counsel; the only text sent without a prior consent record is one immediate pre-approved reply to an inbound contact).
+- Live credentials untested: Twilio, Anthropic web search, Stripe checkout (all fail closed to labelled MOCK/off without config).
+- Trademark clearance for "Ascend Software"; independent audit; push/deploy authorization.

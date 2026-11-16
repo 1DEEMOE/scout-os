@@ -26,4 +26,6 @@ A local SAMPLE walkthrough (Peachtree Roofing) is written by `apps/web/e2e/peach
 - No push, deploy, or paid services without explicit authorization.
 
 ## Open work
-Pricing, QuickBooks, live NOAA storm feed, SMS/voice (pending TCPA legal review), live AI-answers provider, front-desk settings screen, cloud photo storage, live Stripe/Gmail/HubSpot testing, independent audit, trademark search, compliance review.
+Pricing numbers (owner decision; the pricing page and per-plan checkout are built and config-driven), QuickBooks, SMS/voice TCPA legal review (Twilio missed-call answering is built; the text-back template needs counsel sign-off), front-desk settings screen, cloud photo storage, live Twilio/Stripe/Gmail/HubSpot testing, independent audit, trademark search, compliance review.
+
+Done in the 2026-11-17 session: automatic NOAA SPC storm feed (worker sync, no more manual CSV), public booking API open to server-to-server AI agents, config-driven pricing page + self-serve plan signup, opt-in live AI-visibility provider (`AI_ANSWERS_PROVIDER=anthropic-websearch`), Twilio missed-call answering (voice + SMS webhooks, signature-verified, consent-ledger integrated), one-command setup (`pnpm setup`). Details: docs/plans/session-log.md session 8.
