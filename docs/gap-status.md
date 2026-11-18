@@ -9,13 +9,13 @@ Legend: BUILT = code + tests in mock mode only. BLOCKED = needs the owner, a per
 | 3 | Email deliverability | BUILT (adapter, bounce/complaint handling, suppression-aware sender, SPF/DKIM/DMARC checker). NOT wired: webhook route, durable suppression table, DNS fetch, live Postmark/SES test | `core/src/mail/` |
 | 4 | Deployment, error tracking, backups | BLOCKED: no deploy by rule; Sentry/DR are owner decisions | owner |
 | 5 | Twilio managed numbers | BUILT as a core module (mock + live adapter via fake fetch, Tier 3 approval, crash-safe purchase, text-back gate). NOT wired: no route, no persistence adapter, no call from enable/rotate. Never run against live Twilio | `core/src/speed/managed-number.ts` |
-| 6 | Background inbox sync | not started | |
+| 6 | Background inbox sync | CLOSED (was wrongly listed as open): self-perpetuating pg-boss chain, first beat enqueued on mailbox connect, stops on disconnect | `core/src/inbox/sync.ts` |
 | 7 | Pilots | BLOCKED: needs a real customer | owner |
-| 8 | Data export + account deletion | BUILT as export + erasure PLAN (never executes). Erasure is BLOCKED by 3 findings below | `core/src/privacy/` |
-| 9 | Invites for people without accounts | not started | |
+| 8 | Data export + account deletion | Export: WIRED (audited manager endpoint, JSON download). Erasure: plan-only by design — BLOCKED by the 3 findings below | `core/src/privacy/` |
+| 9 | Invites for people without accounts | CLOSED (was wrongly listed as open): emailed 7-day token links, hash stored, accept flow serves non-users | `core/src/org/service.ts` |
 | 10 | Migrations 0013-0018 unreviewed; 0020-0023 proposed | BLOCKED: owner SQL review | owner |
-| 11 | Single-shot agent planning | not started | |
-| 12 | In-memory rate limiting, embedded worker | not started | |
+| 11 | Single-shot agent planning | CLOSED: `task.continue` lets an agent hand off a follow-up task with prior results; full classify→policy→approval pipeline re-runs; chain depth capped | `core/src/engine/` |
+| 12 | In-memory rate limiting, embedded worker | Rate limiting CLOSED (was wrongly listed as open): `rate_limits` table + `storage: "database"` since migration 0015. Embedded worker stays by design (monolith-first). | `apps/web/src/server/auth.ts` |
 | 13 | External security audit | BLOCKED | owner |
 
 ## Findings from gap 8 that need an owner decision

@@ -37,10 +37,10 @@ See `acceptance.md`. Summary of the final run: clean install, lint, typecheck, u
 
 ## Known gaps (must be decided or fixed before real customers)
 
-1. **Email verification and password reset** are not built (need a transactional email provider). Accounts are unverified.
-2. **Auth rate limiting is in memory**: fine for one server, not shared across instances. Switch Better Auth to database storage before scaling out.
-3. **Invitations** only add people who already have an account.
-4. **Inbox sync is on demand** (button). No background polling or Gmail push yet.
+1. ~~Email verification and password reset are not built~~: the flows exist (Better Auth + `/forgot-password`); what is missing is a deliverable transactional provider. Postmark is now wired behind `POSTMARK_SERVER_TOKEN` with bounce/complaint handling; until a live key and DNS auth (SPF/DKIM/DMARC) are set, platform mail is the labelled MOCK console sender. Accounts remain unverified until then.
+2. ~~Auth rate limiting is in memory~~: stale — migration 0015 added the `rate_limits` table and Better Auth runs with `storage: "database"`, shared across instances.
+3. ~~Invitations only add people who already have an account~~: stale — `inviteMember` emails a 7-day token link (SHA-256 stored) and `acceptInvitation` serves invitees without accounts.
+4. ~~Inbox sync is on demand~~: stale — a self-perpetuating pg-boss job chain syncs every `WOS_INBOX_SYNC_SECONDS` (default 300s, floor 30s) from mailbox connect until disconnect. Gmail push remains a possible upgrade.
 5. **Single-shot planning**: an agent plans all actions up front and can't read a tool's result before deciding the next step. Multi-step reasoning needs separate tasks.
 6. ~~Escalated tasks have no retry~~: done in Session 5 (managers can retry from the task page).
 7. **Model prices** for metering are configuration (`MODEL_PRICE_*`); set them from the provider's price list.
