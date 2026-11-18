@@ -1,4 +1,4 @@
-import { afterAll, afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { closePool, withTenant } from "@wos/db";
 import {
   approveAllTemplates,
@@ -46,6 +46,11 @@ const ctx = (t: string) => ({ params: Promise.resolve({ token: t }) });
 
 beforeEach(async () => {
   await resetDb();
+  // Text-back obeys TCPA quiet hours (recipient-local 8:00-21:00). Pin the
+  // clock to mid-window in the test timezone or this file flakes by the hour.
+  // Only Date is faked; real timers stay so the pg driver keeps working.
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(new Date("2026-11-18T16:00:00.000Z")); // 10:00 in America/Chicago
   sentTexts = [];
   setSmsPortForTests(fakePort);
   process.env.TWILIO_AUTH_TOKEN = AUTH_TOKEN;
@@ -57,6 +62,7 @@ beforeEach(async () => {
 });
 
 afterEach(() => {
+  vi.useRealTimers();
   setSmsPortForTests(undefined);
   if (ORIGINAL_AUTH === undefined) delete process.env.TWILIO_AUTH_TOKEN;
   else process.env.TWILIO_AUTH_TOKEN = ORIGINAL_AUTH;
