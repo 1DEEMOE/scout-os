@@ -15,7 +15,7 @@ All seven gap-review items built and verified locally, one commit each (e94300b�
 | Missed-call answering | Done — Twilio voice/SMS webhooks, signature-verified, consent ledger, one pre-approved text-back, voicemail task |
 | One-command setup | Done — `pnpm setup` (env secrets, roles/DBs, migrations, verification), idempotent |
 
-Verification: lint 0, typecheck 0, full suite **892** unit/integration tests, **19** isolation, webpack build clean, bootstrap run live against real Postgres 16 (idempotent + failure-path checked), **e2e 51/51** (Chrome, production build + real worker). Evidence: `QUALITY_GATE.md`; details: `docs/plans/session-log.md` session 8.
+Verification: lint 0, typecheck 0, full suite **978** unit/integration tests (incl. self-verifying backup runs against real pg_dump/pg_restore), **21** isolation (RLS + proposed-migration rollback suites), webpack build clean, bootstrap run live against real Postgres 16 (idempotent + failure-path checked), **e2e 51/51** (Chrome, production build + real worker). Evidence: `QUALITY_GATE.md`; details: `docs/plans/session-log.md` session 8.
 
 **Still open (owner):** TCPA review of the text-back template · live-credential testing (Twilio/Anthropic/Stripe) · trademark clearance · independent audit · push/deploy authorization.
 
