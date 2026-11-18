@@ -15,6 +15,7 @@
     "build": "pnpm --filter @wos/web build",
     "test:e2e": "pnpm --filter @wos/web test:e2e",
     "setup": "node scripts/bootstrap.mjs",
+    "db:backup": "node scripts/backup.mjs",
     "check:mail-dns": "pnpm --filter @wos/web exec tsx ../../scripts/check-mail-dns.mts"
   },
   "devDependencies": {
