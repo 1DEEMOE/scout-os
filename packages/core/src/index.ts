@@ -161,6 +161,7 @@ export * from "./job-photos/service";
 export * from "./documents/forgery";
 export { frontDeskTools, forgeryTools, registerFrontDeskTools } from "./tools/front-desk";
 export { exportTenant, erasureOrder, planErasure, tenantTables, unclassifiedTables } from "./privacy/plan";
+export { exportTenantData, EXPORT_MAX_ROWS_PER_TABLE } from "./privacy/export";
 export type { ErasurePlan, ExportBundle, TableReader } from "./privacy/plan";
 export { TABLE_POLICY } from "./privacy/registry";
 export { InMemorySuppressionStore, SOFT_BOUNCE_LIMIT, handleMailEvent, parsePostmarkEvent, parseSesEvents, webhookSecretOk } from "./mail/bounces";
