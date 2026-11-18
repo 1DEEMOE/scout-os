@@ -15,7 +15,10 @@ All seven gap-review items built and verified locally, one commit each (e94300b�
 | Missed-call answering | Done — Twilio voice/SMS webhooks, signature-verified, consent ledger, one pre-approved text-back, voicemail task |
 | One-command setup | Done — `pnpm setup` (env secrets, roles/DBs, migrations, verification), idempotent |
 
-Verification: lint 0, typecheck 0, full suite **978** unit/integration tests (incl. self-verifying backup runs against real pg_dump/pg_restore), **21** isolation (RLS + proposed-migration rollback suites), webpack build clean, bootstrap run live against real Postgres 16 (idempotent + failure-path checked), **e2e 51/51** (Chrome, production build + real worker). Evidence: `QUALITY_GATE.md`; details: `docs/plans/session-log.md` session 8.
+## Vertical jobs workspace (2026-11-18 session)
+The elite-pack engine is now a product surface: **Jobs** (pack-driven intake form → deterministic estimate → approval-gated send → booked → dispatched → in progress → done) and a **Dispatch** day board with crew lanes. Elite packs now cover **moving, house cleaning, HVAC, and plumbing**; the setup wizard badges industries that include the workspace. Estimates stay blocked until the owner confirms real prices and the pack's required business fields (e.g. USDOT) are on file; the send itself waits on a human approval at the pack's compliance floor. Interim persistence in `memory_records`; proposed migration **0026** (jobs + jobs_config, forced RLS, no DELETE) is ready for review with a rollback-transaction isolation test.
+
+Verification: lint 0, typecheck 0, full suite **1017** unit/integration tests (incl. self-verifying backup runs against real pg_dump/pg_restore and the jobs pipeline end-to-end against real Postgres), **23** isolation (RLS + proposed-migration rollback suites, every tRPC procedure probed cross-org and signed-out), webpack build clean, bootstrap run live against real Postgres 16 (idempotent + failure-path checked), **e2e 51/51** (Chrome, production build + real worker). Evidence: `QUALITY_GATE.md`; details: `docs/plans/session-log.md` session 8.
 
 **Still open (owner):** TCPA review of the text-back template · live-credential testing (Twilio/Anthropic/Stripe) · trademark clearance · independent audit · push/deploy authorization.
 
