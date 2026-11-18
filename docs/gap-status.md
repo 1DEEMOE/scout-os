@@ -8,7 +8,7 @@ Legend: BUILT = code + tests in mock mode only. BLOCKED = needs the owner, a per
 | 2 | TCPA / Google restricted-scope / CAN-SPAM / trademark | BLOCKED: legal and Google process | owner + counsel |
 | 3 | Email deliverability | BUILT (adapter, bounce/complaint handling, suppression-aware sender, SPF/DKIM/DMARC checker). NOT wired: webhook route, durable suppression table, DNS fetch, live Postmark/SES test | `core/src/mail/` |
 | 4 | Deployment, error tracking, backups | BLOCKED: no deploy by rule; Sentry/DR are owner decisions | owner |
-| 5 | Twilio managed numbers | not started | |
+| 5 | Twilio managed numbers | BUILT as a core module (mock + live adapter via fake fetch, Tier 3 approval, crash-safe purchase, text-back gate). NOT wired: no route, no persistence adapter, no call from enable/rotate. Never run against live Twilio | `core/src/speed/managed-number.ts` |
 | 6 | Background inbox sync | not started | |
 | 7 | Pilots | BLOCKED: needs a real customer | owner |
 | 8 | Data export + account deletion | BUILT as export + erasure PLAN (never executes). Erasure is BLOCKED by 3 findings below | `core/src/privacy/` |
@@ -23,3 +23,10 @@ Legend: BUILT = code + tests in mock mode only. BLOCKED = needs the owner, a per
 2. All tenant tables cascade from `organizations`. Deleting that row erases the retained tables (opt-outs, billing, audit). The plan therefore anonymizes the row instead.
 3. The app DB role lacks DELETE on at least `organizations` and `audit_events`. Erasure needs a separate privileged path or a reviewed grant.
 Retention of opt-outs, consent proof, billing and audit records is a drafting default marked `legalReview: pending`.
+
+## Managed numbers (gap 5): what you must know before wiring it
+1. **Carrier registration.** A new US local number can answer calls immediately, but texting from it is generally blocked or filtered until A2P 10DLC registration is approved (or a toll-free number is verified). Text-back therefore stays OFF (`channelReadiness`) until the owner records approval. Registration is done through Twilio's process, not by this code. Verify current carrier rules.
+2. **Rotating the front-desk link breaks the number.** The webhook URLs contain the plaintext token, which exists only at enable/rotate time (only its hash is stored). `repointManagedNumber` must be called from enable and rotate, or voice and SMS stop working.
+3. **Money.** Buying is Tier 3 with a named human approval; releasing is the same and irreversible (the number is lost). Who pays, and the price, are owner decisions. Live buying needs `WOS_MANAGED_NUMBERS=1` on top of credentials.
+4. **One Twilio account.** Numbers are bought on the platform's account so the existing single-token webhook signature check still applies. Subaccounts would need per-tenant tokens.
+5. **Crash safety.** An intent record is written before the purchase, and a retry looks the number up before buying, so a crash after buying does not buy twice. Tested with an injected failure; not tested against a real database or Twilio.
