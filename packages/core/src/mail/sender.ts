@@ -1,6 +1,7 @@
 import { logger } from "../logger";
 import { SmtpMailSender } from "./smtp";
-import { PostmarkMailSender } from "./postmark";
+import { PostmarkMailSender, SuppressingMailSender } from "./postmark";
+import { lazyPlatformSuppressionStore } from "./platform-suppression";
 
 /**
  * Platform email sender (verification, password reset). This is the SaaS's own
@@ -44,9 +45,16 @@ export class ConsoleMailSender implements MailSender {
 
 let sender: MailSender | undefined;
 
-/** Process-wide sender: SMTP if configured (and not in mock mode), else the MOCK console sender. */
+/**
+ * Process-wide sender: Postmark (preferred) or SMTP when configured and not in mock mode,
+ * wrapped so known-bounced/complained addresses are refused; otherwise the MOCK console sender.
+ */
 export function getMailSender(): MailSender {
-  sender ??= (process.env.WOS_MOCK_MODE === "1" ? null : (PostmarkMailSender.fromEnv() ?? SmtpMailSender.fromEnv())) ?? new ConsoleMailSender();
+  sender ??= (() => {
+    if (process.env.WOS_MOCK_MODE === "1") return new ConsoleMailSender();
+    const base = PostmarkMailSender.fromEnv() ?? SmtpMailSender.fromEnv();
+    return base ? new SuppressingMailSender(base, lazyPlatformSuppressionStore()) : new ConsoleMailSender();
+  })();
   return sender;
 }
 

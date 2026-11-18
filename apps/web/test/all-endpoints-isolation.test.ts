@@ -83,6 +83,10 @@ const input = () => ({
   amountCents: 1,
   trade: "roofing",
   documentKind: "invoice",
+  // gaps-2: managed numbers
+  areaCode: "314",
+  phone: "+13145550100",
+  status: "pending",
   // plug-and-play (provisioning refuses anyone who isn't a configured platform admin)
   clientEmail: "victim@example.test",
   confirmEmail: "victim@example.test",

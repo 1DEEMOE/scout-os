@@ -12,7 +12,7 @@ export default tseslint.config(
   },
   {
     // Standalone Node scripts (no DOM, no bundler).
-    files: ["scripts/**/*.mjs"],
+    files: ["scripts/**/*.mjs", "scripts/**/*.mts"],
     languageOptions: {
       globals: { process: "readonly", console: "readonly", URL: "readonly", Buffer: "readonly" },
     },

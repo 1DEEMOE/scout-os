@@ -14,7 +14,8 @@
     "test:isolation": "pnpm --filter @wos/db migrate:test && vitest run packages/db/test/isolation.test.ts packages/db/test/proposed-0021-isolation.test.ts packages/db/test/proposed-0022-isolation.test.ts packages/db/test/proposed-0023-isolation.test.ts packages/db/test/proposed-0024-isolation.test.ts --reporter=verbose",
     "build": "pnpm --filter @wos/web build",
     "test:e2e": "pnpm --filter @wos/web test:e2e",
-    "setup": "node scripts/bootstrap.mjs"
+    "setup": "node scripts/bootstrap.mjs",
+    "check:mail-dns": "pnpm --filter @wos/web exec tsx ../../scripts/check-mail-dns.mts"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",

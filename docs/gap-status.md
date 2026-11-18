@@ -6,7 +6,7 @@ Legend: BUILT = code + tests in mock mode only. BLOCKED = needs the owner, a per
 |---|---|---|---|
 | 1 | Zero live verification | BLOCKED: needs live credentials and a pilot | owner |
 | 2 | TCPA / Google restricted-scope / CAN-SPAM / trademark | BLOCKED: legal and Google process | owner + counsel |
-| 3 | Email deliverability | BUILT (adapter, bounce/complaint handling, suppression-aware sender, SPF/DKIM/DMARC checker). NOT wired: webhook route, durable suppression table, DNS fetch, live Postmark/SES test | `core/src/mail/` |
+| 3 | Email deliverability | WIRED: Postmark is the preferred sender, wrapped in the suppression-aware sender; bounce/complaint webhook at `/api/webhooks/mail/postmark` (shared-secret auth, 503-until-durable); durable store = proposed 0025 (in-memory fallback + loud warn meanwhile); DNS check = `scripts/check-mail-dns.mts`. NOT done: live Postmark test, SES/SNS signature verification | `core/src/mail/`, `apps/web/src/app/api/webhooks/mail/` |
 | 4 | Deployment, error tracking, backups | BLOCKED: no deploy by rule; Sentry/DR are owner decisions | owner |
 | 5 | Twilio managed numbers | WIRED: tRPC + front-desk settings UI, durable store (memory_records interim; proposed 0024 is the proper table), rotate re-points webhooks, owner-only Tier 3 provision/release, A2P gate for text-back. Never run against live Twilio | `core/src/speed/managed-service.ts` |
 | 6 | Background inbox sync | CLOSED (was wrongly listed as open): self-perpetuating pg-boss chain, first beat enqueued on mailbox connect, stops on disconnect | `core/src/inbox/sync.ts` |

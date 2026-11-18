@@ -166,6 +166,7 @@ export type { ErasurePlan, ExportBundle, TableReader } from "./privacy/plan";
 export { TABLE_POLICY } from "./privacy/registry";
 export { InMemorySuppressionStore, SOFT_BOUNCE_LIMIT, handleMailEvent, parsePostmarkEvent, parseSesEvents, webhookSecretOk } from "./mail/bounces";
 export type { MailEvent, SuppressionStore } from "./mail/bounces";
+export { platformSuppressionStore, platformSuppressionDurable, lazyPlatformSuppressionStore, setPlatformSuppressionStoreForTests } from "./mail/platform-suppression";
 export { PostmarkMailSender, SuppressingMailSender } from "./mail/postmark";
 export { evaluateDomainAuth } from "./mail/dns-auth";
 export type { DomainAuthInput, DomainAuthReport } from "./mail/dns-auth";
