@@ -202,3 +202,21 @@ export function delegationOf(input: Record<string, unknown> | undefined): Delega
   const d = input?.delegation as Partial<Delegation> | undefined;
   return d && typeof d.chainId === "string" && typeof d.depth === "number" && typeof d.threadId === "string" ? (d as Delegation) : undefined;
 }
+
+/**
+ * Set only by the task.continue tool (server side): the follow-up chain a task
+ * belongs to. `chainId` is the root task's id; `depth` starts at 1 for the
+ * first follow-up. Callers can't supply this — stripReserved removes it.
+ */
+export interface Continuation {
+  chainId: string;
+  depth: number;
+  fromTaskId: string;
+  /** Agent-written handoff: what the previous task learned or produced. */
+  summary: string;
+}
+
+export function continuationOf(input: Record<string, unknown> | undefined): Continuation | undefined {
+  const c = input?.continuation as Partial<Continuation> | undefined;
+  return c && typeof c.chainId === "string" && typeof c.depth === "number" && typeof c.fromTaskId === "string" && typeof c.summary === "string" ? (c as Continuation) : undefined;
+}

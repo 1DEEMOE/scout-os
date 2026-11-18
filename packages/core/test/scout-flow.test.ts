@@ -18,6 +18,7 @@ import {
   importProspects,
   inboxTools,
   memoryTools,
+  taskContinueTools,
   inviteMember,
   listOpportunities,
   markEngaged,
@@ -96,7 +97,7 @@ beforeEach(async () => {
   plan = { toolCalls: [] };
   configureEngine({
     router: new ModelRouter([new MockModelProvider((r) => (r.purpose === "classify" ? { text: "inbox" } : plan))], "mock"),
-    tools: new ToolRegistry().register(...crmTools(async () => crm), ...inboxTools(mailbox), ...scoutTools(), ...memoryTools()),
+    tools: new ToolRegistry().register(...crmTools(async () => crm), ...inboxTools(mailbox), ...scoutTools(), ...memoryTools(), ...taskContinueTools()),
     mailbox,
     crm: async () => crm,
     retryBaseSeconds: 1,

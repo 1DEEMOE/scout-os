@@ -14,7 +14,7 @@ Legend: BUILT = code + tests in mock mode only. BLOCKED = needs the owner, a per
 | 8 | Data export + account deletion | Export: WIRED (audited manager endpoint, JSON download). Erasure: plan-only by design — BLOCKED by the 3 findings below | `core/src/privacy/` |
 | 9 | Invites for people without accounts | CLOSED (was wrongly listed as open): emailed 7-day token links, hash stored, accept flow serves non-users | `core/src/org/service.ts` |
 | 10 | Migrations 0013-0018 unreviewed; 0020-0023 proposed | BLOCKED: owner SQL review | owner |
-| 11 | Single-shot agent planning | CLOSED: `task.continue` lets an agent hand off a follow-up task with prior results; full classify→policy→approval pipeline re-runs; chain depth capped | `core/src/engine/` |
+| 11 | Single-shot agent planning | CLOSED: `task.continue` lets an agent hand off a follow-up task with prior results (agent-written handoff note travels as external data); the follow-up re-runs the full classify→policy→approval pipeline; chains bounded (2 deep, 3 follow-ups per task, 8 tasks per chain) and attributed to the original requester | `core/src/tools/task.ts` |
 | 12 | In-memory rate limiting, embedded worker | Rate limiting CLOSED (was wrongly listed as open): `rate_limits` table + `storage: "database"` since migration 0015. Embedded worker stays by design (monolith-first). | `apps/web/src/server/auth.ts` |
 | 13 | External security audit | BLOCKED | owner |
 

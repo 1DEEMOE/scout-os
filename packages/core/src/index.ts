@@ -38,6 +38,7 @@ export * from "./tools/finance";
 export * from "./audit-log/service";
 export * from "./memory/service";
 export * from "./tools/memory";
+export * from "./tools/task";
 export * from "./billing/metering";
 export * from "./billing/stripe-billing";
 export * from "./chat/lead";
