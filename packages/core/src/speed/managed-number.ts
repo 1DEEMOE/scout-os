@@ -64,10 +64,13 @@ export function usNumber(raw: string): string {
   return p;
 }
 
-export function buildWebhookUrls(publicBase: string, publicToken: string): WebhookUrls {
+export function buildWebhookUrls(publicBase: string, publicToken: string, opts: { allowHttp?: boolean } = {}): WebhookUrls {
   let u: URL;
   try { u = new URL(publicBase); } catch { throw err("invalid_input", "Public base URL is not a valid URL."); }
-  if (u.protocol !== "https:") throw err("invalid_input", "Twilio webhooks must use https.");
+  // http is only ever acceptable for the MOCK provisioner against a loopback base (local dev);
+  // a real provider must never see a plaintext-webhook URL, and neither may a mock on a network host.
+  const loopback = /^(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/.test(u.host);
+  if (u.protocol !== "https:" && !(opts.allowHttp && u.protocol === "http:" && loopback)) throw err("invalid_input", "Twilio webhooks must use https.");
   if (!/^[A-Za-z0-9_-]{16,}$/.test(publicToken)) throw err("invalid_input", "Front-desk token is missing or malformed.");
   const base = `${u.protocol}//${u.host}/api/front-desk/${encodeURIComponent(publicToken)}`;
   return { voiceUrl: `${base}/voice`, smsUrl: `${base}/sms` };
@@ -103,7 +106,7 @@ export async function provisionManagedNumber(i: {
 }): Promise<ManagedNumberRecord> {
   requireApproval(i.approval);
   const phone = usNumber(i.phone);
-  const urls = buildWebhookUrls(i.publicBase, i.publicToken);
+  const urls = buildWebhookUrls(i.publicBase, i.publicToken, { allowHttp: i.port.mock });
 
   const existing = await i.store.get(i.tenantId);
   if (existing && (existing.status === "active" || existing.status === "reserving") && existing.phone !== phone) {
@@ -132,7 +135,7 @@ export async function provisionManagedNumber(i: {
 export async function repointManagedNumber(i: { port: NumberProvisioner; store: ManagedNumberStore; tenantId: string; publicBase: string; publicToken: string }): Promise<void> {
   const rec = await i.store.get(i.tenantId);
   if (!rec || rec.status !== "active" || !rec.sid) throw err("not_found", "No active managed number for this workspace.");
-  await i.port.updateWebhooks(rec.sid, buildWebhookUrls(i.publicBase, i.publicToken));
+  await i.port.updateWebhooks(rec.sid, buildWebhookUrls(i.publicBase, i.publicToken, { allowHttp: i.port.mock }));
 }
 
 export async function releaseManagedNumber(i: { port: NumberProvisioner; store: ManagedNumberStore; tenantId: string; approval: Approval | undefined }): Promise<ManagedNumberRecord> {

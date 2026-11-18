@@ -171,3 +171,15 @@ export { evaluateDomainAuth } from "./mail/dns-auth";
 export type { DomainAuthInput, DomainAuthReport } from "./mail/dns-auth";
 export { InMemoryManagedNumberStore, ManagedNumberError, MockNumberProvisioner, TwilioNumberProvisioner, buildWebhookUrls, channelReadiness, numberProvisionerFromEnv, proposeNumbers, provisionManagedNumber, recordA2pStatus, releaseManagedNumber, repointManagedNumber } from "./speed/managed-number";
 export type { A2pStatus, Approval, ManagedNumberRecord, ManagedNumberStore, NumberProvisioner, ProvisionProposal, WebhookUrls } from "./speed/managed-number";
+export {
+  dbManagedNumberStore,
+  managedNumberStatus,
+  proposeManagedNumbers,
+  provisionManagedNumberForOrg,
+  releaseManagedNumberForOrg,
+  recordManagedNumberA2p,
+  repointManagedNumberAfterRotate,
+  resetManagedNumberProvisionerForTests,
+  managedNumberProvisionerForTests,
+} from "./speed/managed-service";
+export type { ManagedNumberStatus } from "./speed/managed-service";

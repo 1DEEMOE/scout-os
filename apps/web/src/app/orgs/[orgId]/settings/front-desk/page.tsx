@@ -1,8 +1,9 @@
-import { listFrontDeskChannels, listFrontDeskSlots, listPendingFrontDeskBookings } from "@wos/core";
+import { listFrontDeskChannels, listFrontDeskSlots, listPendingFrontDeskBookings, managedNumberStatus } from "@wos/core";
 import { orgContext } from "@/server/org-context";
 import { ActionButton } from "../../../../actions";
 import { Badge, Card, Empty, PageTitle, When } from "../../../../ui";
 import { AddSlots, EnableDesk, RotateLink } from "./desk-client";
+import { ManagedNumber } from "./managed-number";
 
 export const dynamic = "force-dynamic";
 
@@ -12,14 +13,14 @@ function fmt(d: Date, tz: string) {
 
 export default async function FrontDeskPage({ params }: { params: Promise<{ orgId: string }> }) {
   const { orgId } = await params;
-  const { userId, isManager, org } = await orgContext(orgId);
+  const { userId, isManager, isOwner, org } = await orgContext(orgId);
   const isViewer = org.role === "viewer";
   const orgName = org.name;
   const channels = await listFrontDeskChannels({ actorUserId: userId, orgId });
   const ch = channels[0];
-  const [slots, pending] = ch
-    ? await Promise.all([listFrontDeskSlots({ actorUserId: userId, orgId, channelId: ch.id }), listPendingFrontDeskBookings({ actorUserId: userId, orgId })])
-    : [[], []];
+  const slots = ch ? await listFrontDeskSlots({ actorUserId: userId, orgId, channelId: ch.id }) : [];
+  const pending = ch ? await listPendingFrontDeskBookings({ actorUserId: userId, orgId }) : [];
+  const numberStatus = isManager ? await managedNumberStatus({ actorUserId: userId, orgId }) : null;
 
   return (
     <div className="flex flex-col gap-6">
@@ -91,6 +92,17 @@ export default async function FrontDeskPage({ params }: { params: Promise<{ orgI
           </Card>
         </>
       )}
+
+      <Card title="Business phone number">
+        <p className="mb-3 text-sm text-muted">
+          A number the platform sets up for you: it answers missed calls with your recording disclosure and takes a message, and can send one text-back. No Twilio account needed.
+        </p>
+        {numberStatus ? (
+          <ManagedNumber orgId={orgId} isOwner={isOwner} initial={numberStatus} />
+        ) : (
+          <p className="text-sm text-muted">An owner or admin can manage the business number.</p>
+        )}
+      </Card>
     </div>
   );
 }
