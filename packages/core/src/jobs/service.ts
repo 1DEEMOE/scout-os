@@ -126,6 +126,21 @@ async function putJob(tx: Tx, job: JobRecord): Promise<void> {
   await tx.insert(memoryRecords).values({ tenantId: job.tenantId, layer: "org", scopeRef: ref, content, trust: "verified", createdByUser: job.createdBy });
 }
 
+/**
+ * All job records in the tenant, newest first. Storage-level: no role or pack
+ * checks — for cross-feature readers (e.g. the contact 360) that already ran
+ * their own role gate and must not 500 on orgs without an elite pack.
+ */
+export async function listJobRecordsTx(tx: Tx, tenantId: string): Promise<JobRecord[]> {
+  const rows = await tx
+    .select({ content: memoryRecords.content })
+    .from(memoryRecords)
+    .where(and(eq(memoryRecords.tenantId, tenantId), eq(memoryRecords.layer, "org"), like(memoryRecords.scopeRef, `${REF_PREFIX}%`)))
+    .orderBy(desc(memoryRecords.createdAt))
+    .limit(500);
+  return rows.map((r) => parseJob(r.content)).filter((j): j is JobRecord => j !== null);
+}
+
 /** Read inside an RLS-scoped tx — another org's jobs are invisible by construction. */
 async function readJobTx(tx: Tx, tenantId: string, jobId: string): Promise<JobRecord> {
   const rows = await tx

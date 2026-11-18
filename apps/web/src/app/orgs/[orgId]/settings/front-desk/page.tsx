@@ -1,8 +1,9 @@
-import { listFrontDeskChannels, listFrontDeskSlots, listPendingFrontDeskBookings, managedNumberStatus } from "@wos/core";
+import { getLeadFormSettings, listFrontDeskChannels, listFrontDeskSlots, listPendingFrontDeskBookings, managedNumberStatus } from "@wos/core";
 import { orgContext } from "@/server/org-context";
 import { ActionButton } from "../../../../actions";
 import { Badge, Card, Empty, PageTitle, When } from "../../../../ui";
 import { AddSlots, EnableDesk, RotateLink } from "./desk-client";
+import { LeadFormCard } from "./lead-form-card";
 import { ManagedNumber } from "./managed-number";
 
 export const dynamic = "force-dynamic";
@@ -21,6 +22,7 @@ export default async function FrontDeskPage({ params }: { params: Promise<{ orgI
   const slots = ch ? await listFrontDeskSlots({ actorUserId: userId, orgId, channelId: ch.id }) : [];
   const pending = ch ? await listPendingFrontDeskBookings({ actorUserId: userId, orgId }) : [];
   const numberStatus = isManager ? await managedNumberStatus({ actorUserId: userId, orgId }) : null;
+  const leadForm = ch ? await getLeadFormSettings({ actorUserId: userId, orgId }) : null;
 
   return (
     <div className="flex flex-col gap-6">
@@ -72,6 +74,29 @@ export default async function FrontDeskPage({ params }: { params: Promise<{ orgI
                   </li>
                 ))}
               </ul>
+            )}
+          </Card>
+
+          <Card title="Lead form for your website">
+            {leadForm?.channel ? (
+              isManager ? (
+                <LeadFormCard
+                  orgId={orgId}
+                  channelId={leadForm.channel.id}
+                  initial={{
+                    enabled: leadForm.form.enabled,
+                    intro: leadForm.form.intro,
+                    successMessage: leadForm.form.successMessage,
+                    askPhone: leadForm.form.askPhone,
+                    askCompany: leadForm.form.askCompany,
+                    askMessage: leadForm.form.askMessage,
+                  }}
+                />
+              ) : (
+                <p className="text-sm text-muted">The lead form is {leadForm.form.enabled ? "on" : "off"}. An owner or admin can change it.</p>
+              )
+            ) : (
+              <Empty>Set up the booking link above first — the lead form shares it.</Empty>
             )}
           </Card>
 

@@ -96,6 +96,15 @@ const input = () => ({
   to: "done",
   fields: {},
   jobStatus: "inquiry",
+  // native CRM
+  dealId: NIL,
+  contactId: NIL,
+  dealStage: "lead",
+  expectedClose: "2026-12-01",
+  lostReason: "probe",
+  ownerUserId: null,
+  probabilities: {},
+  form: { enabled: true, intro: "probe", successMessage: "probe", askPhone: true, askCompany: true, askMessage: true },
   // plug-and-play (provisioning refuses anyone who isn't a configured platform admin)
   clientEmail: "victim@example.test",
   confirmEmail: "victim@example.test",

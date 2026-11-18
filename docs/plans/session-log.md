@@ -229,3 +229,41 @@ Directive: close the seven launch-readiness gaps from the gap review (engineerin
 - TCPA review of the missed-call text-back template (owner + counsel; the only text sent without a prior consent record is one immediate pre-approved reply to an inbound contact).
 - Live credentials untested: Twilio, Anthropic web search, Stripe checkout (all fail closed to labelled MOCK/off without config).
 - Trademark clearance for "Ascend Software"; independent audit; push/deploy authorization.
+
+## Session 9 — vertical jobs workspace recap (2026-11-18, context recovery)
+
+The jobs workspace (intake → estimate → approval-gated send → dispatch board) landed in sessions across 2026-11-17/18 and shipped as v5 (23-patch series, HEAD ae8325f). Recap of the decisions that constrain later work:
+
+- Estimates are NEVER stored: a deterministic function of (pack, answers, org pricing config), recomputed on every read. Keeps each record under the memory_records 2000-char cap; example-pricing edits never strand stale numbers.
+- Sends never go direct: engine refuses while example prices or required business fields are missing, and the send is a task + approval at the pack's compliance floor.
+- Interim persistence `memory_records` scopeRef `job:<id>`; proposed 0026 awaits Darian's review like 0020–0025.
+- Audit rows carry job ids/statuses only — never customer PII.
+
+## Session 10 — CRM parity sprint (2026-11-18)
+
+Directive: "Compared to other platforms like sales force, hub spot and other CRMs let's figure out what they offer using REA and use their features in to our product. Bottom line we have to have the best product and features on the market." Research (public docs/reviews of Salesforce Sales Cloud + Agentforce, HubSpot Smart CRM + Breeze, Pipedrive, Freshsales, monday CRM, Zoho) → gap audit → build, clean-room (original implementations of standard concepts; nothing copied).
+
+### What was built (one commit, c590490)
+- **Native pipeline** (`packages/core/src/crm/pipeline.ts`): stages lead/qualified/quote_sent/negotiation/won/lost; interim store `deal:<id>` + `pipeline-config` in memory_records; weighted forecast computed on read from board rows; manager-tunable open-stage probabilities in basis points (won=10000/lost=0 are facts); create/update/move with role gates (STAFF writes, MANAGERS reopen, won↔lost refused, closed deals immutable until reopened).
+- **Contact 360** (`crm/timeline.ts`): score (from `crm/scoring.ts` — fixed rules with per-rule point explanations, no per-org DSL: config-injection surface avoided), append-only notes (`note:<contactId>:<noteId>`; audit metadata = note id + length, never body), merged timeline from deals/crm_records/invoices/messages/jobs assembled on read (never stored → cannot drift).
+- **Lead form** (`crm/leadform.ts` + `/f/[token]` + `/api/front-desk/[token]/lead`): shares the front-desk channel token (ONE public capability to guard; pause closes form). Honeypot (silent ok, no store), validation before rate counting, per-IP 10/min + 50/day counted in their own committed transaction, 24h dedupe (one open web-form deal per contact per day), tier-0 system audit without PII.
+- **Proposed 0027** (deals, pipeline_configs, contact_notes append-only, lead_forms, contacts.source + 'web_form') + down file + README row + rollback-transaction isolation test. NOT applied.
+- **UI**: sales board with forecast strip + recently-decided, deal page (move/won/lost/edit), contact page (details/score/deals/notes/timeline), new-deal form, lead-form settings card on the front-desk page.
+
+### Decision log (hard-won, do not relearn)
+- zod v4 `z.record(z.enum(...), v)` is EXHAUSTIVE — `z.partialRecord` for optional enum keys (probe test caught it).
+- `moveDeal` gates BEFORE reading the deal: a non-member must not probe deal existence; reopen re-checks MANAGERS after the read.
+- Public paths can't call role-gated service functions (withTenant opens a new pooled connection per call; "lead-form" isn't a member) — storage-level `insertDealTx` + the service writes its own system audit.
+- Rate limiting counts in its OWN committed transaction before the work, so failed attempts still count (same lesson as front-desk bookings).
+- memory_records CHECK requires created_by_agent OR created_by_user — system inserts use the actor id ("lead-form") in created_by_user.
+- contacts.source stays 'inbox' for form leads until 0027's CHECK widening is applied; code labels them via deal source 'web_form'.
+- inOrg does NO membership check — role gate must run before any data read.
+- Emoji icons replaced by text Badges (repo file-content guidance).
+- e2e: `/Maya Lead/` regex matched the deal card's accessible name first — click through to the contact page and use `exact: true` link names; the form message appears twice on the contact page (notes + timeline) — assert with `exact: true`.
+
+### Verified
+- 17 new core/db tests (pipeline 5, contact360 5, leadform 6, proposed-0027 2) — all green.
+- Full battery: lint 0 · typecheck 0 (3 packages) · suite 1060 passed / 4 skipped · isolation 25/25 · build clean (/f/[token], /api/front-desk/[token]/lead, sales, sales/new, sales/deals/[dealId], sales/contacts/[contactId]) · e2e 53/53 (8.0m) · quality gate PASS 3/3.
+
+### Deferred (documented, not requested)
+- Contact dedupe/merge UI (P2); stage-vocabulary customization UI.

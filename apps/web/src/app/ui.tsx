@@ -157,6 +157,12 @@ export function stageLabel(stage: string): string {
     qualified: "Qualified",
     opportunity: "Opportunity",
     disqualified: "Ruled out",
+    // native pipeline stages
+    lead: "Lead",
+    quote_sent: "Quote sent",
+    negotiation: "Negotiation",
+    won: "Won",
+    lost: "Lost",
   };
   return map[stage.toLowerCase()] ?? stage.replaceAll("_", " ");
 }
