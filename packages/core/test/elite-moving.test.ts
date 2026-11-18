@@ -12,7 +12,7 @@ describe("elite moving pack", () => {
     expect(hasElitePack("moving")).toBe(true);
     expect(getPack("moving").id).toBe(moving.id);
     expect(elitePackSchema.safeParse(moving).success).toBe(true);
-    expect(hasElitePack("plumbing")).toBe(false);
+    expect(hasElitePack("cafe")).toBe(false);
   });
 
   it("rejects bad packs: unknown placeholder, sms without STOP, tier-1 cadence, dangling pricing field", () => {
@@ -114,6 +114,32 @@ describe("elite moving pack", () => {
       expect(c.approvalTier).toBeGreaterThanOrEqual(2);
       expect(c.consentCheckedAtSend).toBe(true);
       if (c.channel === "sms") expect(c.body).toMatch(/STOP/);
+    }
+  });
+});
+
+describe("elite pack registry (house cleaning, hvac, plumbing)", () => {
+  it("all four packs parse and attach to real overlays", () => {
+    for (const id of ["moving", "house_cleaning", "hvac", "plumbing"]) {
+      expect(hasElitePack(id)).toBe(true);
+      expect(getPack(id).id).toBe(id); // the v1 overlay exists
+      expect(getElitePack(id)).toBeDefined();
+    }
+  });
+
+  it("each new pack prices an estimate from valid intake", () => {
+    const cases: [string, Record<string, string | number | boolean>][] = [
+      ["house_cleaning", { service_kind: "recurring", bedrooms: 3, bathrooms: 2, sqft: 1800, frequency: "biweekly", supplies: "we_bring", preferred_date: "2026-12-01" }],
+      ["hvac", { visit_kind: "repair", system_type: "central_ac", issue: "blowing warm air", systems_count: 1, property_type: "house", preferred_date: "2026-12-01" }],
+      ["plumbing", { visit_kind: "repair", urgency: "soon", issue: "running toilet", fixtures_count: 1, property_type: "house", preferred_date: "2026-12-01" }],
+    ];
+    for (const [id, answers] of cases) {
+      const pack = getElitePack(id)!;
+      const intake = validateIntake(pack, answers);
+      expect(intake.ok, `${id} intake: ${[...intake.missing, ...intake.errors].join(";")}`).toBe(true);
+      const est = buildEstimate(pack, answers, { jurisdiction: "intrastate", ownerConfiguredPrices: true, businessProfile: { business_address: "1 Main St" } });
+      expect(est.blockedReasons, `${id} blocked: ${est.blockedReasons.join(";")}`).toEqual([]);
+      expect(est.totalCents, `${id} total`).toBeGreaterThan(0);
     }
   });
 });

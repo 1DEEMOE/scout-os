@@ -9,6 +9,7 @@ const d = (over: Partial<ShellData> = {}): ShellData => ({
   isManager: true,
   isViewer: false,
   hasScout: true,
+  hasEliteJobs: false,
   waiting: 3,
   teammates: [],
   routines: [{ id: "r1", name: "Morning briefing", kind: "morning_briefing" }],

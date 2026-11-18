@@ -42,7 +42,7 @@ function initialStep(s: State): Step {
   return "basics";
 }
 
-export function SetupWizard({ orgId, initial, packs = [] }: { orgId: string; initial: State; packs?: { id: string; label: string; group: string; summary: string }[] }) {
+export function SetupWizard({ orgId, initial, packs = [] }: { orgId: string; initial: State; packs?: { id: string; label: string; group: string; summary: string; elite?: boolean }[] }) {
   const router = useRouter();
   const [state, setState] = useState(initial);
   const [step, setStep] = useState<Step>(initialStep(initial));
@@ -133,6 +133,7 @@ export function SetupWizard({ orgId, initial, packs = [] }: { orgId: string; ini
               >
                 <div className="font-medium">{p.label}</div>
                 <p className="mt-1 text-sm text-muted">{p.summary}</p>
+                {p.elite && <p className="mt-2"><Badge tone="accent">Jobs & dispatch included</Badge></p>}
               </button>
             ))}
           </div>

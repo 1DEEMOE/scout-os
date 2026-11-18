@@ -39,6 +39,8 @@ export * from "./audit-log/service";
 export * from "./memory/service";
 export * from "./tools/memory";
 export * from "./tools/task";
+export * from "./jobs/service";
+export { jobsTools, registerJobsTools, JOBS_SEND_ESTIMATE_TOOL } from "./tools/jobs";
 export * from "./billing/metering";
 export * from "./billing/stripe-billing";
 export * from "./chat/lead";
@@ -91,9 +93,9 @@ export * from "./platform/admin";
 export { INDUSTRY_PACKS, PACK_GROUPS, PACK_VERSION, closestPack, getPack, listPacks, packsUsing, searchPacks } from "./industries/packs";
 export { handoffReliability } from "./integrations/reliability";
 export { readPilotMetrics } from "./pilot/metrics";
-export { readPackId } from "./industries/store";
+export { readPackId, writePackId } from "./industries/store";
 export { ELITE_PACKS, ELITE_VERSION, buildEstimate, disclosuresFor, elitePackSchema, getElitePack, hasElitePack, renderEstimateText, validateIntake } from "./industries/elite";
-export type { Answers as EliteAnswers, Estimate as EliteEstimate, ElitePack, ElitePackInput } from "./industries/elite";
+export type { Answers as EliteAnswers, Condition as EliteCondition, Estimate as EliteEstimate, EstimateConfig as EliteEstimateConfig, IntakeField as EliteIntakeField, Jurisdiction as EliteJurisdiction, ElitePack, ElitePackInput } from "./industries/elite";
 export {
   approveAllTemplates,
   findLeadByExternalKey,

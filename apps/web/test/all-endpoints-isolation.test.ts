@@ -87,6 +87,15 @@ const input = () => ({
   areaCode: "314",
   phone: "+13145550100",
   status: "pending",
+  // jobs workspace
+  memberIds: ["mallory"],
+  scheduledFor: "2026-12-01T15:00:00.000Z",
+  customerName: "probe customer",
+  customerEmail: "victim@example.test",
+  result: "booked",
+  to: "done",
+  fields: {},
+  jobStatus: "inquiry",
   // plug-and-play (provisioning refuses anyone who isn't a configured platform admin)
   clientEmail: "victim@example.test",
   confirmEmail: "victim@example.test",

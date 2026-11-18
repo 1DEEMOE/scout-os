@@ -3,6 +3,7 @@ import {
   registerFinanceTools,
   registerFrontDeskTools,
   registerInboxTools,
+  registerJobsTools,
   registerMemoryTools,
   registerScoutTools,
   registerTaskContinueTools,
@@ -21,4 +22,5 @@ export function registerProductTools(registry: ToolRegistry, deps: { mailbox: Ma
   registerTaskContinueTools(registry);
   registerScoutTools(registry);
   registerFrontDeskTools(registry);
+  registerJobsTools(registry);
 }

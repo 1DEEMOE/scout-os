@@ -1,5 +1,5 @@
 import { headers } from "next/headers";
-import { approvalsForReview, getPack, getPauseState, listAgents, listMyOrgs, listRoutines, listThreads, planSummary, readPackId } from "@wos/core";
+import { approvalsForReview, getPack, getPauseState, hasElitePack, listAgents, listMyOrgs, listRoutines, listThreads, planSummary, readPackId } from "@wos/core";
 import { withTenant } from "@wos/db";
 import { getSessionUser } from "@/server/auth";
 import { isPlatformAdmin } from "@/server/platform-admin";
@@ -57,6 +57,7 @@ export default async function OrgLayout({ children, params }: { children: React.
         isManager,
         isViewer: org.role === "viewer",
         hasScout: plan.plan.features.includes("scout"),
+        hasEliteJobs: hasElitePack(packId ?? ""),
         waiting: approvals.open.length,
         teammates: agents.map((a) => ({ id: a.id, name: a.displayName, active: a.status === "active" })),
         routines: routines.slice(0, 6).map((r) => ({ id: r.id, name: r.name, kind: r.kind })),

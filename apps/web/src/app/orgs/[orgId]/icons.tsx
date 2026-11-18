@@ -18,7 +18,9 @@ export type IconName =
   | "library"
   | "workspace"
   | "chevron"
-  | "close";
+  | "close"
+  | "jobs"
+  | "dispatch";
 
 const PATHS: Record<IconName, React.ReactNode> = {
   today: <path d="M4.5 6.5A2.5 2.5 0 0 1 7 4h10a2.5 2.5 0 0 1 2.5 2.5v7A2.5 2.5 0 0 1 17 16h-6.5L6 19.5V16a1.5 1.5 0 0 1-1.5-1.5Z" />,
@@ -77,6 +79,19 @@ const PATHS: Record<IconName, React.ReactNode> = {
   ),
   chevron: <path d="m7 10 5 5 5-5" />,
   close: <path d="M6.5 6.5l11 11M17.5 6.5l-11 11" />,
+  jobs: (
+    <>
+      <rect x="3.75" y="7.5" width="16.5" height="11.5" rx="2.25" />
+      <path d="M9 7.5V6a1.5 1.5 0 0 1 1.5-1.5h3A1.5 1.5 0 0 1 15 6v1.5M8 12.5h8M8 15.5h5" />
+    </>
+  ),
+  dispatch: (
+    <>
+      <path d="M3.75 7h9.5v9H3.75zM13.25 10h3.4l2.5 3v3h-5.9" />
+      <circle cx="7" cy="17.5" r="1.75" />
+      <circle cx="16" cy="17.5" r="1.75" />
+    </>
+  ),
 };
 
 export function Icon({ name, className = "h-5 w-5" }: { name: IconName; className?: string }) {
