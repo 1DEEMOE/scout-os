@@ -8,6 +8,14 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
+/**
+ * These tests shell out to pg_dump/psql and create + restore a scratch database, so they are
+ * legitimately slower than the 5s default (~6s cold, ~1s warm here). They get their own budget,
+ * tunable per environment, instead of raising the limit for the whole suite. A genuinely hung
+ * subprocess still fails: scripts/backup.mjs has its own command timeouts.
+ */
+const SUBPROCESS_TEST_TIMEOUT_MS = Number(process.env.WOS_SUBPROCESS_TEST_TIMEOUT_MS ?? 30_000);
+
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 const script = path.join(root, "scripts", "backup.mjs");
 const pgBinDir = process.env.PG_BIN_DIR ?? "";
@@ -52,7 +60,7 @@ describe.skipIf(!hasTools)("scripts/backup.mjs", () => {
     const dumps = readdirSync(dir).filter((f) => f.endsWith(".dump"));
     expect(dumps).toHaveLength(1);
     expect(statSync(path.join(dir, dumps[0]!)).size).toBeGreaterThan(1024);
-  });
+  }, SUBPROCESS_TEST_TIMEOUT_MS);
 
   it("rotates old dumps beyond the keep count", () => {
     const dir = mkdtempSync(path.join(tmpdir(), "wos-backup-"));
@@ -65,7 +73,7 @@ describe.skipIf(!hasTools)("scripts/backup.mjs", () => {
     expect(r.output).toContain("rotated out 20000101-000000-wos_test-aaaa.dump");
     const remaining = readdirSync(dir).filter((f) => f.endsWith(".dump"));
     expect(remaining).toHaveLength(2); // the fresh dump + newest fake
-  });
+  }, SUBPROCESS_TEST_TIMEOUT_MS);
 
   it("fails closed on bad credentials and never leaks the password", () => {
     const dir = mkdtempSync(path.join(tmpdir(), "wos-backup-"));
@@ -85,7 +93,7 @@ describe.skipIf(!hasTools)("scripts/backup.mjs", () => {
       expect(`${err.stdout}${err.stderr}`).not.toContain("definitely_wrong_pw");
     }
     expect(readdirSync(dir).filter((f) => f.endsWith(".dump"))).toHaveLength(0);
-  });
+  }, SUBPROCESS_TEST_TIMEOUT_MS);
 
   it("refuses to dump a newer server with older client tools", () => {
     const dir = mkdtempSync(path.join(tmpdir(), "wos-backup-"));
@@ -104,5 +112,5 @@ describe.skipIf(!hasTools)("scripts/backup.mjs", () => {
     const r = runBackup({ BACKUP_DIR: dir, PG_BIN_DIR: shimDir });
     expect(r.code).toBe(1);
     expect(r.output).toContain("cannot dump");
-  });
+  }, SUBPROCESS_TEST_TIMEOUT_MS);
 });

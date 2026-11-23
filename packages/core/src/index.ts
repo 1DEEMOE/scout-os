@@ -191,3 +191,5 @@ export {
   managedNumberProvisionerForTests,
 } from "./speed/managed-service";
 export type { ManagedNumberStatus } from "./speed/managed-service";
+export { SmsRegistrationBlocked, attestSmsRegistration, effectiveFromNumber, sendSmsGuarded, smsRegistrationCheck } from "./speed/sms-registration";
+export type { RegistrationStatus, SendCheck } from "./speed/sms-registration";

@@ -11,6 +11,7 @@ import { readPackId } from "../industries/store";
 import { approvalExpiryMs } from "../kimi/cards";
 import { smsWindowOpen } from "./hours";
 import { isStartKeyword, isStopKeyword, normalizePhone, smsPortForSend } from "./sms";
+import { SmsRegistrationBlocked, effectiveFromNumber, sendSmsGuarded, smsRegistrationCheck } from "./sms-registration";
 
 export type TemplateStatus = "ready_to_approve" | "approved";
 
@@ -43,6 +44,8 @@ export interface LeadRecord {
   approvalId?: string;
   /** Voicemail recording (Twilio URL) left by a missed caller, if any. */
   recordingUrl?: string;
+  /** The number the customer contacted. Approved sends must go out from this same number. */
+  smsFrom?: string;
   /** True when the send path is the labelled MOCK (no live provider configured). */
   mock: boolean;
 }
@@ -204,12 +207,14 @@ async function queueCustom(tx: Tx, tenantId: string, userId: string, lead: LeadR
  * business themselves, so a single immediate reply is allowed without a
  * prior consent record. It never creates consent — follow-ups still need it.
  */
-async function gate(tx: Tx, lead: LeadRecord, channel: "email" | "sms", now: Date, opts?: { inboundInitiated?: boolean }): Promise<{ ok: true } | { ok: false; reason: string }> {
+async function gate(tx: Tx, tenantId: string, lead: LeadRecord, channel: "email" | "sms", now: Date, opts?: { inboundInitiated?: boolean; smsFrom?: string }): Promise<{ ok: true } | { ok: false; reason: string }> {
   if (channel === "sms") {
     if (!lead.phone) return { ok: false, reason: "no_phone" };
     if (await stopped(tx, lead.phone)) return { ok: false, reason: "stop" };
     if (!opts?.inboundInitiated && !(await consented(tx, lead.phone))) return { ok: false, reason: "no_consent" };
     if (!smsWindowOpen(now, lead.timezone)) return { ok: false, reason: "quiet_hours" };
+    const reg = await smsRegistrationCheck(tx, tenantId, opts?.smsFrom);
+    if (!reg.ok) return { ok: false, reason: reg.reason ?? "sms_registration_unverified" };
     return { ok: true };
   }
   if (lead.email) {
@@ -293,6 +298,7 @@ export async function ingestLeadCore(tx: Tx, tenantId: string, createdBy: string
     timezone: input.timezone || "America/New_York",
     purpose,
     outcome: "waiting_for_template",
+    smsFrom: effectiveFromNumber(input.smsFrom) ?? undefined,
     mock: portMock,
   };
   const templates = (await allScoped(tx, "speed:template:")).map((r) => parse<StagedTemplate>(r.content)).filter((t): t is StagedTemplate => !!t);
@@ -312,7 +318,7 @@ export async function ingestLeadCore(tx: Tx, tenantId: string, createdBy: string
     await recordAudit(tx, { tenantId, actorType: "system", actorId: "speed-to-lead", action: "speed.reply.blocked", target: `lead:${lead.id}`, tier: 2, outcome: "denied", metadata: { reason: input.suppressSend, purpose, suppressed: true } });
     return suppressed;
   }
-  const g = await gate(tx, lead, channel, now, { inboundInitiated: input.inboundInitiated });
+  const g = await gate(tx, tenantId, lead, channel, now, { inboundInitiated: input.inboundInitiated, smsFrom: lead.smsFrom });
   if (!g.ok) {
     const blocked: LeadRecord = { ...lead, outcome: "blocked", blockReason: g.reason, templateId: match.id };
     await put(tx, tenantId, createdBy, scopeLead(key), blocked);
@@ -321,7 +327,17 @@ export async function ingestLeadCore(tx: Tx, tenantId: string, createdBy: string
   }
   const body = renderTemplate(match.body, { name: lead.name, business: input.businessName });
   let sentMock = portMock;
-  if (channel === "sms") sentMock = (await smsPortForSend(input.smsFrom).send({ to: lead.phone, body, idempotencyKey: `lead:${lead.id}`, tenantId })).mock;
+  if (channel === "sms") {
+    try {
+      sentMock = (await sendSmsGuarded(tx, tenantId, lead.smsFrom, { to: lead.phone, body, idempotencyKey: `lead:${lead.id}` })).mock;
+    } catch (e) {
+      if (!(e instanceof SmsRegistrationBlocked)) throw e;
+      const blocked: LeadRecord = { ...lead, outcome: "blocked", blockReason: e.reason, templateId: match.id };
+      await put(tx, tenantId, createdBy, scopeLead(key), blocked);
+      await recordAudit(tx, { tenantId, actorType: "system", actorId: "speed-to-lead", action: "speed.reply.blocked", target: `lead:${lead.id}`, tier: 2, outcome: "denied", metadata: { reason: e.reason, purpose, atSendBoundary: true } });
+      return blocked;
+    }
+  }
   const sent: LeadRecord = { ...lead, outcome: "sent", templateId: match.id, firstResponseAt: now.toISOString(), mock: sentMock };
   await put(tx, tenantId, createdBy, scopeLead(key), sent);
   await recordAudit(tx, { tenantId, actorType: "system", actorId: "speed-to-lead", action: "speed.reply.send", target: `lead:${lead.id}`, tier: 2, outcome: "success", metadata: { templateId: match.id, purpose, preApproved: true, mock: sentMock, seconds: 0 } });
@@ -354,7 +370,7 @@ export async function fulfillSpeedApproval(tx: Tx, tenantId: string, leadId: str
   const lead = row ? parse<LeadRecord>(row.content) : null;
   if (!row || !lead) return;
   const channel: "email" | "sms" = lead.phone && !lead.email ? "sms" : "email";
-  const g = await gate(tx, lead, channel, now);
+  const g = await gate(tx, tenantId, lead, channel, now, { smsFrom: lead.smsFrom });
   const taskUpdate = async (state: "COMPLETED" | "FAILED") => {
     if (!lead.approvalId) return;
     const [ap] = await tx.select({ taskId: approvalRequests.taskId }).from(approvalRequests).where(eq(approvalRequests.id, lead.approvalId));
@@ -366,7 +382,17 @@ export async function fulfillSpeedApproval(tx: Tx, tenantId: string, leadId: str
     await recordAudit(tx, { tenantId, actorType: "system", actorId: "speed-to-lead", action: "speed.reply.blocked", target: `lead:${lead.id}`, tier: 2, outcome: "denied", metadata: { reason: g.reason } });
     return;
   }
-  if (channel === "sms" && lead.customBody) await smsPortForSend().send({ to: lead.phone, body: lead.customBody, idempotencyKey: `lead:${lead.id}`, tenantId });
+  if (channel === "sms" && lead.customBody) {
+    try {
+      await sendSmsGuarded(tx, tenantId, lead.smsFrom, { to: lead.phone, body: lead.customBody, idempotencyKey: `lead:${lead.id}` });
+    } catch (e) {
+      if (!(e instanceof SmsRegistrationBlocked)) throw e;
+      await put(tx, tenantId, "system:speed-to-lead", row.scopeRef, { ...lead, outcome: "blocked", blockReason: e.reason });
+      await taskUpdate("FAILED");
+      await recordAudit(tx, { tenantId, actorType: "system", actorId: "speed-to-lead", action: "speed.reply.blocked", target: `lead:${lead.id}`, tier: 2, outcome: "denied", metadata: { reason: e.reason, atSendBoundary: true } });
+      return;
+    }
+  }
   await put(tx, tenantId, "system:speed-to-lead", row.scopeRef, { ...lead, outcome: "sent", firstResponseAt: now.toISOString() });
   await taskUpdate("COMPLETED");
 }

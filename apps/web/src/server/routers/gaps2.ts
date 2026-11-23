@@ -15,6 +15,7 @@ import {
   uploadJobPhoto,
   verifyJobPhotoChain,
   exportClaimPacket,
+  attestSmsRegistration,
   managedNumberStatus,
   proposeManagedNumbers,
   provisionManagedNumberForOrg,
@@ -74,6 +75,10 @@ export const gaps2Router = router({
     return { ...r, managedNumberWarning: repoint.warning };
   }),
 
+  /** Owner records the carrier-registration outcome for a number they brought themselves. Texts stay blocked until "approved". */
+  smsRegistrationAttest: protectedProcedure
+    .input(z.object({ orgId, phone: z.string().min(7).max(20), status: z.enum(["not_started", "pending", "approved", "rejected"]) }))
+    .mutation(({ ctx, input }) => attestSmsRegistration({ actorUserId: ctx.userId, ...input })),
   managedNumberStatus: protectedProcedure.input(z.object({ orgId })).query(({ ctx, input }) => managedNumberStatus({ actorUserId: ctx.userId, ...input })),
   managedNumberPropose: protectedProcedure
     .input(z.object({ orgId, areaCode: z.string().regex(/^[2-9]\d{2}$/, "Enter a 3-digit US area code") }))
