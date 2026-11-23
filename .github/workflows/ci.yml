@@ -71,6 +71,20 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      # The runner ships PostgreSQL 18 client tools. pg_dump 17+ emits
+      # `SET transaction_timeout`, which the postgres:16 service rejects on restore
+      # (backup-script tests). Use client tools of the same major version as the server.
+      - name: Install PostgreSQL 16 client tools and put them first on PATH
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client-16
+          echo "/usr/lib/postgresql/16/bin" >> "$GITHUB_PATH"
+      - name: Confirm client/server major versions match
+        run: |
+          pg_dump --version
+          psql -h 127.0.0.1 -U postgres -tAc "show server_version"
+        env:
+          PGPASSWORD: postgres
       - name: Create roles and databases (wos_dev, wos_test, wos_e2e)
         run: psql -h 127.0.0.1 -U postgres -f scripts/setup-local-db.sql
         env:
@@ -124,4 +138,7 @@ jobs:
         run: psql -h 127.0.0.1 -U postgres -f scripts/setup-local-db.sql
         env:
           PGPASSWORD: postgres
+      # Playwright's webServer runs `next start`, which needs a production build.
+      - name: Build apps/web for e2e
+        run: pnpm build
       - run: pnpm test:e2e
