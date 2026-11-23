@@ -1,9 +1,6 @@
 import { createHash } from "node:crypto";
 import { and, eq } from "drizzle-orm";
-import { auditEvents, proposedSchema, withTenant } from "@wos/db";
-
-// Pending proposed 0022 tables (see packages/db/src/schema-proposed.ts); used only when WOS_DURABLE_EVENTS=1.
-const { deadLetters, integrationEvents } = proposedSchema;
+import { auditEvents, deadLetters, integrationEvents, withTenant } from "@wos/db";
 import { recordAudit } from "../audit";
 import { scrubPii } from "../logger";
 import type { DeadLetter, EventJournal, JournalEntry } from "./bus";
@@ -31,12 +28,12 @@ function duplicate(err: unknown): boolean {
  * An audit row is still written for each dead letter (tamper-evident trail).
  */
 /**
- * Durable events (0022 tables) are opt-in until the owner reviews and adopts
- * packages/db/proposed/0022_events_and_dead_letters.sql. Default: audit-trail
- * journal and in-process breaker, which need no new tables.
+ * Durable events (0022 tables) are the default now that 0022 is adopted.
+ * WOS_DURABLE_EVENTS=0 is a rollback lever: it falls back to the audit-trail
+ * journal and in-process breaker (use it only if 0022 has been rolled back).
  */
 export function durableEventsEnabled(): boolean {
-  return process.env.WOS_DURABLE_EVENTS === "1";
+  return process.env.WOS_DURABLE_EVENTS !== "0";
 }
 
 export function durableJournal(): EventJournal {

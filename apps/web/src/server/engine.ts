@@ -68,7 +68,7 @@ export function ensureEngine(): void {
     status = "none";
   }
   configureEngine({ router: new ModelRouter(providers, defaultProvider, meteringHooks), tools, mailbox, crm, invoicing });
-  // Durable journal/breaker need proposed migration 0022; opt-in until adopted.
+  // Durable journal/breaker use the 0022 tables. WOS_DURABLE_EVENTS=0 falls back to the audit trail.
   if (durableEventsEnabled()) {
     setIntegrationJournal(durableJournal());
     setIntegrationBreaker(new DurableCircuitBreaker());

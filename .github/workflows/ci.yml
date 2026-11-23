@@ -77,8 +77,8 @@ jobs:
           PGPASSWORD: postgres
       - run: pnpm test
       - run: pnpm test:isolation
-      - name: Durable event bus on a scratch DB (proposed 0020-0023 applied there only)
-        run: ADMIN_URL=postgres://postgres:postgres@127.0.0.1:5432 node scripts/test-durable-events.mjs
+      - name: Event bus in audit-trail fallback mode
+        run: WOS_DURABLE_EVENTS=0 npx vitest run packages/core/test/kimi.test.ts packages/core/test/producer-replay.test.ts packages/core/test/verify-fixes.test.ts packages/core/test/storm-sync.test.ts
 
   build:
     runs-on: ubuntu-latest

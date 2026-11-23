@@ -2,10 +2,7 @@ import { and, desc, eq, isNull } from "drizzle-orm";
 import { recordAudit } from "../audit";
 import { AppError } from "../errors";
 import { inOrg, MANAGERS, requireRole } from "../org/access";
-import { auditEvents, proposedSchema } from "@wos/db";
-
-// Pending proposed 0022 table (see packages/db/src/schema-proposed.ts); used only when WOS_DURABLE_EVENTS=1.
-const { deadLetters } = proposedSchema;
+import { auditEvents, deadLetters } from "@wos/db";
 import { listAuditEvents } from "../audit-log/service";
 import { activeJournal, durableEventsEnabled } from "./journal";
 import { runEvent, type BusEvent, type BusHandler } from "./bus";
@@ -39,9 +36,8 @@ async function listDeadLettersFromAudit(input: { actorUserId: string; orgId: str
 }
 
 /**
- * Open dead letters. Reads the durable 0022 table only when WOS_DURABLE_EVENTS=1
- * (the owner has adopted 0022); otherwise reads the audit trail, which needs no
- * proposed SQL.
+ * Open dead letters. Reads the durable 0022 table (default); with
+ * WOS_DURABLE_EVENTS=0 it reads the audit trail instead.
  */
 export async function listDeadLetters(input: { actorUserId: string; orgId: string }) {
   if (!durableEventsEnabled()) return listDeadLettersFromAudit(input);

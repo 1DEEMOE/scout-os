@@ -1,8 +1,5 @@
 import { eq } from "drizzle-orm";
-import { proposedSchema, withTenant } from "@wos/db";
-
-// Pending proposed 0022 table (see packages/db/src/schema-proposed.ts).
-const { integrationBreakers } = proposedSchema;
+import { integrationBreakers, withTenant } from "@wos/db";
 
 export class BreakerOpenError extends Error {
   readonly code = "BREAKER_OPEN";

@@ -15,10 +15,12 @@ command or a click; nothing is assumed. Cost: Render's smallest plans
    as the database owner — that role can bypass RLS).
 3. Apply migrations as the owner role:
    `DATABASE_URL_OWNER=<owner-url> pnpm db:migrate`
-   (0019 is the last applied file. 0020–0027 are proposals in
-   `packages/db/proposed/` awaiting owner review; 0020–0023 are reviewed in
-   `docs/plans/migration-review-0020-0023.md`. Do not set
-   `WOS_DURABLE_EVENTS=1` until 0022 is adopted and applied.)
+   (The migrator applies 0001–0023. 0020–0023 are reviewed in
+   `docs/plans/migration-review-0020-0023.md`; the rollback path is proven by
+   `scripts/test-rollbacks.mjs`. 0024–0027 are unreviewed proposals in
+   `packages/db/proposed/` and are never applied by the migrator. Take a backup
+   before the first migrate. If you must roll 0022 back, set
+   `WOS_DURABLE_EVENTS=0` first.)
 4. Set the secret env vars in Render (all `sync: false` in render.yaml):
    `DATABASE_URL` (app_user URL, on BOTH services), `ANTHROPIC_API_KEY`,
    `STRIPE_*`, `GOOGLE_CLIENT_*`, `SMTP_URL`, `MAIL_FROM`.
@@ -31,7 +33,7 @@ command or a click; nothing is assumed. Cost: Render's smallest plans
 | Step | Command / check | Pass |
 |---|---|---|
 | Health | `curl $URL/api/healthz` | `{"ok":true,...}` |
-| Migrations | response has no 503; `schema_migrations` = 19 rows (more once proposals are adopted) | count matches |
+| Migrations | response has no 503; `schema_migrations` = 23 rows | count matches |
 | Live integrations | `node scripts/verify-live-integrations.mjs` with staging env | 0 FAIL |
 | Mock mode off | `WOS_MOCK_MODE` is `0`/unset | healthz/UI show no MOCK |
 | Sign-up flow | create account; verification email arrives (SMTP_URL set) | verified login |

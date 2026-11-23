@@ -1,8 +1,8 @@
 # Scout OS on Render.
-# Does not run database migrations. Apply packages/db/migrations (0001–0019)
-# with DATABASE_URL_OWNER. 0020–0027 are proposals in packages/db/proposed/
-# awaiting Darian's review and are never applied automatically. Leave
-# WOS_DURABLE_EVENTS unset until 0022 is adopted.
+# Does not run database migrations. Apply packages/db/migrations (0001–0023)
+# with DATABASE_URL_OWNER after a backup (docs/plans/staging-runbook.md).
+# 0024–0027 are unreviewed proposals in packages/db/proposed/ and are never
+# applied automatically.
 # No secret values are stored here.
 #
 # Database roles (least privilege, CLAUDE.md law 5): the app must NOT connect

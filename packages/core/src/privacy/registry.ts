@@ -37,6 +37,9 @@ export const TABLE_POLICY: Readonly<Record<string, TablePolicy>> = {
   opportunity_events: del, outreach_events: del, routines: del, routine_runs: del, routine_recoveries: del,
   payment_detail_changes: del, front_desk_slots: del, front_desk_bookings: del, front_desk_rate_buckets: del,
   ai_answer_checks: del, job_photos: del, incoming_documents: del,
+  // Adopted 0020-0023: tenant business data and operational telemetry, all deleted on erasure.
+  service_menu_items: del, bookable_resources: del, appointments: del, response_templates: del,
+  integration_events: del, dead_letters: del, integration_breakers: del, pilot_metrics: del,
 };
 
 /**
@@ -46,13 +49,15 @@ export const TABLE_POLICY: Readonly<Record<string, TablePolicy>> = {
  * Requires one pre-step: agents.current_version_id must be NULLed first (agents <-> agent_versions cycle).
  */
 export const ERASURE_ORDER: readonly string[] = [
-  "agent_permissions", "agent_versions", "ai_answer_checks", "business_profiles", "chat_delegations", "crm_records",
+  "appointments", "agent_permissions", "agent_versions", "ai_answer_checks", "business_profiles", "chat_delegations", "crm_records",
   "front_desk_bookings", "front_desk_rate_buckets", "incoming_documents", "invoices", "job_photos", "memory_records",
   "messages", "opportunity_events", "organization_invitations", "organization_members", "outreach_events",
   "payment_detail_changes", "routine_recoveries", "routine_runs", "signal_observations", "task_dependencies",
   "usage_counters", "usage_events", "workflow_executions", "approval_requests", "chat_messages", "conversations",
   "front_desk_slots", "opportunities", "payment_destinations", "routines", "chat_threads", "email_identities",
   "front_desk_channels", "prospects", "tasks", "agents", "contacts", "integration_connections", "intelligence_sources",
+  "service_menu_items", "bookable_resources", "response_templates", "integration_events", "dead_letters",
+  "integration_breakers", "pilot_metrics",
 ];
 
 export const ERASURE_PRE_STEPS: readonly string[] = ["UPDATE agents SET current_version_id = NULL for the tenant (breaks the agents/agent_versions cycle)"];

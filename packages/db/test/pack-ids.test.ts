@@ -3,13 +3,13 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 
 /**
- * Drift guard for proposed migration 0021: the `organizations_industry_check` CHECK list
+ * Drift guard for migration 0021: the `organizations_industry_check` CHECK list
  * must exactly match the pack ids in `packages/core/src/industries/overlays.ts`.
  * Adding a pack without updating the migration (or vice versa) fails here.
  * Pure file comparison — no database needed.
  */
 function sqlIds(): string[] {
-  const sql = readFileSync(path.resolve(import.meta.dirname, "../proposed/0021_industry_packs_and_speed.sql"), "utf8");
+  const sql = readFileSync(path.resolve(import.meta.dirname, "../migrations/0021_industry_packs_and_speed.sql"), "utf8");
   const match = sql.match(/industry IS NULL OR industry IN \(([^)]+)\)/s);
   if (!match) throw new Error("industry CHECK not found in 0021");
   return [...match[1]!.matchAll(/'([a-z_0-9]+)'/g)].map((m) => m[1]!).sort();

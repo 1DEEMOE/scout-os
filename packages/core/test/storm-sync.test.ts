@@ -2,7 +2,7 @@ import { sql } from "drizzle-orm";
 import { afterAll, afterEach, beforeEach, describe, expect, it } from "vitest";
 import { closePool, withTenant } from "@wos/db";
 import {
-  auditJournal,
+  activeJournal,
   configureEngine,
   createOrg,
   currentSpcReportDay,
@@ -155,7 +155,7 @@ describe("storm sync", () => {
   });
 
   it("dead-letters a failed day and the owner replay refetches and ingests it", async () => {
-    setIntegrationJournal(auditJournal());
+    setIntegrationJournal(activeJournal());
     let calls = 0;
     setSpcFetchForTests((async (_url: unknown) => {
       calls++;

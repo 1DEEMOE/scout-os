@@ -3,4 +3,3 @@ export { withTenant, withTenantOutOfBand, withUser, withGlobal, withFrontDeskTok
 export { closePool, getPool as getAuthPool } from "./client";
 export { QUEUES, PGBOSS_SCHEMA } from "./queues";
 export { adminQuery, adminUrl } from "./admin";
-export { proposedSchema } from "./schema-proposed";
