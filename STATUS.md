@@ -1,5 +1,17 @@
 # Ascend Software — status (2026-11-17)
 
+> **2026-11-23 update (Kimi review round, merged onto the v6 series):** proposed
+> migrations 0020–0023 were reviewed (`docs/plans/migration-review-0020-0023.md`)
+> but are **NOT adopted**: they stay in `packages/db/proposed/` until the owner
+> approves them. The durable event journal, dead letters and shared circuit
+> breaker are built and tested but **opt-in** (`WOS_DURABLE_EVENTS=1`, needs 0022
+> applied); the default path uses the audit-trail journal and in-process breaker.
+> CI added (`.github/workflows/ci.yml`), security review
+> (`docs/security/audit-2026-11-23.md`), staging runbook
+> (`docs/plans/staging-runbook.md`) and `scripts/verify-live-integrations.mjs`.
+> Evidence: `QUALITY_GATE.md`. Still not deployed; live integrations and the
+> independent human audit remain open.
+
 Repo at `/workspace/scout-os/repo`. Phase 9 self-assessment completed locally. Nothing deployed. No push. Clean-room rules intact.
 
 ## SMB launch-readiness gaps (2026-11-17 session)

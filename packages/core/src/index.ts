@@ -143,14 +143,15 @@ export {
   type SmsSendResult,
   type TwilioConfig,
 } from "./speed/sms";
-export { integrations } from "./events/breaker";
+export { DurableCircuitBreaker, integrations } from "./events/breaker";
 export { correlation, logOp } from "./events/correlation";
 export { backoffMs, MemoryJournal, runEvent } from "./events/bus";
 export { listDeadLetters, replayDeadLetter, registerBusHandler } from "./events/recovery";
 export { registerIntegrationHandlers, PRODUCER_EVENT_TYPES } from "./events/handlers";
 export { resetAppliedEffects } from "./events/bus";
 export { produceIntegration, setIntegrationJournal } from "./events/produce";
-export { auditJournal, deadLetterIdempotencyKey } from "./events/journal";
+export { setIntegrationBreaker } from "./events/bus";
+export { activeJournal, auditJournal, durableJournal, durableEventsEnabled, deadLetterIdempotencyKey } from "./events/journal";
 export { modelForPurpose } from "./engine/model-route";
 export { assertSafeOutbound } from "./security/ssrf";
 export { publicClientAllowed, sameOrigin } from "./security/origin";

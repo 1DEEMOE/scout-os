@@ -1,4 +1,4 @@
--- Rollback for proposed 0020.
+-- Rollback for 0020.
 BEGIN;
 ALTER TABLE routines DROP COLUMN IF EXISTS watch_topics;
 ALTER TABLE organizations DROP COLUMN IF EXISTS brand_accent;

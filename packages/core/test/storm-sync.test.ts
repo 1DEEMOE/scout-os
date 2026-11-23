@@ -171,7 +171,7 @@ describe("storm sync", () => {
     const open = await listDeadLetters({ actorUserId: "owner", orgId });
     const letter = open.find((row) => row.type === "integration.spc");
     expect(letter).toBeTruthy();
-    const result = await replayDeadLetter({ actorUserId: "owner", orgId, auditId: letter!.id });
+    const result = await replayDeadLetter({ actorUserId: "owner", orgId, deadLetterId: letter!.id });
     expect(result.status).toBe("done");
     expect(calls).toBe(2);
     expect(await listSignals({ actorUserId: "owner", orgId })).toHaveLength(3);

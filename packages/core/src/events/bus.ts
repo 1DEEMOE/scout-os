@@ -1,5 +1,12 @@
 import { scrubPii } from "../logger";
-import { BreakerOpenError, integrations, type CircuitBreaker } from "./breaker";
+import { BreakerOpenError, integrations, type SharedBreaker } from "./breaker";
+
+/** Process-wide default breaker. Production installs the durable breaker so
+ * every web/worker process shares open state; tests keep the in-process one. */
+let defaultBreaker: SharedBreaker = integrations;
+export function setIntegrationBreaker(breaker: SharedBreaker | undefined): void {
+  defaultBreaker = breaker ?? integrations;
+}
 import { logOp } from "./correlation";
 
 export function safeErrorText(err: unknown): string {
@@ -44,6 +51,8 @@ export interface JournalEntry {
   type: string;
   source: string;
   attempt: number;
+  /** Recorded by the durable journal; memory journals ignore it. */
+  status?: "done" | "skipped";
 }
 
 export interface DeadLetter {
@@ -118,7 +127,7 @@ export async function runEvent(
     journal: EventJournal;
     maxAttempts?: number;
     sleep?: (ms: number) => Promise<void>;
-    breaker?: CircuitBreaker;
+    breaker?: SharedBreaker;
     timeoutMs?: number;
   },
 ): Promise<EventResult> {
@@ -137,7 +146,7 @@ async function runEventInner(
     journal: EventJournal;
     maxAttempts?: number;
     sleep?: (ms: number) => Promise<void>;
-    breaker?: CircuitBreaker;
+    breaker?: SharedBreaker;
     timeoutMs?: number;
   },
 ): Promise<EventResult> {
@@ -151,21 +160,21 @@ async function runEventInner(
 
   const decision = handler.decide(event);
   if (!decision.act) {
-    await deps.journal.put({ tenantId: event.tenantId, key: event.idempotencyKey, type: event.type, source: event.source, attempt: 0 });
+    await deps.journal.put({ tenantId: event.tenantId, key: event.idempotencyKey, type: event.type, source: event.source, attempt: 0, status: "skipped" });
     logOp({ message: "event skipped", tenantId: event.tenantId, tool: event.type, input: event.idempotencyKey, outcome: "success", output: decision.reason, durationMs: Date.now() - started });
     return { status: "skipped", reason: decision.reason };
   }
 
   const maxAttempts = deps.maxAttempts ?? 3;
   const sleep = deps.sleep ?? ((ms) => new Promise((r) => setTimeout(r, ms)));
-  const breaker = deps.breaker ?? integrations;
+  const breaker = deps.breaker ?? defaultBreaker;
   let lastError = "unknown";
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
       const act = () => withTimeout((signal) => handler.act(event, effectContext(event.tenantId, event.idempotencyKey, signal)), deps.timeoutMs ?? 8_000);
-      const result = event.integration ? await breaker.run(event.integration, act) : await act();
+      const result = event.integration ? await breaker.run(event.integration, act, Date.now(), event.tenantId) : await act();
       if (handler.verify && !handler.verify(event, result)) throw new Error("verify_failed");
-      const wrote = await deps.journal.put({ tenantId: event.tenantId, key: event.idempotencyKey, type: event.type, source: event.source, attempt });
+      const wrote = await deps.journal.put({ tenantId: event.tenantId, key: event.idempotencyKey, type: event.type, source: event.source, attempt, status: "done" });
       if (wrote === "duplicate") return { status: "duplicate" };
       logOp({ message: "event done", tenantId: event.tenantId, tool: event.type, input: event.idempotencyKey, outcome: "success", output: "verified", durationMs: Date.now() - started, recovery: attempt > 1 ? `attempt ${attempt}` : undefined });
       return { status: "done", attempt, result };

@@ -1,6 +1,5 @@
--- 0021 (PROPOSED, NOT APPLIED): pack ids on organizations, plus the tables a
+-- 0021: pack ids on organizations, plus the tables a
 -- reviewed pack would use for menus, chairs/bays, visits, and reply templates.
--- The app does not read these tables yet. Pack choice still lives in
 -- memory_records (scope_ref speed:*) until this file is moved into migrations/
 -- after review. Rollback: 0021_industry_packs_and_speed.down.sql
 --

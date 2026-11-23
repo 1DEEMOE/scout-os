@@ -1,6 +1,8 @@
 # Scout OS on Render.
-# Does not run database migrations. Apply packages/db/migrations (0013–0019)
-# by hand only after Darian reviews the SQL.
+# Does not run database migrations. Apply packages/db/migrations (0001–0019)
+# with DATABASE_URL_OWNER. 0020–0027 are proposals in packages/db/proposed/
+# awaiting Darian's review and are never applied automatically. Leave
+# WOS_DURABLE_EVENTS unset until 0022 is adopted.
 # No secret values are stored here.
 #
 # Database roles (least privilege, CLAUDE.md law 5): the app must NOT connect
@@ -26,7 +28,12 @@ envVarGroups:
     envVars:
       - key: NODE_VERSION
         value: "22"
+      # OFF by default: staging exists to verify LIVE integrations. Set "1"
+      # per-service only for a demo environment (never in production).
       - key: WOS_MOCK_MODE
+        value: "0"
+      # Accounts must verify their email before sign-in (audit F1).
+      - key: WOS_REQUIRE_EMAIL_VERIFICATION
         value: "1"
       - key: LOG_LEVEL
         value: info

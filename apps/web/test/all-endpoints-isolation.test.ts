@@ -25,7 +25,7 @@ const input = () => ({
   userId: "mallory",
   token: "probe-token-value",
   approvalId: NIL,
-  auditId: NIL,
+  deadLetterId: NIL,
   conversationId: NIL,
   memoryId: NIL,
   threadId: NIL,

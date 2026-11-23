@@ -1,8 +1,47 @@
 name: CI
-on: [push, pull_request]
+
+on:
+  push:
+    branches: [main, main-next]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  WOS_MOCK_MODE: "1"
 
 jobs:
-  verify:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.28.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint
+
+  typecheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.28.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+
+  test:
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -11,25 +50,78 @@ jobs:
           POSTGRES_PASSWORD: postgres
         ports: ["5432:5432"]
         options: >-
-          --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     env:
-      PGPASSWORD: postgres
+      DATABASE_URL: postgres://app_user:app_dev_pw@127.0.0.1:5432/wos_test
+      DATABASE_URL_OWNER: postgres://wos_owner:owner_dev_pw@127.0.0.1:5432/wos_test
+      DATABASE_URL_ADMIN: postgres://postgres:postgres@127.0.0.1:5432/wos_test
+      TEST_DATABASE_URL: postgres://app_user:app_dev_pw@127.0.0.1:5432/wos_test
+      TEST_DATABASE_URL_OWNER: postgres://wos_owner:owner_dev_pw@127.0.0.1:5432/wos_test
+      TEST_DATABASE_URL_ADMIN: postgres://postgres:postgres@127.0.0.1:5432/wos_test
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
+        with:
+          version: 10.28.0
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: pnpm
-      - name: Create roles and databases
-        run: psql -h localhost -U postgres -f scripts/setup-local-db.sql
       - run: pnpm install --frozen-lockfile
-      - run: pnpm lint
-      - run: pnpm typecheck
+      - name: Create roles and databases (wos_dev, wos_test, wos_e2e)
+        run: psql -h 127.0.0.1 -U postgres -f scripts/setup-local-db.sql
+        env:
+          PGPASSWORD: postgres
       - run: pnpm test
       - run: pnpm test:isolation
+      - name: Durable event bus on a scratch DB (proposed 0020-0023 applied there only)
+        run: ADMIN_URL=postgres://postgres:postgres@127.0.0.1:5432 node scripts/test-durable-events.mjs
+
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.28.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
       - run: pnpm build
-      - name: Browser tests (installed Chrome)
-        run: pnpm test:e2e
+
+  e2e:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
         env:
-          CHROME_PATH: /usr/bin/google-chrome
+          POSTGRES_PASSWORD: postgres
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      E2E_DATABASE_URL: postgres://app_user:app_dev_pw@127.0.0.1:5432/wos_e2e
+      E2E_OWNER_DATABASE_URL: postgres://wos_owner:owner_dev_pw@127.0.0.1:5432/wos_e2e
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.28.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Create roles and databases (incl. wos_e2e)
+        run: psql -h 127.0.0.1 -U postgres -f scripts/setup-local-db.sql
+        env:
+          PGPASSWORD: postgres
+      - run: pnpm test:e2e

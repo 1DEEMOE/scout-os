@@ -2,7 +2,7 @@ import { Writable } from "node:stream";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { closePool, withTenant } from "@wos/db";
 import {
-  auditJournal,
+  activeJournal,
   classifyToolCall,
   configureEngine,
   createOrg,
@@ -203,7 +203,7 @@ describe("dead letter lifecycle", () => {
     const { orgId } = await createOrg({ actorUserId: "owner", name: "Replay Co" });
     const key = "k".repeat(200);
     expect(deadLetterIdempotencyKey(key).length).toBeLessThan(80);
-    await auditJournal().dead({ tenantId: orgId, key, type: "weather.refresh", source: "test", error: "down", attempts: 3 });
+    await activeJournal().dead({ tenantId: orgId, key, type: "weather.refresh", source: "test", error: "down", attempts: 3 });
     const open = await listDeadLetters({ actorUserId: "owner", orgId });
     expect(open).toHaveLength(1);
     let seen = "";
@@ -216,7 +216,7 @@ describe("dead letter lifecycle", () => {
         return { count: 0 };
       },
     });
-    const result = await replayDeadLetter({ actorUserId: "owner", orgId, auditId: open[0]!.id });
+    const result = await replayDeadLetter({ actorUserId: "owner", orgId, deadLetterId: open[0]!.id });
     expect(result.status).toBe("done");
     expect(seen).toBe(key);
     expect(await listDeadLetters({ actorUserId: "owner", orgId })).toEqual([]);

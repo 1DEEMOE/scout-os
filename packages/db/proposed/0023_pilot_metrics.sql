@@ -1,4 +1,4 @@
--- 0023 (PROPOSED, NOT APPLIED): a durable row for pilot measurements.
+-- 0023: a durable row for pilot measurements.
 -- The running app stores the same numbers in memory_records (scope_ref pilot:metrics)
 -- until this file is moved into migrations/ after review.
 -- Rollback: 0023_pilot_metrics.down.sql

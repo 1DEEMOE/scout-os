@@ -1,5 +1,4 @@
--- 0022 (PROPOSED, NOT APPLIED): durable event bus, dead letters, and breaker state.
--- The running app still journals through audit_events (ops.event / ops.dead_letter)
+-- 0022: durable event bus, dead letters, and breaker state.
 -- until this file is moved into migrations/ after review.
 -- Rollback: 0022_events_and_dead_letters.down.sql
 

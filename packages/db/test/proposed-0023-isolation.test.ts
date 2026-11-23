@@ -57,8 +57,11 @@ describe("proposed 0023 (rolled back, never applied)", () => {
     }
     for (const statement of sqlDown) {
       // The down file is syntax-valid. It is not executed against the database.
-      expect(statement.toLowerCase()).toContain("drop table");
+      // Besides DROP TABLE it may delete its own schema_migrations row, so a
+      // rolled-back migration re-applies instead of being skipped.
+      expect(statement.toLowerCase()).toMatch(/drop table|delete from schema_migrations/);
     }
+    expect(sqlDown.some((s) => /drop table/i.test(s))).toBe(true);
   });
 
   afterAll(async () => {

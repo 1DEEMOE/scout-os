@@ -15,6 +15,10 @@ import {
   UnconfiguredProvider,
   setIntegrationJournal,
   auditJournal,
+  durableEventsEnabled,
+  durableJournal,
+  DurableCircuitBreaker,
+  setIntegrationBreaker,
   registerIntegrationHandlers,
   type ModelProvider,
 } from "@wos/core";
@@ -64,7 +68,13 @@ export function ensureEngine(): void {
     status = "none";
   }
   configureEngine({ router: new ModelRouter(providers, defaultProvider, meteringHooks), tools, mailbox, crm, invoicing });
-  setIntegrationJournal(auditJournal());
+  // Durable journal/breaker need proposed migration 0022; opt-in until adopted.
+  if (durableEventsEnabled()) {
+    setIntegrationJournal(durableJournal());
+    setIntegrationBreaker(new DurableCircuitBreaker());
+  } else {
+    setIntegrationJournal(auditJournal());
+  }
   registerIntegrationHandlers();
   logger.info({ model: defaultProvider, mockMode, tools: tools.list().map((t) => t.name) }, "engine configured");
   configured = true;

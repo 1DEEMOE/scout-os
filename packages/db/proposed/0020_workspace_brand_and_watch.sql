@@ -1,4 +1,4 @@
--- 0020 (PROPOSED, NOT APPLIED): workspace branding and briefing topics.
+-- 0020: workspace branding and briefing topics.
 -- Additive only. Rollback: 0020_workspace_brand_and_watch.down.sql
 -- Review notes:
 --  * brand_accent is limited to a fixed set of candidate accents so a workspace
@@ -7,8 +7,6 @@
 --    the light surface) and drop any that fail; dark mode keeps the default accent.
 --  * watch_topics filters which briefing sections are shown. NULL = all
 --    sections (today's behaviour). Approvals can never be filtered out.
-BEGIN;
-
 ALTER TABLE organizations
   ADD COLUMN IF NOT EXISTS brand_accent text
     CHECK (brand_accent IS NULL OR brand_accent IN ('#17616a', '#1d4ed8', '#7c3aed', '#b45309', '#be123c', '#166534', '#334155'));
@@ -25,4 +23,3 @@ ALTER TABLE routines
     );
 COMMENT ON COLUMN routines.watch_topics IS 'Briefing sections this routine includes. NULL = all. Must include pending_approvals.';
 
-COMMIT;
