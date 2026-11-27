@@ -31,4 +31,4 @@ CI on the draft PR; fix anything it finds; then the three erasure findings.
 - Staging runbook updated (gates, 25 migrations, retention): `docs/plans/staging-runbook.md`
 - Pilot plan: `docs/plans/pilot-plan.md`
 - Legal drafts for counsel (not publishable): `docs/commercial/legal/`
-- Preliminary trademark look: `docs/commercial/legal/trademark-preliminary-search.md`. Finding: both "Scout OS" (many SCOUT software marks, one in roofing SaaS) and "Ascend Software" (existing Ascend Software, LLC) look contested. Naming is the owner's call.
+- Preliminary trademark look: `docs/commercial/legal/trademark-preliminary-search.md`. Finding: "Ascend Software" collides with existing Ascend Software, LLC marks (accounts-payable SaaS; business-automation software). "Scout" is internal only. Naming is the owner's call.

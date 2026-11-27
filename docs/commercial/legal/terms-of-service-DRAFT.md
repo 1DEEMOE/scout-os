@@ -3,7 +3,7 @@
 Effective date: [DATE]. Provider: [LEGAL ENTITY NAME], a [STATE] [ENTITY TYPE] ("we"). Contact: [EMAIL], [MAILING ADDRESS].
 
 ## 1. The service
-[PRODUCT NAME] is software that helps a business draft and send customer messages, track leads and follow-ups, and prepare briefings, using AI. **COUNSEL: product name is subject to the trademark review.**
+Ascend Software is software that helps a business draft and send customer messages, track leads and follow-ups, and prepare briefings, using AI. **COUNSEL: the name "Ascend Software" is subject to the trademark review (see `trademark-preliminary-search.md`).**
 
 ## 2. Your account and your customers' data
 You must be 18+ and authorised to bind your business. You are responsible for your users, your credentials, and the lawfulness of the data you load (including having the right to contact your own customers). You keep ownership of your data; you grant us a licence to host and process it only to provide the service.
