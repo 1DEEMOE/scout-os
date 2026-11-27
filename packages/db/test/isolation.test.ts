@@ -284,6 +284,8 @@ interface WriteSpec {
   updateSet: ReturnType<typeof sql>;
   update: Denial;
   del: Denial;
+  /** How "move A's row into B" is stopped when that differs from `update` (a column-level grant excludes tenant_id). */
+  moveDenied?: Denial;
   /** The table allows one row per tenant and tenant A already has it: A's own insert hits the unique key (after passing RLS). */
   onePerTenant?: boolean;
 }
@@ -322,8 +324,9 @@ const WRITE_SPECS: WriteSpec[] = [
     table: "integration_events",
     insert: (t, tag) => sql`INSERT INTO integration_events (tenant_id, idempotency_key, type, source, status) VALUES (${t}, ${"wd-" + tag}, 'integration.x', 'x', 'done')`,
     updateSet: sql`status = 'dead'`,
-    update: "permission-denied", // 0022 grants SELECT, INSERT only: the journal is append-only
+    update: "zero-rows", // 0028: UPDATE is granted on status/lease columns only; RLS still hides B's rows
     del: "permission-denied",
+    moveDenied: "permission-denied", // tenant_id has no UPDATE grant at all
   },
   {
     table: "dead_letters",
@@ -417,14 +420,14 @@ describe("cross-tenant write denial on the 0020–0023 tables", () => {
       expect("error" in res, `${spec.table} accepted moving a row into another tenant`).toBe(true);
       const msg = "error" in res ? res.error : "";
       // Tables with no UPDATE grant stop at the privilege check; the rest at the RLS WITH CHECK.
-      expect(msg).toMatch(spec.update === "permission-denied" ? /permission denied/ : /row-level security/);
+      expect(msg).toMatch((spec.moveDenied ?? spec.update) === "permission-denied" ? /permission denied/ : /row-level security/);
     });
 
     it("tenant B's rows are untouched afterwards", async () => {
       const asB = await withTenant(B, async (tx) => (await tx.execute(sql`SELECT count(*)::int AS n FROM ${T}`)).rows as { n: number }[]);
-      expect(asB[0].n, `${spec.table}: tenant B should still see its seeded row`).toBeGreaterThanOrEqual(1);
+      expect(asB[0]?.n ?? 0, `${spec.table}: tenant B should still see its seeded row`).toBeGreaterThanOrEqual(1);
       const asA = await withTenant(A, async (tx) => (await tx.execute(sql`SELECT count(*)::int AS n FROM ${T} WHERE tenant_id = ${B}`)).rows as { n: number }[]);
-      expect(asA[0].n).toBe(0);
+      expect(asA[0]?.n ?? -1).toBe(0);
     });
   });
 
