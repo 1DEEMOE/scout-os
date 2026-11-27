@@ -2,7 +2,12 @@
 -- until this file is moved into migrations/ after review.
 -- Rollback: 0022_events_and_dead_letters.down.sql
 
-CREATE TABLE integration_events (
+-- Lock/statement limits for this transaction: if the table is busy, fail fast and retry
+-- rather than queueing behind (and blocking) live traffic.
+SET LOCAL lock_timeout = '5s';
+SET LOCAL statement_timeout = '60s';
+
+CREATE TABLE IF NOT EXISTS integration_events (
   id               uuid NOT NULL DEFAULT gen_random_uuid(),
   tenant_id        uuid NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
   idempotency_key  text NOT NULL CHECK (length(idempotency_key) BETWEEN 1 AND 200),
@@ -14,9 +19,9 @@ CREATE TABLE integration_events (
   UNIQUE (tenant_id, id),
   UNIQUE (tenant_id, idempotency_key)
 );
-CREATE INDEX integration_events_tenant_idx ON integration_events (tenant_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS integration_events_tenant_idx ON integration_events (tenant_id, created_at DESC);
 
-CREATE TABLE dead_letters (
+CREATE TABLE IF NOT EXISTS dead_letters (
   id           uuid NOT NULL DEFAULT gen_random_uuid(),
   tenant_id    uuid NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
   event_key    text NOT NULL CHECK (length(event_key) BETWEEN 1 AND 200),
@@ -31,9 +36,9 @@ CREATE TABLE dead_letters (
   UNIQUE (tenant_id, id),
   UNIQUE (tenant_id, event_key)
 );
-CREATE INDEX dead_letters_tenant_idx ON dead_letters (tenant_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS dead_letters_tenant_idx ON dead_letters (tenant_id, created_at DESC);
 
-CREATE TABLE integration_breakers (
+CREATE TABLE IF NOT EXISTS integration_breakers (
   id          uuid NOT NULL DEFAULT gen_random_uuid(),
   tenant_id   uuid NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
   name        text NOT NULL CHECK (length(name) BETWEEN 1 AND 80),
@@ -48,21 +53,23 @@ CREATE TABLE integration_breakers (
 
 ALTER TABLE integration_events ENABLE ROW LEVEL SECURITY;
 ALTER TABLE integration_events FORCE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS integration_events_tenant ON integration_events;
 CREATE POLICY integration_events_tenant ON integration_events
   USING (tenant_id = app_current_tenant()) WITH CHECK (tenant_id = app_current_tenant());
 
 ALTER TABLE dead_letters ENABLE ROW LEVEL SECURITY;
 ALTER TABLE dead_letters FORCE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS dead_letters_tenant ON dead_letters;
 CREATE POLICY dead_letters_tenant ON dead_letters
   USING (tenant_id = app_current_tenant()) WITH CHECK (tenant_id = app_current_tenant());
 
 ALTER TABLE integration_breakers ENABLE ROW LEVEL SECURITY;
 ALTER TABLE integration_breakers FORCE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS integration_breakers_tenant ON integration_breakers;
 CREATE POLICY integration_breakers_tenant ON integration_breakers
   USING (tenant_id = app_current_tenant()) WITH CHECK (tenant_id = app_current_tenant());
 
 GRANT SELECT, INSERT ON integration_events TO app_user;
 GRANT SELECT, INSERT, UPDATE ON dead_letters, integration_breakers TO app_user;
 
--- The audit page filters action with a prefix. This index is unused until adopted.
-CREATE INDEX audit_events_tenant_action_idx ON audit_events (tenant_id, action);
+-- The audit_events action index moved to 0029 (built CONCURRENTLY, outside a transaction).
