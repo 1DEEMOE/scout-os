@@ -24,3 +24,11 @@ No pilot, no live verification, no legal sign-off, no pricing. Marketing copy th
 
 ## Next engineering steps (no owner gate)
 CI on the draft PR; fix anything it finds; then the three erasure findings.
+
+## Prepared for the owner (2026-11-27)
+- SQL reading aid: `docs/plans/sql-review-guide.md`
+- Render workspace options: `docs/plans/render-workspace-options.md`
+- Staging runbook updated (gates, 25 migrations, retention): `docs/plans/staging-runbook.md`
+- Pilot plan: `docs/plans/pilot-plan.md`
+- Legal drafts for counsel (not publishable): `docs/commercial/legal/`
+- Preliminary trademark look: `docs/commercial/legal/trademark-preliminary-search.md`. Finding: both "Scout OS" (many SCOUT software marks, one in roofing SaaS) and "Ascend Software" (existing Ascend Software, LLC) look contested. Naming is the owner's call.

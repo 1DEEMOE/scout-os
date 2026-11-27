@@ -4,6 +4,13 @@ Audience: the operator doing the first staging deploy. Everything here is a
 command or a click; nothing is assumed. Cost: Render's smallest plans
 (~$7–15/month total) + a managed Postgres.
 
+## 0. Gates before anything here
+
+- Owner has read the SQL and said "SQL approved" (`docs/plans/sql-review-guide.md`).
+- Render home workspace decided (`docs/plans/render-workspace-options.md`).
+- A backup exists, was downloaded, and its restore was verified. No migration without it.
+- Owner explicitly says go for the deploy.
+
 ## 1. Create the services
 
 1. Push this branch to GitHub and connect the repo to Render (Blueprint
@@ -15,7 +22,7 @@ command or a click; nothing is assumed. Cost: Render's smallest plans
    as the database owner — that role can bypass RLS).
 3. Apply migrations as the owner role:
    `DATABASE_URL_OWNER=<owner-url> pnpm db:migrate`
-   (The migrator applies 0001–0023. 0020–0023 are reviewed in
+   (The migrator applies every file in `migrations/`: 0001–0023, 0028 and 0029 (0024–0027 are not in that folder). 0028/0029 and the 0020–0023 edits are in `sql-for-review/` and need the owner's SQL review first (`docs/plans/sql-review-guide.md`). 0029 runs outside a transaction on purpose. 0020–0023 are reviewed in
    `docs/plans/migration-review-0020-0023.md`; the rollback path is proven by
    `scripts/test-rollbacks.mjs`. 0024–0027 are unreviewed proposals in
    `packages/db/proposed/` and are never applied by the migrator. Take a backup
@@ -33,7 +40,7 @@ command or a click; nothing is assumed. Cost: Render's smallest plans
 | Step | Command / check | Pass |
 |---|---|---|
 | Health | `curl $URL/api/healthz` | `{"ok":true,...}` |
-| Migrations | response has no 503; `schema_migrations` = 23 rows | count matches |
+| Migrations | response has no 503; `schema_migrations` = 25 rows | count matches |
 | Live integrations | `node scripts/verify-live-integrations.mjs` with staging env | 0 FAIL |
 | Mock mode off | `WOS_MOCK_MODE` is `0`/unset | healthz/UI show no MOCK |
 | Sign-up flow | create account; verification email arrives (SMTP_URL set) | verified login |
@@ -52,6 +59,7 @@ or a cron + curl anywhere):
   approval expiries are not running — the worker is down or stuck).
 - **Logs**: point `OTEL_EXPORTER_OTLP_ENDPOINT` at a collector when one is
   chosen; until then, Render log retention + `LOG_LEVEL=info` is the record.
+- **Retention**: the event tables grow; a privileged connection can run `node scripts/prune-events.mjs` (dry run by default; `--apply` to delete finished events and replayed dead letters older than 90 days). Needs `DATABASE_URL_ADMIN` (BYPASSRLS/superuser; the table owner sees zero rows).
 - **Dead letters**: Recovery page (`/orgs/<id>/recovery`) lists them;
   replay is one click. Check daily during the pilot.
 
