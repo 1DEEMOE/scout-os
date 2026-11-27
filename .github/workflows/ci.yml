@@ -45,7 +45,7 @@ jobs:
     runs-on: ubuntu-latest
     services:
       postgres:
-        image: postgres:16
+        image: postgres:17
         env:
           POSTGRES_PASSWORD: postgres
         ports: ["5432:5432"]
@@ -71,17 +71,15 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      # The runner ships PostgreSQL 18 client tools. pg_dump 17+ emits
-      # `SET transaction_timeout`, which the postgres:16 service rejects on restore
-      # (backup-script tests). Use client tools of the same major version as the server.
-      - name: Install PostgreSQL 16 client tools and put them first on PATH
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y postgresql-client-16
-          echo "/usr/lib/postgresql/16/bin" >> "$GITHUB_PATH"
-      - name: Confirm client/server major versions match
+      # Production runs PostgreSQL 17 (render.yaml: postgresMajorVersion "17"), so CI's
+      # database service is 17 too. The runner's client tools are newer than the server
+      # (scripts/backup.mjs accepts tools >= server, never older). An older server than
+      # the dump tool is what produced `unrecognized configuration parameter
+      # "transaction_timeout"` on restore when the service was 16.
+      - name: Report PostgreSQL client and server versions
         run: |
           pg_dump --version
+          pg_restore --version
           psql -h 127.0.0.1 -U postgres -tAc "show server_version"
         env:
           PGPASSWORD: postgres
@@ -112,7 +110,7 @@ jobs:
     runs-on: ubuntu-latest
     services:
       postgres:
-        image: postgres:16
+        image: postgres:17
         env:
           POSTGRES_PASSWORD: postgres
         ports: ["5432:5432"]
