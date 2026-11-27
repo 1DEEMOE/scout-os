@@ -46,3 +46,22 @@
 6. `scripts/test-rollbacks.mjs` re-run after adoption: round-trip schema identical, including the four new rollbacks.
 
 Adopting means the files are in `migrations/`; **no real database has had them applied.** Apply to staging only with the runbook, after a backup.
+
+## Addendum 2026-11-27: data-fix pass (owner approved edits to 0020–0022)
+
+Written by Claude (the assistant), not an independent review. **Owner SQL review still required** for 0028 and 0029, and for the edits below, before any real database sees them. No real database has had any of this applied.
+
+**Edits to 0020–0023** (none had been applied anywhere):
+- All four now start with `SET LOCAL lock_timeout = '5s'` / `statement_timeout = '60s'` (fail fast instead of queueing behind live traffic).
+- `CREATE TABLE/INDEX IF NOT EXISTS` and `DROP POLICY IF EXISTS` before each `CREATE POLICY`.
+- 0021: dropped `service_menu_items_tenant_idx` and `bookable_resources_tenant_idx` (covered by `UNIQUE (tenant_id, id)`); added `appointments_service_idx (tenant_id, service_id)` so deleting a service does not scan appointments.
+- 0022: the `audit_events` index was removed from this file (it blocked writes inside a transaction) and moved to 0029.
+- Rollbacks 0021/0022/0023 now run in one transaction, carry a DESTRUCTIVE / revert-code-first / export-first header, and 0021 re-adds the narrowed CHECK before dropping tables so a failure leaves them in place.
+
+**0028 (new):** fixes the 0021 composite FKs (`ON DELETE SET NULL (service_id)` / `(resource_id)` so a delete no longer tries to null the NOT NULL `tenant_id`); adds the event lease columns (`lease_owner`, `lease_expires_at`, `attempts`), the `in_progress`/`failed` statuses, a lease-state CHECK and a column-level `UPDATE` grant for `app_user`.
+
+**0029 (new, `-- migrate:no-transaction`):** `CREATE INDEX CONCURRENTLY IF NOT EXISTS` on `audit_events (tenant_id, action)`. Not atomic; an interrupted build can leave an INVALID index (drop it, re-run). 
+
+**Evidence (locally, Postgres 16, scratch databases; CI not yet run):** fresh apply 0001→0029; rollback round-trip schema identical with 0028/0029 included; isolation, FK, claim-concurrency, runner and retention tests (see PR). Postgres 17 (production) is covered only by CI.
+
+**Decisions made by the PM:** retention is an owner-run script (`scripts/prune-events.mjs`): finished events and replayed dead letters older than 90 days, dry-run by default; `dead`/`failed`/`in_progress` events and unreplayed dead letters are never pruned. The unused tables (`service_menu_items`, `bookable_resources`, `appointments`, `response_templates`) stay unused: no backfill and no cutover until a pilot customer needs them.

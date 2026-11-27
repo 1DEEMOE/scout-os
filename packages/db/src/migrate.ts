@@ -1,12 +1,12 @@
-import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { PgBoss } from "pg-boss";
 import pg from "pg";
+import { applyMigrations } from "./migrate-runner";
 import { PGBOSS_SCHEMA, QUEUES } from "./queues";
 
-// Applies migrations/*.sql in order, once each, as the owner role.
-// Each file runs in its own transaction; a failure rolls that file back.
+// Applies migrations/*.sql in order, once each, as the owner role (see migrate-runner.ts
+// for the per-file transaction rule and the `-- migrate:no-transaction` opt-out).
 const url = process.env.DATABASE_URL_OWNER;
 if (!url) {
   console.error("DATABASE_URL_OWNER is not set");
@@ -17,26 +17,7 @@ const dir = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "migra
 const client = new pg.Client({ connectionString: url });
 await client.connect();
 try {
-  await client.query(
-    "CREATE TABLE IF NOT EXISTS schema_migrations (name text PRIMARY KEY, applied_at timestamptz NOT NULL DEFAULT now())",
-  );
-  const done = new Set((await client.query<{ name: string }>("SELECT name FROM schema_migrations")).rows.map((r) => r.name));
-  const files = (await readdir(dir)).filter((f) => f.endsWith(".sql")).sort();
-  for (const file of files) {
-    if (done.has(file)) continue;
-    const sqlText = await readFile(path.join(dir, file), "utf8");
-    await client.query("BEGIN");
-    try {
-      await client.query(sqlText);
-      await client.query("INSERT INTO schema_migrations (name) VALUES ($1)", [file]);
-      await client.query("COMMIT");
-      console.log(`applied ${file}`);
-    } catch (err) {
-      await client.query("ROLLBACK");
-      throw err;
-    }
-  }
-  console.log(`migrations up to date (${files.length} files)`);
+  await applyMigrations(client, dir);
 } finally {
   await client.end();
 }

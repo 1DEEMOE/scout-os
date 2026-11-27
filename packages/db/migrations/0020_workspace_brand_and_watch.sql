@@ -7,6 +7,11 @@
 --    the light surface) and drop any that fail; dark mode keeps the default accent.
 --  * watch_topics filters which briefing sections are shown. NULL = all
 --    sections (today's behaviour). Approvals can never be filtered out.
+-- Lock/statement limits for this transaction: if the table is busy, fail fast and retry
+-- rather than queueing behind (and blocking) live traffic.
+SET LOCAL lock_timeout = '5s';
+SET LOCAL statement_timeout = '60s';
+
 ALTER TABLE organizations
   ADD COLUMN IF NOT EXISTS brand_accent text
     CHECK (brand_accent IS NULL OR brand_accent IN ('#17616a', '#1d4ed8', '#7c3aed', '#b45309', '#be123c', '#166534', '#334155'));

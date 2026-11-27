@@ -7,6 +7,11 @@
 -- that check to the pack ids in packages/core/src/industries/packs.ts.
 -- A new pack id needs this list updated before the migration is adopted.
 
+-- Lock/statement limits for this transaction: if the table is busy, fail fast and retry
+-- rather than queueing behind (and blocking) live traffic.
+SET LOCAL lock_timeout = '5s';
+SET LOCAL statement_timeout = '60s';
+
 ALTER TABLE organizations DROP CONSTRAINT IF EXISTS organizations_industry_check;
 ALTER TABLE organizations ADD CONSTRAINT organizations_industry_check CHECK (
   industry IS NULL OR industry IN (
@@ -24,7 +29,7 @@ ALTER TABLE organizations ADD CONSTRAINT organizations_industry_check CHECK (
 );
 COMMENT ON COLUMN organizations.industry IS 'Industry pack id. NULL until setup. See packages/core/src/industries/packs.ts.';
 
-CREATE TABLE service_menu_items (
+CREATE TABLE IF NOT EXISTS service_menu_items (
   id                uuid NOT NULL DEFAULT gen_random_uuid(),
   tenant_id         uuid NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
   pack_service_id   text NOT NULL CHECK (length(pack_service_id) BETWEEN 1 AND 80),
@@ -36,9 +41,9 @@ CREATE TABLE service_menu_items (
   PRIMARY KEY (id),
   UNIQUE (tenant_id, id)
 );
-CREATE INDEX service_menu_items_tenant_idx ON service_menu_items (tenant_id);
+-- (tenant_id) alone is covered by UNIQUE (tenant_id, id), so no separate tenant index.
 
-CREATE TABLE bookable_resources (
+CREATE TABLE IF NOT EXISTS bookable_resources (
   id          uuid NOT NULL DEFAULT gen_random_uuid(),
   tenant_id   uuid NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
   name        text NOT NULL CHECK (length(name) BETWEEN 1 AND 80),
@@ -47,9 +52,8 @@ CREATE TABLE bookable_resources (
   PRIMARY KEY (id),
   UNIQUE (tenant_id, id)
 );
-CREATE INDEX bookable_resources_tenant_idx ON bookable_resources (tenant_id);
 
-CREATE TABLE appointments (
+CREATE TABLE IF NOT EXISTS appointments (
   id           uuid NOT NULL DEFAULT gen_random_uuid(),
   tenant_id    uuid NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
   service_id   uuid,
@@ -64,10 +68,12 @@ CREATE TABLE appointments (
   FOREIGN KEY (tenant_id, resource_id) REFERENCES bookable_resources (tenant_id, id) ON DELETE SET NULL,
   CHECK (ends_at > starts_at)
 );
-CREATE INDEX appointments_tenant_starts_idx ON appointments (tenant_id, starts_at);
-CREATE INDEX appointments_resource_idx ON appointments (tenant_id, resource_id, starts_at);
+CREATE INDEX IF NOT EXISTS appointments_tenant_starts_idx ON appointments (tenant_id, starts_at);
+CREATE INDEX IF NOT EXISTS appointments_resource_idx ON appointments (tenant_id, resource_id, starts_at);
+-- Deleting a service checks appointments by (tenant_id, service_id); without this it scans.
+CREATE INDEX IF NOT EXISTS appointments_service_idx ON appointments (tenant_id, service_id);
 
-CREATE TABLE response_templates (
+CREATE TABLE IF NOT EXISTS response_templates (
   id           uuid NOT NULL DEFAULT gen_random_uuid(),
   tenant_id    uuid NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
   purpose      text NOT NULL CHECK (purpose IN ('first_response', 'rebook', 'no_show', 'late_cancel', 'review')),
@@ -82,27 +88,31 @@ CREATE TABLE response_templates (
   UNIQUE (tenant_id, id),
   CHECK ((status = 'approved') = (approved_by IS NOT NULL AND approved_at IS NOT NULL))
 );
-CREATE INDEX response_templates_tenant_idx ON response_templates (tenant_id, status);
+CREATE INDEX IF NOT EXISTS response_templates_tenant_idx ON response_templates (tenant_id, status);
 
 -- Same tenant policy as migrations 0001–0019: the row's tenant_id must be the
 -- transaction's app.tenant_id. FORCE so the table owner is not exempt.
 ALTER TABLE service_menu_items ENABLE ROW LEVEL SECURITY;
 ALTER TABLE service_menu_items FORCE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS service_menu_items_tenant ON service_menu_items;
 CREATE POLICY service_menu_items_tenant ON service_menu_items
   USING (tenant_id = app_current_tenant()) WITH CHECK (tenant_id = app_current_tenant());
 
 ALTER TABLE bookable_resources ENABLE ROW LEVEL SECURITY;
 ALTER TABLE bookable_resources FORCE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS bookable_resources_tenant ON bookable_resources;
 CREATE POLICY bookable_resources_tenant ON bookable_resources
   USING (tenant_id = app_current_tenant()) WITH CHECK (tenant_id = app_current_tenant());
 
 ALTER TABLE appointments ENABLE ROW LEVEL SECURITY;
 ALTER TABLE appointments FORCE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS appointments_tenant ON appointments;
 CREATE POLICY appointments_tenant ON appointments
   USING (tenant_id = app_current_tenant()) WITH CHECK (tenant_id = app_current_tenant());
 
 ALTER TABLE response_templates ENABLE ROW LEVEL SECURITY;
 ALTER TABLE response_templates FORCE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS response_templates_tenant ON response_templates;
 CREATE POLICY response_templates_tenant ON response_templates
   USING (tenant_id = app_current_tenant()) WITH CHECK (tenant_id = app_current_tenant());
 

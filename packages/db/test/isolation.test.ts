@@ -261,3 +261,193 @@ describe("context handling", () => {
     await expect(withTenant("' OR 1=1 --", async () => 1)).rejects.toBeInstanceOf(InvalidTenantError);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Cross-tenant WRITE denial for the tables added in migrations 0020–0023.
+// The read side is covered above for every table. This block proves the other
+// half for the eight newest tables, as the app role scoped to tenant A against
+// tenant B's data:
+//   1. INSERT with B's tenant_id is rejected (the WITH CHECK policy);
+//   2. UPDATE / DELETE of B's rows never succeed — either they match 0 rows, or
+//      the app has no grant for that verb at all ("permission denied");
+//   3. an UPDATE that moves A's row into B's tenant is rejected;
+//   4. B's rows are unchanged afterwards (checked as B, and as the owner).
+// "mode" records which of the two denial shapes each verb takes today, taken
+// from the migrations' GRANTs. If a grant changes, this fails and says so.
+// ---------------------------------------------------------------------------
+type Denial = "zero-rows" | "permission-denied";
+interface WriteSpec {
+  table: string;
+  /** Returns an INSERT statement that targets `tenant` (valid in every other respect). */
+  insert: (tenant: string, tag: string) => ReturnType<typeof sql>;
+  /** A harmless column change used for the UPDATE probe. */
+  updateSet: ReturnType<typeof sql>;
+  update: Denial;
+  del: Denial;
+  /** How "move A's row into B" is stopped when that differs from `update` (a column-level grant excludes tenant_id). */
+  moveDenied?: Denial;
+  /** The table allows one row per tenant and tenant A already has it: A's own insert hits the unique key (after passing RLS). */
+  onePerTenant?: boolean;
+}
+
+const soon = sql`now() + interval '1 day'`;
+const WRITE_SPECS: WriteSpec[] = [
+  {
+    table: "service_menu_items",
+    insert: (t, tag) => sql`INSERT INTO service_menu_items (tenant_id, pack_service_id, label) VALUES (${t}, ${"wd-" + tag}, 'x')`,
+    updateSet: sql`label = 'hijacked'`,
+    update: "zero-rows",
+    del: "zero-rows",
+  },
+  {
+    table: "bookable_resources",
+    insert: (t, tag) => sql`INSERT INTO bookable_resources (tenant_id, name, kind) VALUES (${t}, ${"wd-" + tag}, 'chair')`,
+    updateSet: sql`name = 'hijacked'`,
+    update: "zero-rows",
+    del: "zero-rows",
+  },
+  {
+    table: "appointments",
+    insert: (t) => sql`INSERT INTO appointments (tenant_id, starts_at, ends_at, status) VALUES (${t}, ${soon}, now() + interval '2 days', 'booked')`,
+    updateSet: sql`status = 'cancelled'`,
+    update: "zero-rows",
+    del: "permission-denied", // 0021 grants app_user SELECT, INSERT, UPDATE only
+  },
+  {
+    table: "response_templates",
+    insert: (t, tag) => sql`INSERT INTO response_templates (tenant_id, purpose, channel, name, body, status) VALUES (${t}, 'rebook', 'email', ${"wd-" + tag}, 'x', 'ready_to_approve')`,
+    updateSet: sql`body = 'hijacked'`,
+    update: "zero-rows",
+    del: "permission-denied",
+  },
+  {
+    table: "integration_events",
+    insert: (t, tag) => sql`INSERT INTO integration_events (tenant_id, idempotency_key, type, source, status) VALUES (${t}, ${"wd-" + tag}, 'integration.x', 'x', 'done')`,
+    updateSet: sql`status = 'dead'`,
+    update: "zero-rows", // 0028: UPDATE is granted on status/lease columns only; RLS still hides B's rows
+    del: "permission-denied",
+    moveDenied: "permission-denied", // tenant_id has no UPDATE grant at all
+  },
+  {
+    table: "dead_letters",
+    insert: (t, tag) => sql`INSERT INTO dead_letters (tenant_id, event_key, type, source, integration, error, attempts) VALUES (${t}, ${"wd-" + tag}, 'integration.x', 'x', 'x', 'boom', 1)`,
+    updateSet: sql`error = 'hijacked'`,
+    update: "zero-rows",
+    del: "permission-denied",
+  },
+  {
+    table: "integration_breakers",
+    insert: (t, tag) => sql`INSERT INTO integration_breakers (tenant_id, name, state) VALUES (${t}, ${"wd-" + tag}, 'closed')`,
+    updateSet: sql`state = 'open'`,
+    update: "zero-rows",
+    del: "permission-denied",
+  },
+  {
+    table: "pilot_metrics",
+    insert: (t) => sql`INSERT INTO pilot_metrics (tenant_id) VALUES (${t})`,
+    updateSet: sql`bookings_recovered = 999`,
+    update: "zero-rows",
+    del: "permission-denied",
+    onePerTenant: true, // UNIQUE (tenant_id) in 0023
+  },
+];
+
+/** Runs a write as tenant A and reports how it was denied: rows affected, or the Postgres error text. */
+async function attemptAsA(q: ReturnType<typeof sql>): Promise<{ rows: number } | { error: string }> {
+  return withTenant(A, async (tx) => (await tx.execute(q)).rowCount ?? 0).then(
+    (rows) => ({ rows }),
+    (e: { message: string; cause?: { message: string } }) => ({ error: e.cause?.message ?? e.message }),
+  );
+}
+
+describe("cross-tenant write denial on the 0020–0023 tables", () => {
+  it("covers exactly the eight tables added by migrations 0020–0023 (none left untested)", () => {
+    const tracked = WRITE_SPECS.map((s) => s.table).sort();
+    expect(tracked).toEqual(
+      [
+        "appointments",
+        "bookable_resources",
+        "dead_letters",
+        "integration_breakers",
+        "integration_events",
+        "pilot_metrics",
+        "response_templates",
+        "service_menu_items",
+      ].sort(),
+    );
+    const discovered = new Set(tenantTables.map((t) => t.table));
+    for (const s of WRITE_SPECS) expect(discovered.has(s.table), s.table).toBe(true);
+  });
+
+  describe.each(WRITE_SPECS)("$table", (spec) => {
+    const T = sql.identifier(spec.table);
+
+    it("rejects an INSERT carrying tenant B's id (WITH CHECK)", async () => {
+      await expectPgError(withTenant(A, (tx) => tx.execute(spec.insert(B, "ins-b"))), /row-level security/);
+    });
+
+    it("accepts the same INSERT shape for tenant A (so the rejection above is the policy, not a bad statement)", async () => {
+      if (spec.onePerTenant) {
+        // Tenant A already has its single row: reaching the unique key proves the row passed the RLS check.
+        await expectPgError(withTenant(A, (tx) => tx.execute(spec.insert(A, "ins-a"))), /duplicate key|unique/);
+        return;
+      }
+      // Rolled back via a thrown sentinel: this must not change the seeded row counts other tests rely on.
+      const sentinel = new Error("rollback");
+      await expect(
+        withTenant(A, async (tx) => {
+          const r = await tx.execute(spec.insert(A, "ins-a"));
+          expect(r.rowCount).toBe(1);
+          throw sentinel;
+        }),
+      ).rejects.toBe(sentinel);
+    });
+
+    it(`UPDATE of tenant B's rows is denied (${spec.update})`, async () => {
+      const res = await attemptAsA(sql`UPDATE ${T} SET ${spec.updateSet} WHERE tenant_id = ${B}`);
+      if (spec.update === "zero-rows") expect(res).toEqual({ rows: 0 });
+      else expect("error" in res && res.error).toMatch(/permission denied/);
+    });
+
+    it(`DELETE of tenant B's rows is denied (${spec.del})`, async () => {
+      const res = await attemptAsA(sql`DELETE FROM ${T} WHERE tenant_id = ${B}`);
+      if (spec.del === "zero-rows") expect(res).toEqual({ rows: 0 });
+      else expect("error" in res && res.error).toMatch(/permission denied/);
+    });
+
+    it("an UPDATE that moves tenant A's row into tenant B is rejected", async () => {
+      const res = await attemptAsA(sql`UPDATE ${T} SET tenant_id = ${B} WHERE tenant_id = ${A}`);
+      expect("error" in res, `${spec.table} accepted moving a row into another tenant`).toBe(true);
+      const msg = "error" in res ? res.error : "";
+      // Tables with no UPDATE grant stop at the privilege check; the rest at the RLS WITH CHECK.
+      expect(msg).toMatch((spec.moveDenied ?? spec.update) === "permission-denied" ? /permission denied/ : /row-level security/);
+    });
+
+    it("tenant B's rows are untouched afterwards", async () => {
+      const asB = await withTenant(B, async (tx) => (await tx.execute(sql`SELECT count(*)::int AS n FROM ${T}`)).rows as { n: number }[]);
+      expect(asB[0]?.n ?? 0, `${spec.table}: tenant B should still see its seeded row`).toBeGreaterThanOrEqual(1);
+      const asA = await withTenant(A, async (tx) => (await tx.execute(sql`SELECT count(*)::int AS n FROM ${T} WHERE tenant_id = ${B}`)).rows as { n: number }[]);
+      expect(asA[0]?.n ?? -1).toBe(0);
+    });
+  });
+
+  it("appointments: a composite foreign key to tenant B's service or resource is rejected", async () => {
+    const bService = (await withTenant(B, async (tx) => (await tx.execute(sql`SELECT id FROM service_menu_items LIMIT 1`)).rows[0])) as { id: string };
+    const bResource = (await withTenant(B, async (tx) => (await tx.execute(sql`SELECT id FROM bookable_resources LIMIT 1`)).rows[0])) as { id: string };
+    // Inserting an A appointment that points at B's parent row cannot satisfy (tenant_id, service_id) -> (tenant_id, id).
+    await expectPgError(
+      withTenant(A, (tx) =>
+        tx.execute(sql`INSERT INTO appointments (tenant_id, service_id, starts_at, ends_at, status)
+                       VALUES (${A}, ${bService.id}, ${soon}, now() + interval '2 days', 'booked')`),
+      ),
+      /foreign key/,
+    );
+    await expectPgError(
+      withTenant(A, (tx) =>
+        tx.execute(sql`INSERT INTO appointments (tenant_id, resource_id, starts_at, ends_at, status)
+                       VALUES (${A}, ${bResource.id}, ${soon}, now() + interval '2 days', 'booked')`),
+      ),
+      /foreign key/,
+    );
+  });
+});

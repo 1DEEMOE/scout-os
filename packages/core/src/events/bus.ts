@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { scrubPii } from "../logger";
 import { BreakerOpenError, integrations, type SharedBreaker } from "./breaker";
 
@@ -65,10 +66,42 @@ export interface DeadLetter {
   attempts: number;
 }
 
+/**
+ * Outcome of asking to run an event's effect.
+ *  - claimed:   this caller holds the lease and must run the effect;
+ *  - completed: the event already finished (done, skipped or dead);
+ *  - busy:      another caller holds a live lease on it right now.
+ */
+export type ClaimResult = "claimed" | "completed" | "busy";
+
+export interface ClaimRequest {
+  tenantId: string;
+  key: string;
+  type: string;
+  source: string;
+  /** Random per run. Only the owner can finish the claim it holds. */
+  owner: string;
+  /** How long the lease lasts. After it passes, another caller may take over. */
+  leaseMs: number;
+}
+
 export interface EventJournal {
   has(tenantId: string, key: string): Promise<boolean>;
   put(entry: JournalEntry): Promise<"inserted" | "duplicate">;
   dead(entry: DeadLetter): Promise<void>;
+  /**
+   * Optional. Journals shared across processes implement it so two workers
+   * (or a redelivered job, or a replay) cannot run the same effect at once.
+   * The claim is one atomic statement in the store, not in-process state.
+   */
+  claim?(req: ClaimRequest): Promise<ClaimResult>;
+  /**
+   * Optional, paired with claim. Ends the claim the owner holds: 'done' records
+   * the event as applied, 'failed' makes the key claimable again. False means the
+   * lease was lost (it expired and someone else took over), so the caller must
+   * not treat its result as the recorded one.
+   */
+  finish?(input: { tenantId: string; key: string; owner: string; outcome: "done" | "failed"; attempt: number }): Promise<boolean>;
 }
 
 export class MemoryJournal implements EventJournal {
@@ -91,7 +124,8 @@ export class MemoryJournal implements EventJournal {
   }
 }
 
-export type EventStatus = "done" | "duplicate" | "skipped" | "dead" | "degraded" | "rejected";
+/** "busy": another process is running this event now. It is neither done nor failed; try again later. */
+export type EventStatus = "done" | "duplicate" | "skipped" | "dead" | "degraded" | "rejected" | "busy";
 
 export interface EventResult {
   status: EventStatus;
@@ -129,6 +163,12 @@ export async function runEvent(
     sleep?: (ms: number) => Promise<void>;
     breaker?: SharedBreaker;
     timeoutMs?: number;
+    /**
+     * With a claiming journal, an event that already completed is normally dropped.
+     * Set this when the caller must still run the effect to read its result back
+     * (the provider dedupes by key). The effect then runs without taking a lease.
+     */
+    rereadCompleted?: boolean;
   },
 ): Promise<EventResult> {
   const id = `${event.tenantId}:${event.idempotencyKey}`;
@@ -148,6 +188,12 @@ async function runEventInner(
     sleep?: (ms: number) => Promise<void>;
     breaker?: SharedBreaker;
     timeoutMs?: number;
+    /**
+     * With a claiming journal, an event that already completed is normally dropped.
+     * Set this when the caller must still run the effect to read its result back
+     * (the provider dedupes by key). The effect then runs without taking a lease.
+     */
+    rereadCompleted?: boolean;
   },
 ): Promise<EventResult> {
   const started = Date.now();
@@ -168,24 +214,66 @@ async function runEventInner(
   const maxAttempts = deps.maxAttempts ?? 3;
   const sleep = deps.sleep ?? ((ms) => new Promise((r) => setTimeout(r, ms)));
   const breaker = deps.breaker ?? defaultBreaker;
+  const timeoutMs = deps.timeoutMs ?? 8_000;
+
+  // Claim before the effect. The in-process maps above only stop duplicates inside one
+  // process; the claim is an atomic write in the shared store, so a second worker, a
+  // redelivered job or a replay cannot start the same effect while this one runs.
+  const owner = randomUUID();
+  let leased = false;
+  let rereadOnly = false;
+  if (deps.journal.claim) {
+    // Longest this run can legitimately take: every attempt at its time cap plus the longest backoff.
+    const leaseMs = maxAttempts * (timeoutMs + 30_000);
+    const claim = await deps.journal.claim({ tenantId: event.tenantId, key: event.idempotencyKey, type: event.type, source: event.source, owner, leaseMs });
+    if (claim === "busy") {
+      logOp({ message: "event busy", tenantId: event.tenantId, tool: event.type, input: event.idempotencyKey, outcome: "degraded", failure: "in_progress_elsewhere", durationMs: Date.now() - started, recovery: "retry_later" });
+      return { status: "busy", reason: "in_progress" };
+    }
+    if (claim === "completed") {
+      if (!deps.rereadCompleted) return { status: "duplicate" };
+      rereadOnly = true;
+    } else {
+      leased = true;
+    }
+  }
+  /** Gives the key back so it can be claimed again. Not used after a timeout: the effect may still be running. */
+  let released = false;
+  const release = async (attempt: number) => {
+    if (!leased || released || !deps.journal.finish) return;
+    released = true;
+    await deps.journal.finish({ tenantId: event.tenantId, key: event.idempotencyKey, owner, outcome: "failed", attempt });
+  };
+
   let lastError = "unknown";
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
-      const act = () => withTimeout((signal) => handler.act(event, effectContext(event.tenantId, event.idempotencyKey, signal)), deps.timeoutMs ?? 8_000);
+      const act = () => withTimeout((signal) => handler.act(event, effectContext(event.tenantId, event.idempotencyKey, signal)), timeoutMs);
       const result = event.integration ? await breaker.run(event.integration, act, Date.now(), event.tenantId) : await act();
       if (handler.verify && !handler.verify(event, result)) throw new Error("verify_failed");
-      const wrote = await deps.journal.put({ tenantId: event.tenantId, key: event.idempotencyKey, type: event.type, source: event.source, attempt, status: "done" });
+      let wrote: "inserted" | "duplicate";
+      if (leased && deps.journal.finish) {
+        const kept = await deps.journal.finish({ tenantId: event.tenantId, key: event.idempotencyKey, owner, outcome: "done", attempt });
+        released = true;
+        wrote = kept ? "inserted" : "duplicate"; // false: the lease ran out and another worker took the key
+      } else if (rereadOnly) {
+        wrote = "duplicate"; // already recorded by an earlier run; this one only read the result back
+      } else {
+        wrote = await deps.journal.put({ tenantId: event.tenantId, key: event.idempotencyKey, type: event.type, source: event.source, attempt, status: "done" });
+      }
       if (wrote === "duplicate") return { status: "duplicate" };
       logOp({ message: "event done", tenantId: event.tenantId, tool: event.type, input: event.idempotencyKey, outcome: "success", output: "verified", durationMs: Date.now() - started, recovery: attempt > 1 ? `attempt ${attempt}` : undefined });
       return { status: "done", attempt, result };
     } catch (err) {
       lastError = safeErrorText(err);
       if (err instanceof BreakerOpenError) {
+        await release(attempt); // the effect never started
         await deps.journal.dead({ tenantId: event.tenantId, key: event.idempotencyKey, type: event.type, source: event.source, integration: event.integration, error: "breaker_open", attempts: attempt });
         logOp({ message: "event degraded", tenantId: event.tenantId, tool: event.type, input: event.idempotencyKey, outcome: "degraded", failure: "breaker_open", durationMs: Date.now() - started, recovery: "dead_letter" });
         return { status: "degraded", reason: "breaker_open", attempt };
       }
-      // A timeout means the effect may still be finishing. Do not start another attempt.
+      // A timeout means the effect may still be finishing. Do not start another attempt,
+      // and keep the lease: a replay is refused until it expires, so it cannot overlap.
       if (isTimeout(err)) {
         await deps.journal.dead({ tenantId: event.tenantId, key: event.idempotencyKey, type: event.type, source: event.source, integration: event.integration, error: "timeout", attempts: attempt });
         logOp({ message: "event timed out", tenantId: event.tenantId, tool: event.type, input: event.idempotencyKey, outcome: "error", failure: "timeout", durationMs: Date.now() - started, recovery: "dead_letter" });
@@ -194,6 +282,7 @@ async function runEventInner(
       if (attempt < maxAttempts) await sleep(backoffMs(attempt));
     }
   }
+  await release(maxAttempts);
   await deps.journal.dead({ tenantId: event.tenantId, key: event.idempotencyKey, type: event.type, source: event.source, integration: event.integration, error: lastError, attempts: maxAttempts });
   logOp({ message: "event dead", tenantId: event.tenantId, tool: event.type, input: event.idempotencyKey, outcome: "error", failure: lastError, durationMs: Date.now() - started, recovery: "dead_letter" });
   return { status: "dead", reason: lastError, attempt: maxAttempts };
