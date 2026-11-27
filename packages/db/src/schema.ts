@@ -5,6 +5,10 @@ import { bigint, bigserial, boolean, date, doublePrecision, integer, jsonb, nume
 
 const ts = (name: string) => timestamp(name, { withTimezone: true, mode: "date" });
 
+// Industry pack ids, mirroring migrations/0021_industry_packs_and_speed.sql and
+// packages/core/src/industries/overlays.ts. The pack-ids test fails on drift.
+const PACK_IDS: [string, ...string[]] = ["auto_detail", "auto_glass", "auto_repair", "bakery", "barber", "body_shop", "bookkeeping_firm", "cafe", "catering", "childcare", "construction", "consulting", "counseling", "dental", "dog_grooming", "duct_cleaning", "ecommerce", "electrical", "esthetics", "event_planner", "flooring", "garage_door", "general", "hair_salon", "handyman", "house_cleaning", "hvac", "junk_removal", "landscaping", "lash_brow", "law_office", "locksmith", "med_spa", "moving", "music_lessons", "nail_salon", "painting", "personal_training", "pest_control", "pet_boarding", "pet_sitting", "photographer", "plumbing", "pressure_washing", "real_estate", "restaurant", "retail_shop", "roofing", "startup_agency", "startup_dtc", "startup_saas", "tax_prep", "tire_shop", "towing", "tree_service", "tutoring", "venue", "veterinary", "wellness_studio", "yoga_studio"];
+
 export const users = pgTable("users", {
   id: text("id").primaryKey(),
   name: text("name").notNull(),
@@ -23,8 +27,10 @@ export const organizations = pgTable("organizations", {
   monthlyAiBudgetMicros: bigint("monthly_ai_budget_micros", { mode: "number" }).notNull().default(5_000_000),
   agentsPausedAt: ts("agents_paused_at"),
   agentsPausedBy: text("agents_paused_by"),
-  /** Wizard industry preset: roofing | general. */
-  industry: text("industry", { enum: ["roofing", "general"] }),
+  /** Industry pack id (migration 0021). Keep in sync with packages/core/src/industries/overlays.ts — enforced by packages/db/test/pack-ids.test.ts. */
+  industry: text("industry", { enum: PACK_IDS }),
+  /** Operator-chosen accent (migration 0020). NULL = product default. */
+  brandAccent: text("brand_accent"),
   timezone: text("timezone"),
   onboardingCompletedAt: ts("onboarding_completed_at"),
   onboardingStep: text("onboarding_step"),
@@ -408,7 +414,7 @@ export const chatDelegations = pgTable("chat_delegations", {
   createdAt: ts("created_at").notNull().defaultNow(),
 });
 
-// ---------- Scout OS: entitlements ----------
+// ---------- Ascend Software: entitlements ----------
 
 export const usageCounters = pgTable(
   "usage_counters",
@@ -422,7 +428,7 @@ export const usageCounters = pgTable(
   (t) => [primaryKey({ columns: [t.tenantId, t.metric, t.period] })],
 );
 
-// ---------- Scout OS: lead intelligence (migration 0011) ----------
+// ---------- Ascend Software: lead intelligence (migration 0011) ----------
 
 export const OPPORTUNITY_STAGES = ["prospect", "engaged", "qualified", "opportunity", "disqualified"] as const;
 export type OpportunityStage = (typeof OPPORTUNITY_STAGES)[number];
@@ -617,6 +623,8 @@ export const routines = pgTable("routines", {
   status: text("status", { enum: ["active", "paused"] }).notNull().default("active"),
   nextRunAt: ts("next_run_at"),
   lastRunAt: ts("last_run_at"),
+  /** Briefing sections this routine includes (migration 0020). NULL = all. DB CHECK requires pending_approvals when set. */
+  watchTopics: text("watch_topics").array(),
   createdBy: text("created_by").notNull(),
   updatedBy: text("updated_by").notNull(),
   createdAt: ts("created_at").notNull().defaultNow(),
@@ -819,4 +827,92 @@ export const incomingDocuments = pgTable("incoming_documents", {
   createdBy: text("created_by").notNull(),
   createdAt: ts("created_at").notNull().defaultNow(),
   resolvedAt: ts("resolved_at"),
+});
+
+// ---- Adopted proposed migrations (0020–0023); see docs/plans/migration-review-0020-0023.md ----
+
+export const serviceMenuItems = pgTable("service_menu_items", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  tenantId: uuid("tenant_id").notNull(),
+  packServiceId: text("pack_service_id").notNull(),
+  label: text("label").notNull(),
+  durationMinutes: integer("duration_minutes"),
+  priceCents: integer("price_cents"),
+  priceIsExample: boolean("price_is_example").notNull().default(true),
+  createdAt: ts("created_at").notNull().defaultNow(),
+});
+
+export const bookableResources = pgTable("bookable_resources", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  tenantId: uuid("tenant_id").notNull(),
+  name: text("name").notNull(),
+  kind: text("kind", { enum: ["staff", "chair", "bay"] }).notNull(),
+  createdAt: ts("created_at").notNull().defaultNow(),
+});
+
+export const appointments = pgTable("appointments", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  tenantId: uuid("tenant_id").notNull(),
+  serviceId: uuid("service_id"),
+  resourceId: uuid("resource_id"),
+  startsAt: ts("starts_at").notNull(),
+  endsAt: ts("ends_at").notNull(),
+  status: text("status", { enum: ["booked", "completed", "no_show", "late_cancel", "cancelled"] }).notNull(),
+  createdAt: ts("created_at").notNull().defaultNow(),
+});
+
+export const responseTemplates = pgTable("response_templates", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  tenantId: uuid("tenant_id").notNull(),
+  purpose: text("purpose", { enum: ["first_response", "rebook", "no_show", "late_cancel", "review"] }).notNull(),
+  channel: text("channel", { enum: ["email", "sms"] }).notNull(),
+  name: text("name").notNull(),
+  body: text("body").notNull(),
+  status: text("status", { enum: ["ready_to_approve", "approved"] }).notNull(),
+  approvedBy: text("approved_by"),
+  approvedAt: ts("approved_at"),
+  createdAt: ts("created_at").notNull().defaultNow(),
+});
+
+export const integrationEvents = pgTable("integration_events", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  tenantId: uuid("tenant_id").notNull(),
+  idempotencyKey: text("idempotency_key").notNull(),
+  type: text("type").notNull(),
+  source: text("source").notNull(),
+  status: text("status", { enum: ["done", "skipped", "dead"] }).notNull(),
+  createdAt: ts("created_at").notNull().defaultNow(),
+});
+
+export const deadLetters = pgTable("dead_letters", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  tenantId: uuid("tenant_id").notNull(),
+  eventKey: text("event_key").notNull(),
+  type: text("type").notNull(),
+  source: text("source").notNull(),
+  integration: text("integration").notNull().default(""),
+  error: text("error").notNull(),
+  attempts: integer("attempts").notNull(),
+  replayedAt: ts("replayed_at"),
+  createdAt: ts("created_at").notNull().defaultNow(),
+});
+
+export const integrationBreakers = pgTable("integration_breakers", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  tenantId: uuid("tenant_id").notNull(),
+  name: text("name").notNull(),
+  state: text("state", { enum: ["closed", "open", "half_open"] }).notNull(),
+  failures: integer("failures").notNull().default(0),
+  openUntil: ts("open_until"),
+  updatedAt: ts("updated_at").notNull().defaultNow(),
+});
+
+export const pilotMetrics = pgTable("pilot_metrics", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  tenantId: uuid("tenant_id").notNull(),
+  setupStartedAt: ts("setup_started_at"),
+  setupFinishedAt: ts("setup_finished_at"),
+  firstReplyApprovedAt: ts("first_reply_approved_at"),
+  bookingsRecovered: integer("bookings_recovered").notNull().default(0),
+  updatedAt: ts("updated_at").notNull().defaultNow(),
 });

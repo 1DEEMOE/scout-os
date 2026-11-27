@@ -19,6 +19,7 @@ export const AGENT_PRESETS: AgentSpec[] = [
       { name: "inbox.send_draft", maxTier: 2 },
       { name: "memory.note", maxTier: 1 },
       { name: "memory.propose_fact", maxTier: 2 },
+      { name: "task.continue", maxTier: 1 },
     ],
   },
   {
@@ -36,6 +37,7 @@ export const AGENT_PRESETS: AgentSpec[] = [
       { name: "inbox.create_draft", maxTier: 1 },
       { name: "memory.note", maxTier: 1 },
       { name: "memory.propose_fact", maxTier: 2 },
+      { name: "task.continue", maxTier: 1 },
     ],
   },
   {
@@ -51,6 +53,7 @@ export const AGENT_PRESETS: AgentSpec[] = [
       { name: "finance.update_payment_destination", maxTier: 3 },
       { name: "finance.request_payment_with_new_destination", maxTier: 3 },
       { name: "memory.note", maxTier: 1 },
+      { name: "task.continue", maxTier: 1 },
     ],
   },
 ];

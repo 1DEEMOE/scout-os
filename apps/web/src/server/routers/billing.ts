@@ -12,8 +12,8 @@ export const billingRouter = router({
   setBudget: protectedProcedure
     .input(z.object({ orgId, budgetCents: z.coerce.number().int().min(0).max(1_000_000) }))
     .mutation(({ ctx, input }) => setMonthlyBudget({ actorUserId: ctx.userId, ...input })),
-  checkout: protectedProcedure.input(z.object({ orgId })).mutation(async ({ ctx, input }) => {
+  checkout: protectedProcedure.input(z.object({ orgId, plan: z.string().regex(/^[a-z_]+$/).max(40).optional() })).mutation(async ({ ctx, input }) => {
     const base = process.env.BETTER_AUTH_URL ?? `https://${(await headers()).get("host")}`;
-    return createCheckout({ actorUserId: ctx.userId, orgId: input.orgId, returnUrl: `${base}/orgs/${input.orgId}/billing` });
+    return createCheckout({ actorUserId: ctx.userId, orgId: input.orgId, plan: input.plan, returnUrl: `${base}/orgs/${input.orgId}/billing` });
   }),
 });

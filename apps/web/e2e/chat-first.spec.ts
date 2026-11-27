@@ -33,7 +33,7 @@ async function expectAccessible(page: Page, where: string) {
 
 const base = () => `/orgs/${seed.orgId}`;
 
-test.describe("chat-first Scout OS", () => {
+test.describe("chat-first Ascend Software", () => {
   test("Today is a conversation: briefing as a message, approvals inline, a composer that starts a thread", async ({ page }) => {
     test.setTimeout(120_000);
     const errors: string[] = [];

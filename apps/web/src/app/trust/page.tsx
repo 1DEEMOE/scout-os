@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 
-export const metadata: Metadata = { title: "How Scout OS handles trust" };
+export const metadata: Metadata = { title: "How Ascend Software handles trust" };
 
 const card = "flex flex-col gap-4 rounded-[var(--radius-card)] border border-line bg-surface p-7 sm:p-8";
 
@@ -11,7 +11,7 @@ export default function TrustPage() {
   return (
     <div className="mx-auto flex max-w-2xl flex-col gap-12 px-6 py-16">
       <header className="flex flex-col gap-4">
-        <p className="text-muted">Scout OS</p>
+        <p className="text-muted">Ascend Software</p>
         <h1 className="text-display font-semibold">How decisions are kept</h1>
         <p className="text-lg leading-relaxed text-muted">
           This page describes how the product is built. It is not a customer list, not a security certification, and not a promise about any particular business.

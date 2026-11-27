@@ -1,4 +1,4 @@
-import { getOnboardingState, listPacks } from "@wos/core";
+import { getOnboardingState, hasElitePack, listPacks } from "@wos/core";
 import { redirect } from "next/navigation";
 import { orgContext } from "@/server/org-context";
 import { PageTitle } from "../../../ui";
@@ -24,12 +24,12 @@ export default async function SetupPage({
   return (
     <div className="mx-auto flex w-full max-w-2xl flex-col gap-6">
       <PageTitle sub="About five minutes. Approvals, consent and pause-all stay exactly as they are — this just gets you to a useful Morning Briefing faster.">
-        Set up Scout OS
+        Set up Ascend Software
       </PageTitle>
       {!isManager ? (
         <p className="text-sm text-muted">Ask an owner or admin to finish setup. You can still browse the checklist on the overview.</p>
       ) : (
-        <SetupWizard orgId={orgId} initial={state} packs={listPacks().map((p) => ({ id: p.id, label: p.label, group: p.group, summary: p.summary }))} />
+        <SetupWizard orgId={orgId} initial={state} packs={listPacks().map((p) => ({ id: p.id, label: p.label, group: p.group, summary: p.summary, elite: hasElitePack(p.id) }))} />
       )}
     </div>
   );

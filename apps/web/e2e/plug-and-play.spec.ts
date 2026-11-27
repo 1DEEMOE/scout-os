@@ -166,7 +166,7 @@ test("nothing to install: a web app manifest and icons for the home screen; help
   const m = await request.get("/manifest.webmanifest");
   expect(m.status()).toBe(200);
   const manifest = (await m.json()) as { name: string; display: string; start_url: string; icons: { src: string; sizes: string; purpose?: string }[] };
-  expect(manifest.name).toBe("Scout OS");
+  expect(manifest.name).toBe("Ascend Software");
   expect(manifest.display).toBe("standalone");
   expect(manifest.start_url).toBe("/orgs");
   for (const size of ["192x192", "512x512"]) expect(manifest.icons.some((i) => i.sizes === size)).toBe(true);

@@ -20,6 +20,8 @@ export interface ModelRequest {
   system: string;
   messages: ModelMessage[];
   tools?: ModelToolSpec[];
+  /** Provider-side tools (e.g. Anthropic web_search), passed through untouched. */
+  serverTools?: unknown[];
   maxTokens?: number;
   model?: string;
   /** For metering. */
@@ -133,16 +135,19 @@ export class AnthropicProvider implements ModelProvider {
 
   async complete(req: ModelRequest): Promise<ModelResponse> {
     const model = req.model ?? this.defaultModel;
+    const clientTools = (req.tools ?? []).map((t) => ({
+      name: t.name,
+      description: t.description,
+      input_schema: t.inputSchema as Anthropic.Tool.InputSchema,
+    }));
+    const serverTools = (req.serverTools ?? []) as Anthropic.ToolUnion[];
+    const tools = [...clientTools, ...serverTools];
     const res = await this.client.messages.create({
       model,
       max_tokens: req.maxTokens ?? 1024,
       system: req.system,
       messages: req.messages,
-      tools: req.tools?.map((t) => ({
-        name: t.name,
-        description: t.description,
-        input_schema: t.inputSchema as Anthropic.Tool.InputSchema,
-      })),
+      tools: tools.length ? tools : undefined,
     });
     const text = res.content.flatMap((b) => (b.type === "text" ? [b.text] : [])).join("");
     const toolCalls = res.content.flatMap((b) => (b.type === "tool_use" ? [{ name: b.name, input: b.input }] : []));

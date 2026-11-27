@@ -52,7 +52,7 @@ import {
   ToolRegistry,
   undoPracticeMemory,
   withinQuietHours,
-  auditJournal,
+  activeJournal,
   listDeadLetters,
 } from "../src/index";
 import { rememberMockRetry, resetMockRetries, runMockRetry } from "../src/events/retry";
@@ -266,7 +266,7 @@ describe("pending effect lock and mock replay", () => {
     resetAppliedEffects();
     resetMockRetries();
     registerIntegrationHandlers();
-    setIntegrationJournal(auditJournal());
+    setIntegrationJournal(activeJournal());
   });
   afterAll(async () => {
     await stopBoss();
@@ -301,7 +301,7 @@ describe("pending effect lock and mock replay", () => {
       tenantId: orgId,
       integration: "payments",
       idempotencyKey: "pay-1",
-      journal: auditJournal(),
+      journal: activeJournal(),
       mock: true,
       retry: async () => {
         tries++;
@@ -311,11 +311,11 @@ describe("pending effect lock and mock replay", () => {
     })).rejects.toThrow(/mock down/);
     const [letter] = await listDeadLetters({ actorUserId: "owner", orgId });
     expect(letter?.type).toBe("integration.payments");
-    const replayed = await replayDeadLetter({ actorUserId: "owner", orgId, auditId: letter!.id });
+    const replayed = await replayDeadLetter({ actorUserId: "owner", orgId, deadLetterId: letter!.id });
     expect(replayed.status).toBe("done");
     expect(replayed.result).toMatchObject({ retried: true, mock: true });
     expect(tries).toBe(1);
-    const again = await replayDeadLetter({ actorUserId: "owner", orgId, auditId: letter!.id });
+    const again = await replayDeadLetter({ actorUserId: "owner", orgId, deadLetterId: letter!.id });
     expect(again.status === "done" || again.status === "duplicate").toBe(true);
     expect(tries).toBe(1);
   });
@@ -335,7 +335,7 @@ describe("pending effect lock and mock replay", () => {
       integration: "payments",
       idempotencyKey: "pay-live",
       mock: false,
-      journal: auditJournal(),
+      journal: activeJournal(),
       retry: async () => {
         calls++;
         return { externalId: "live-invoice", mock: true };
@@ -345,7 +345,7 @@ describe("pending effect lock and mock replay", () => {
       },
     })).rejects.toThrow(/live down/);
     const [letter] = await listDeadLetters({ actorUserId: "owner", orgId });
-    const replayed = await replayDeadLetter({ actorUserId: "owner", orgId, auditId: letter!.id });
+    const replayed = await replayDeadLetter({ actorUserId: "owner", orgId, deadLetterId: letter!.id });
     expect(calls).toBe(0);
     expect(replayed.status).toBe("done");
     expect(replayed.result).not.toMatchObject({ mock: true });

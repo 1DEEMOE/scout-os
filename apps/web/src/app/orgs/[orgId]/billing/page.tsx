@@ -1,4 +1,4 @@
-import { getSubscription, listAgents, planSummary, usageSummary, type Metric } from "@wos/core";
+import { getSubscription, listAgents, planSummary, pricingCards, usageSummary, type Metric } from "@wos/core";
 import { orgContext } from "@/server/org-context";
 import { ActionButton, ActionForm } from "../../../actions";
 import { Badge, Card, Empty, inputCls, PageTitle, When } from "../../../ui";
@@ -27,6 +27,37 @@ function Allowance({ label, used, limit }: { label: string; used: number; limit:
           <div className={`h-full ${pct >= 90 ? "bg-danger" : "bg-accent"}`} style={{ width: `${pct}%` }} />
         </dd>
       )}
+    </div>
+  );
+}
+
+/** Per-plan checkout for owners. Online-purchasable plans only; otherwise the honest fallback. */
+function PlanPicker({ orgId }: { orgId: string }) {
+  const cards = pricingCards().filter((c) => c.purchasable);
+  if (cards.length === 0) {
+    // Legacy single-price configuration still works; nothing at all configured says so.
+    if (process.env.STRIPE_PRICE_ID && process.env.STRIPE_SECRET_KEY) {
+      return (
+        <div className="mt-3 flex flex-col gap-2">
+          <ActionButton path="billing.checkout" input={{ orgId }} label="Subscribe with Stripe" variant="primary" />
+          <p className="text-xs text-muted">Plans and prices are published on the <a className="underline" href="/pricing">pricing page</a>.</p>
+        </div>
+      );
+    }
+    return <p className="mt-3 text-sm text-muted">Online checkout isn&apos;t configured on this server yet. Contact the team that runs this site to start a plan.</p>;
+  }
+  return (
+    <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+      {cards.map((c) => (
+        <div key={c.plan.id} className="flex flex-col gap-2 rounded-md border border-line p-4">
+          <div className="flex items-baseline justify-between">
+            <span className="font-medium">{c.plan.label}</span>
+            {c.display && <span className="text-sm">{c.display.price}<span className="text-muted">{c.display.period}</span></span>}
+          </div>
+          {c.plan.trialDays > 0 && <span className="text-xs text-accent">Includes a {c.plan.trialDays}-day free trial</span>}
+          <ActionButton path="billing.checkout" input={{ orgId, plan: c.plan.id }} label={`Choose ${c.plan.label}`} variant="primary" />
+        </div>
+      ))}
     </div>
   );
 }
@@ -89,11 +120,14 @@ export default async function BillingPage({ params, searchParams }: { params: Pr
           <p className="mb-3 text-sm text-muted">Scout lead intelligence is part of the Scout Pro and Enterprise plans.</p>
         )}
         {sub ? (
-          <p className="text-sm">Subscription <Badge tone={sub.status === "active" ? "accent" : "warn"}>{sub.status}</Badge> renews <When date={sub.currentPeriodEnd} /></p>
+          <>
+            <p className="text-sm">Subscription <Badge tone={sub.status === "active" ? "accent" : "warn"}>{sub.status}</Badge> renews <When date={sub.currentPeriodEnd} /></p>
+            <p className="mt-2 text-xs text-muted">To change plans, contact the team that runs this site — starting a second checkout would bill twice.</p>
+          </>
         ) : (
           <>
             <Empty>No subscription yet.</Empty>
-            {isOwner && <div className="mt-3"><ActionButton path="billing.checkout" input={{ orgId }} label="Subscribe with Stripe" variant="primary" /></div>}
+            {isOwner && <PlanPicker orgId={orgId} />}
           </>
         )}
       </Card>

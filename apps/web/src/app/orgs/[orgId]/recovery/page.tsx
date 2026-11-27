@@ -27,7 +27,7 @@ export default async function RecoveryPage({ params }: { params: Promise<{ orgId
                 <p className="font-medium">{row.type || "event"}{row.integration ? ` · ${row.integration}` : ""}</p>
                 <p className="text-sm text-muted">{row.error || "failed"} · {row.attempts} tries · {row.source}</p>
               </div>
-              <ReplayButton orgId={orgId} auditId={row.id} />
+              <ReplayButton orgId={orgId} deadLetterId={row.id} />
             </li>
           ))}
         </ul>

@@ -13,6 +13,8 @@ export interface ShellData {
   isManager: boolean;
   isViewer: boolean;
   hasScout: boolean;
+  /** True when the org's industry has an elite pack, unlocking the jobs workspace + dispatch board. */
+  hasEliteJobs: boolean;
   waiting: number;
   teammates: { id: string; name: string; active: boolean }[];
   routines: { id: string; name: string; kind: string }[];
@@ -75,6 +77,20 @@ export function moreGroups(d: ShellData): NavGroup[] {
     { href: "/routines", label: d.routines.length ? "All routines" : "Set up a routine", exact: true, keywords: "schedule automation briefing" },
   ];
   return [
+    ...(d.hasEliteJobs
+      ? [
+          {
+            id: "field-ops",
+            title: "Jobs & dispatch",
+            icon: "jobs" as IconName,
+            items: [
+              { href: "/jobs", label: "Jobs", keywords: "estimates quotes work orders pipeline" },
+              { href: "/jobs/new", label: "New job", keywords: "intake estimate quote customer" },
+              { href: "/dispatch", label: "Dispatch", keywords: "crew schedule assign day board" },
+            ],
+          },
+        ]
+      : []),
     {
       id: "teammates",
       title: "Teammates & routines",

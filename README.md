@@ -1,8 +1,8 @@
-# Scout OS
+# Ascend Software
 
 Multi-tenant SaaS where small businesses hire AI employees (Scout, Inbox, Pipeline, Billing, Analyst, Coordinator) that find opportunities and run operations with human approval gates.
 
-**Customer-facing name:** Scout OS. Internal package names, env vars, and DB roles still use `@wos/*` / `WOS_*` / `wos_*` so existing installs and provider metadata stay intact. A trademark clearance search for "Scout OS" (classes 9 and 42) is still required before public use — see `docs/research/ip-flags.md`.
+**Customer-facing name:** Ascend Software. Internal package names, env vars, and DB roles still use `@wos/*` / `WOS_*` / `wos_*` so existing installs and provider metadata stay intact. A trademark clearance search for "Ascend Software" (classes 9 and 42) is still required before public use — see `docs/research/ip-flags.md`.
 
 **Status:** Phases 0–8 built and verified on synthetic data; Phase 9 adversarial testing in progress. Not deployed. Integrations with Gmail, HubSpot, Stripe and the AI model are built but **not yet verified against live accounts**; see `docs/plans/readiness-report.md` and `docs/plans/live-integration-runbook.md`. Clean-room rules apply (no copying of Bops).
 
@@ -10,14 +10,24 @@ Multi-tenant SaaS where small businesses hire AI employees (Scout, Inbox, Pipeli
 
 Needs Node 22+, pnpm 10, and PostgreSQL 16.
 
+One command does everything — env file with generated secrets, database roles, migrations, and a verification pass:
+
+```bash
+pnpm setup        # add --demo for synthetic demo accounts
+```
+
+It assumes a local superuser `postgres:postgres@localhost:5432`; point elsewhere with `--db-url postgres://user:pw@host:5432/postgres`. Re-running is safe. No local Postgres yet? Docker: `docker run -d -p 5432:5432 -e POSTGRES_PASSWORD=postgres postgres:16`, then `pnpm setup`.
+
+Then start the app: `pnpm --filter @wos/web dev` → http://localhost:3000, and the worker in a second terminal: `pnpm --filter @wos/web worker`.
+
+<details><summary>Manual steps (what <code>pnpm setup</code> does for you)</summary>
+
 1. Create roles and databases once, as a Postgres superuser: `psql -U postgres -f scripts/setup-local-db.sql` (local passwords only).
 2. `cp .env.example apps/web/.env.local`, then set `BETTER_AUTH_SECRET` and `WOS_SECRETS_KEY`. For a demo without any external accounts, also set `WOS_MOCK_MODE=1`.
 3. `pnpm install`
 4. `DATABASE_URL_OWNER=postgres://wos_owner:owner_dev_pw@localhost:5432/wos_dev pnpm db:migrate`
-5. Start the web app: `pnpm --filter @wos/web dev` → http://localhost:3000
-6. Start the worker in a second terminal (same env vars): `pnpm --filter @wos/web worker`
 
-On Windows, Docker works for step 1: `docker run -d -p 5432:5432 -e POSTGRES_PASSWORD=postgres postgres:16`, then run the SQL with `psql -h localhost -U postgres`.
+</details>
 
 Demo seed (synthetic accounts only): from `apps/web`, `npx tsx e2e/demo-seed.ts`. Logins: `owner@e2e.test` / `sam@e2e.test`, password `e2e-password-12345`.
 
@@ -30,7 +40,7 @@ Tests use the `TEST_DATABASE_URL` / `TEST_DATABASE_URL_OWNER` / `TEST_DATABASE_U
 ## How it works
 
 - Agents **propose** actions; the platform decides. Tier 0–1 run; tier 2 (external), 3 (financial) and 4 (destructive) wait in Approvals. What a person approves is fingerprinted, so any change to the action voids the approval. Email/chat-origin data forces tier ≥ 2. The lead bot is capped at tier 3. Tier 4 needs a second confirmation from a different owner.
-- Scout finds roofing opportunities from attested prospect lists + NOAA SPC storm reports (CSV upload; live fetch not built). Consent and suppression are checked at send time.
+- Scout finds roofing opportunities from attested prospect lists + NOAA SPC storm reports. The worker syncs the current and previous SPC report days automatically every 6 hours (`WOS_STORM_SYNC_SECONDS`); manual CSV upload remains as a fallback. Consent and suppression are checked at send time.
 - Each organization's data is isolated by Postgres row-level security. Tests discover every table and every API endpoint to prove it.
 - Tasks run in a separate worker process via a Postgres-backed queue. Retries can't repeat a side effect: each step carries an idempotency key that the provider (or our records) can check.
 

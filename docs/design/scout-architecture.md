@@ -1,7 +1,7 @@
-# ADR-004: Scout OS — Lead Intelligence, Entitlements and Rebrand (Phase 1 plan)
+# ADR-004: Ascend Software — Lead Intelligence, Entitlements and Rebrand (Phase 1 plan)
 
 Status: PROPOSED and being implemented in Session 6. Owner approval is required for anything marked **DECISION**.
-Inputs: Scout OS Master Engineering Directive v1.0; Phase 0 discovery (`docs/research/scout-phase0-discovery.md`).
+Inputs: Ascend Software Master Engineering Directive v1.0; Phase 0 discovery (`docs/research/scout-phase0-discovery.md`).
 
 ## 1. Principles carried over
 
@@ -9,7 +9,7 @@ Everything Scout does goes through the existing engine: tasks, policy tiers, app
 
 ## 2. Rebrand (Phase 2)
 
-- Customer-facing name **Scout OS**, tagline "Your AI workforce. Finding opportunities. Running operations." from one `brand.ts` module.
+- Customer-facing name **Ascend Software**, tagline "Your AI workforce. Finding opportunities. Running operations." from one `brand.ts` module.
 - Internal identifiers (`@wos/*` packages, `WOS_*` env vars, `wos_*` roles and databases, `wos_idempotency_key` HubSpot property, `<wos-…>` Message-IDs) are **kept**. Renaming them would break running installs, stored data and provider-side references. Documented as compatibility identifiers.
 - Agent display names follow the directive roster. Kinds are unchanged except the new `scout`:
 

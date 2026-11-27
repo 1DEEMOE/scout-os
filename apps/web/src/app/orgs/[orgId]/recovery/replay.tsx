@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { errorMessage, trpc } from "@/lib/trpc";
 import { buttonCls } from "../../../ui";
 
-export function ReplayButton({ orgId, auditId }: { orgId: string; auditId: string }) {
+export function ReplayButton({ orgId, deadLetterId }: { orgId: string; deadLetterId: string }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -19,7 +19,7 @@ export function ReplayButton({ orgId, auditId }: { orgId: string; auditId: strin
           setBusy(true);
           setError(null);
           try {
-            await trpc.audit.replay.mutate({ orgId, auditId });
+            await trpc.audit.replay.mutate({ orgId, deadLetterId });
             router.refresh();
           } catch (err) {
             setError(errorMessage(err));

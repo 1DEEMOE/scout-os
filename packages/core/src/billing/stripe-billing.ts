@@ -7,6 +7,7 @@ import { logger } from "../logger";
 import { ANY_ROLE, inOrg, requireRole } from "../org/access";
 import { periodOf } from "./metering";
 import { applyPlan, planForSubscription } from "./plans";
+import { checkoutPriceForPlan } from "./pricing";
 
 /**
  * Platform billing: the SaaS charging its customers (not a tenant's own
@@ -21,16 +22,21 @@ function platformStripe(): Stripe {
   return new Stripe(key, { maxNetworkRetries: 2 });
 }
 
-export async function createCheckout(input: { actorUserId: string; orgId: string; returnUrl: string }): Promise<{ url: string }> {
+/**
+ * Starts Stripe Checkout for a plan. Owners only. `plan` picks the Stripe
+ * price via STRIPE_PRICE_PLAN_MAP and the plan's configured trial; without it
+ * the legacy single STRIPE_PRICE_ID is used. Unknown/unmapped plans are
+ * refused before any Stripe call.
+ */
+export async function createCheckout(input: { actorUserId: string; orgId: string; returnUrl: string; plan?: string }): Promise<{ url: string }> {
   await inOrg(input.orgId, (tx) => requireRole(tx, input.orgId, input.actorUserId, ["owner"], "billing.checkout"));
-  const price = process.env.STRIPE_PRICE_ID;
-  if (!price) throw new AppError("NOT_FOUND", "No plan price is configured (STRIPE_PRICE_ID)");
+  const { priceId, trialDays } = checkoutPriceForPlan(input.plan);
   const session = await platformStripe().checkout.sessions.create({
     mode: "subscription",
-    line_items: [{ price, quantity: 1 }],
+    line_items: [{ price: priceId, quantity: 1 }],
     client_reference_id: input.orgId,
     metadata: { tenantId: input.orgId },
-    subscription_data: { metadata: { tenantId: input.orgId } },
+    subscription_data: { metadata: { tenantId: input.orgId }, ...(trialDays > 0 ? { trial_period_days: trialDays } : {}) },
     success_url: `${input.returnUrl}?checkout=success`,
     cancel_url: `${input.returnUrl}?checkout=cancelled`,
   });

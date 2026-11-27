@@ -1,7 +1,7 @@
 # SCOUT OS — Project Rules (AD22 OMEGA v2)
 
 
-Customer-facing product name: **Scout OS**. Internal identifiers remain `@wos/*`, `WOS_*`, `wos_*` (packages, env, DB roles, HubSpot property). Trademark search for "Scout OS" is still required before public use.
+Customer-facing product name: **Ascend Software**. Internal identifiers remain `@wos/*`, `WOS_*`, `wos_*` (packages, env, DB roles, HubSpot property). Trademark search for "Ascend Software" is still required before public use.
 
 ## What this project is
 

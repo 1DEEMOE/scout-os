@@ -82,6 +82,21 @@ describe("public booking routes", () => {
     expect(limited).toBe(true);
   });
 
+  it("an outside AI agent with no Origin header can book; a foreign browser origin can't", async () => {
+    const slotId = (await listAvailability(token, new Date(), new Date(Date.now() + 7 * 86_400_000))).slots[0]!.id;
+    const payload = JSON.stringify({ slotId, requesterKind: "ai_agent", agentName: "Ruby", agentProvider: "Acme Voice", disclosureAck: true, customerName: "Homeowner", customerEmail: "hh@example.test" });
+    // Server-to-server agent: no Origin header at all → 202, not 403.
+    const agentRes = await book(new Request("http://x/", {
+      method: "POST", headers: { "content-type": "application/json", "x-forwarded-for": "203.0.113.70" }, body: payload,
+    }), params());
+    expect(agentRes.status).toBe(202);
+    // A browser driven by a third-party site still gets blocked.
+    const browserRes = await book(new Request("http://x/", {
+      method: "POST", headers: { "content-type": "application/json", origin: "https://evil.example", "x-forwarded-for": "203.0.113.71" }, body: payload,
+    }), params());
+    expect(browserRes.status).toBe(403);
+  });
+
   it("a string 'false' doesn't count as acknowledging the disclosure for AI agents", async () => {
     const slotId = (await listAvailability(token, new Date(), new Date(Date.now() + 7 * 86_400_000))).slots[0]!.id;
     const res = await book(new Request("http://x/", {

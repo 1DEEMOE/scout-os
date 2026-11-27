@@ -172,8 +172,8 @@ export async function inviteMember(input: { actorUserId: string; orgId: string; 
       const mailed = sender.mock ? false : await sender
         .send({
           to: email,
-          subject: "You've been invited to Scout OS",
-          text: `You've been invited to join an organization on Scout OS as ${role}.\n\nAccept the invitation: ${acceptUrl}\n\nThis link expires in 7 days. If you weren't expecting this, ignore it.`,
+          subject: "You've been invited to Ascend Software",
+          text: `You've been invited to join an organization on Ascend Software as ${role}.\n\nAccept the invitation: ${acceptUrl}\n\nThis link expires in 7 days. If you weren't expecting this, ignore it.`,
         })
         .then(
           () => true,

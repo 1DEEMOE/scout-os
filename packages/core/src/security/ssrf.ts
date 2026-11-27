@@ -1,8 +1,9 @@
 /**
  * Outbound fetches must hit an allowlisted https host. User-supplied URLs are not fetched.
- * api.weather.gov is the only host the product calls directly today.
+ * The product calls two public NOAA hosts directly: api.weather.gov (NWS alerts)
+ * and www.spc.noaa.gov (SPC storm-report CSVs).
  */
-const ALLOWED_HOSTS = new Set(["api.weather.gov"]);
+const ALLOWED_HOSTS = new Set(["api.weather.gov", "www.spc.noaa.gov"]);
 
 export class UnsafeUrlError extends Error {
   readonly code = "UNSAFE_URL";

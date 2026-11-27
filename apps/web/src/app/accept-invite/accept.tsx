@@ -57,7 +57,7 @@ export function AcceptInvite({ google }: { google: boolean }) {
   const heading = (
     <div>
       <p className="text-muted">You&apos;re invited to</p>
-      <h1 className="mt-1 text-display font-semibold">{workspace || "your Scout OS workspace"}</h1>
+      <h1 className="mt-1 text-display font-semibold">{workspace || "your Ascend Software workspace"}</h1>
     </div>
   );
 

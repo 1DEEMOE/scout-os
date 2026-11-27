@@ -79,7 +79,14 @@ export function EnableDesk({ orgId, defaultName }: { orgId: string; defaultName:
 export function RotateLink({ orgId, channelId }: { orgId: string; channelId: string }) {
   const [token, setToken] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  if (token) return <NewLink token={token} onDismiss={() => setToken(null)} />;
+  const [warning, setWarning] = useState<string | null>(null);
+  if (token)
+    return (
+      <div className="flex flex-col gap-2">
+        {warning && <p role="alert" className="text-sm text-danger">{warning}</p>}
+        <NewLink token={token} onDismiss={() => setToken(null)} />
+      </div>
+    );
   return (
     <div className="flex flex-col gap-2">
       <button
@@ -88,7 +95,9 @@ export function RotateLink({ orgId, channelId }: { orgId: string; channelId: str
         onClick={async () => {
           if (!window.confirm("Replace the booking link? The current link stops working immediately, wherever you've shared it.")) return;
           try {
-            setToken((await trpc.gaps2.frontDeskRotateLink.mutate({ orgId, channelId })).publicToken);
+            const r = await trpc.gaps2.frontDeskRotateLink.mutate({ orgId, channelId });
+            if (r.managedNumberWarning) setWarning(r.managedNumberWarning);
+            setToken(r.publicToken);
           } catch (e) {
             setError(errorMessage(e));
           }

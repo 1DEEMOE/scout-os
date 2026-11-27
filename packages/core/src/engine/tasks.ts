@@ -139,9 +139,9 @@ export function finishedWithoutActions(t: Pick<TaskRow, "state" | "plan">): bool
   return !steps || steps.length === 0;
 }
 
-/** `delegation` is set only by the lead bot (server code); callers can't supply it. */
+/** `delegation`/`continuation` are set only by server code; callers can't supply them. */
 function stripReserved(i: Record<string, unknown>): Record<string, unknown> {
-  const { delegation: _d, ...rest } = i;
+  const { delegation: _d, continuation: _c, ...rest } = i;
   return rest;
 }
 
@@ -152,12 +152,12 @@ function stripReserved(i: Record<string, unknown>): Record<string, unknown> {
  */
 export async function insertTask(
   tx: Tx,
-  t: { orgId: string; actorUserId: string; intent: string; title?: string; input: Record<string, unknown>; plan?: unknown; auditMetadata?: Record<string, unknown> },
+  t: { orgId: string; actorUserId: string; intent: string; title?: string; input: Record<string, unknown>; plan?: unknown; parentTaskId?: string; auditMetadata?: Record<string, unknown> },
 ): Promise<{ taskId: string }> {
   await consumeQuota(tx, t.orgId, "tasks", 1);
   const [row] = await tx
     .insert(tasks)
-    .values({ tenantId: t.orgId, requestedBy: t.actorUserId, intent: t.intent, title: cleanTitle(t.title), input: t.input, plan: t.plan ?? null })
+    .values({ tenantId: t.orgId, requestedBy: t.actorUserId, intent: t.intent, title: cleanTitle(t.title), input: t.input, plan: t.plan ?? null, ...(t.parentTaskId ? { parentTaskId: t.parentTaskId } : {}) })
     .returning({ id: tasks.id });
   await recordAudit(tx, {
     tenantId: t.orgId,

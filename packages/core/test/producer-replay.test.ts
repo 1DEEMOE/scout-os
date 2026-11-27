@@ -2,7 +2,7 @@ import { Writable } from "node:stream";
 import { afterAll, afterEach, beforeEach, describe, expect, it } from "vitest";
 import { closePool } from "@wos/db";
 import {
-  auditJournal,
+  activeJournal,
   configureEngine,
   createOrg,
   fetchNwsAlerts,
@@ -36,7 +36,7 @@ describe("producer replay", () => {
     resetNwsCache();
     resetAppliedEffects();
     registerIntegrationHandlers();
-    setIntegrationJournal(auditJournal());
+    setIntegrationJournal(activeJournal());
   });
   afterEach(() => {
     setIntegrationJournal(undefined);
@@ -59,7 +59,7 @@ describe("producer replay", () => {
     const open = await listDeadLetters({ actorUserId: "owner", orgId });
     expect(open.map((row) => row.type)).toContain("integration.nws");
     const letter = open.find((row) => row.type === "integration.nws")!;
-    const result = await replayDeadLetter({ actorUserId: "owner", orgId, auditId: letter.id });
+    const result = await replayDeadLetter({ actorUserId: "owner", orgId, deadLetterId: letter.id });
     expect(result.status).toBe("done");
     expect(await listDeadLetters({ actorUserId: "owner", orgId })).toEqual([]);
     expect(calls).toBe(2);

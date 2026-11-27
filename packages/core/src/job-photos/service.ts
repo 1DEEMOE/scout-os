@@ -249,7 +249,7 @@ export async function exportClaimPacket(input: { actorUserId: string; orgId: str
 <tbody>
 ${photoRows || '<tr><td colspan="8">No photos</td></tr>'}
 </tbody></table>
-<p style="margin-top:2rem;color:#666;font-size:0.85rem">This packet is evidence of integrity checks performed by Scout OS. It does not prove scene authenticity by itself.</p>
+<p style="margin-top:2rem;color:#666;font-size:0.85rem">This packet is evidence of integrity checks performed by Ascend Software. It does not prove scene authenticity by itself.</p>
 </body></html>`;
 
   return { html, filename: `claim-packet-${input.jobId.slice(0, 8)}.html` };

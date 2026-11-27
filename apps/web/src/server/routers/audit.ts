@@ -25,6 +25,6 @@ export const auditRouter = router({
     .query(({ ctx, input }) => listDeadLetters({ actorUserId: ctx.userId, orgId: input.orgId })),
 
   replay: protectedProcedure
-    .input(z.object({ orgId: z.string().max(64), auditId: z.uuid() }))
-    .mutation(({ ctx, input }) => replayDeadLetter({ actorUserId: ctx.userId, orgId: input.orgId, auditId: input.auditId })),
+    .input(z.object({ orgId: z.string().max(64), deadLetterId: z.uuid() }))
+    .mutation(({ ctx, input }) => replayDeadLetter({ actorUserId: ctx.userId, orgId: input.orgId, deadLetterId: input.deadLetterId })),
 });

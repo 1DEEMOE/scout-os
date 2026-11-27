@@ -30,7 +30,7 @@ export function ForgotPasswordForm({ emailConfigured }: { emailConfigured: boole
       <h1 className="text-display font-semibold">Reset your password</h1>
       {!emailConfigured && (
         <p role="note" className="rounded-md border border-warn/40 bg-warn/10 px-3 py-2 text-sm">
-          Email isn&apos;t set up on this server yet, so reset links can&apos;t be delivered. Ask whoever runs this Scout OS install to reset it for you.
+          Email isn&apos;t set up on this server yet, so reset links can&apos;t be delivered. Ask whoever runs this Ascend Software install to reset it for you.
         </p>
       )}
       {sent ? (

@@ -81,6 +81,7 @@ function Form({ mode }: { mode: "sign-in" | "sign-up" }) {
       {mode === "sign-in" && (
         <p className="text-sm text-muted"><a className="underline" href="/forgot-password">Forgot your password?</a></p>
       )}
+      <p className="text-sm text-muted"><a className="underline" href="/pricing">Plans and pricing</a></p>
     </form>
   );
 }

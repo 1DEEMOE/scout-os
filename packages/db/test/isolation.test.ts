@@ -93,6 +93,16 @@ async function seedTenant(tenantId: string, userId: string) {
       VALUES (${tenantId}, 'invoice', 'Vendor', 5000, '["bank_mismatch"]'::jsonb, 40, 'flagged', ${userId})`);
     await tx.execute(sql`INSERT INTO billing_ledger (tenant_id, entry_type, amount_micros, period) VALUES (${tenantId}, 'usage', 30, '2026-11')`);
     await tx.execute(sql`INSERT INTO memory_records (tenant_id, layer, scope_ref, content, trust, created_by_user) VALUES (${tenantId}, 'org', 'org', 'We bill monthly', 'user', ${userId})`);
+    const menuItem = await one(sql`INSERT INTO service_menu_items (tenant_id, pack_service_id, label) VALUES (${tenantId}, 'drain', 'Drain clearing') RETURNING id`);
+    const resource = await one(sql`INSERT INTO bookable_resources (tenant_id, name, kind) VALUES (${tenantId}, 'Chair 1', 'chair') RETURNING id`);
+    await tx.execute(sql`INSERT INTO appointments (tenant_id, service_id, resource_id, starts_at, ends_at, status)
+      VALUES (${tenantId}, ${menuItem.id}, ${resource.id}, now() + interval '1 day', now() + interval '1 day' + interval '1 hour', 'booked')`);
+    await tx.execute(sql`INSERT INTO response_templates (tenant_id, purpose, channel, name, body, status)
+      VALUES (${tenantId}, 'first_response', 'email', 'Seed reply', 'Thanks for reaching out.', 'ready_to_approve')`);
+    await tx.execute(sql`INSERT INTO integration_events (tenant_id, idempotency_key, type, source, status) VALUES (${tenantId}, 'evt-seed', 'integration.nws', 'nws', 'done')`);
+    await tx.execute(sql`INSERT INTO dead_letters (tenant_id, event_key, type, source, integration, error, attempts) VALUES (${tenantId}, 'evt-dead', 'integration.nws', 'nws', 'nws', 'boom', 3)`);
+    await tx.execute(sql`INSERT INTO integration_breakers (tenant_id, name, state) VALUES (${tenantId}, 'nws', 'closed')`);
+    await tx.execute(sql`INSERT INTO pilot_metrics (tenant_id, setup_started_at) VALUES (${tenantId}, now())`);
     const thread = await one(sql`INSERT INTO chat_threads (tenant_id, title, created_by) VALUES (${tenantId}, 'Plan', ${userId}) RETURNING id`);
     const msg = await one(sql`INSERT INTO chat_messages (tenant_id, thread_id, author_type, content) VALUES (${tenantId}, ${thread.id}, 'lead', 'ok') RETURNING id`);
     await tx.execute(sql`INSERT INTO chat_delegations (tenant_id, thread_id, message_id, task_id, agent_kind) VALUES (${tenantId}, ${thread.id}, ${msg.id}, ${t2.id}, 'inbox')`);

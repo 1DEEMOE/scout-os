@@ -193,6 +193,22 @@ export default async function SettingsPage({ params, searchParams }: { params: P
         )}
       </Card>
       </div>
+
+      {isManager && (
+        <Card title="Your data">
+          <div className="flex flex-col gap-2 text-base">
+            <p className="text-sm text-muted">
+              Download everything this workspace has stored — conversations, contacts, bookings, invoices, agent history — as one JSON file. Credentials and tokens are never included. Downloads are recorded in the audit log.
+            </p>
+            <div>
+              <a className={quietButtonCls} href={`/api/orgs/${orgId}/export.json`} download>Download workspace data</a>
+            </div>
+            <p className="text-xs text-muted">
+              Deleting the workspace and its data is a plan-first, two-owner action. Contact the platform owner to start an erasure plan.
+            </p>
+          </div>
+        </Card>
+      )}
     </div>
   );
 }

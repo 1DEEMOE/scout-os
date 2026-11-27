@@ -7,7 +7,8 @@ import { aiAnswerChecks, businessProfiles, organizations } from "@wos/db";
 import { recordAudit } from "../audit";
 import { AppError } from "../errors";
 import { ANY_ROLE, STAFF, inOrg, requireRole } from "../org/access";
-import { getAiAnswersProvider, type AiAnswersResult } from "./provider";
+import { providerForAiAnswers } from "./live";
+import type { AiAnswersResult } from "./provider";
 
 export function aiAnswersPeriod(d = new Date()): string {
   return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
@@ -22,10 +23,8 @@ export async function runAiAnswersCheck(input: {
   /** Force a re-check even if this period already has a row (tests). */
   force?: boolean;
 }): Promise<{ checkId: string; result: AiAnswersResult; trendDelta: number | null; period: string }> {
-  if (process.env.WOS_MOCK_MODE !== "1") {
-    // Still allow mock provider only until a live provider is explicitly approved.
-    // Never make live calls from this path without a future, reviewed provider.
-  }
+  // Live measurement is opt-in (AI_ANSWERS_PROVIDER) and never happens in
+  // mock mode; providerForAiAnswers decides and falls back to the labelled mock.
   return inOrg(input.orgId, async (tx) => {
     await requireRole(tx, input.orgId, input.actorUserId, STAFF, "ai_answers.check");
     const period = aiAnswersPeriod();
@@ -55,8 +54,8 @@ export async function runAiAnswersCheck(input: {
       }
     }
 
-    const provider = getAiAnswersProvider();
-    const result = await provider.check({ trade, zip, businessName: org?.name });
+    const provider = providerForAiAnswers();
+    const result = await provider.check({ trade, zip, businessName: org?.name, tenantId: input.orgId });
     const [prev] = await tx
       .select()
       .from(aiAnswerChecks)

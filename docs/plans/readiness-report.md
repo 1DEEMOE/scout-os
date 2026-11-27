@@ -37,22 +37,22 @@ See `acceptance.md`. Summary of the final run: clean install, lint, typecheck, u
 
 ## Known gaps (must be decided or fixed before real customers)
 
-1. **Email verification and password reset** are not built (need a transactional email provider). Accounts are unverified.
-2. **Auth rate limiting is in memory**: fine for one server, not shared across instances. Switch Better Auth to database storage before scaling out.
-3. **Invitations** only add people who already have an account.
-4. **Inbox sync is on demand** (button). No background polling or Gmail push yet.
+1. ~~Email verification and password reset are not built~~: the flows exist (Better Auth + `/forgot-password`); what is missing is a deliverable transactional provider. Postmark is now wired behind `POSTMARK_SERVER_TOKEN` with bounce/complaint handling; until a live key and DNS auth (SPF/DKIM/DMARC) are set, platform mail is the labelled MOCK console sender. Accounts remain unverified until then.
+2. ~~Auth rate limiting is in memory~~: stale — migration 0015 added the `rate_limits` table and Better Auth runs with `storage: "database"`, shared across instances.
+3. ~~Invitations only add people who already have an account~~: stale — `inviteMember` emails a 7-day token link (SHA-256 stored) and `acceptInvitation` serves invitees without accounts.
+4. ~~Inbox sync is on demand~~: stale — a self-perpetuating pg-boss job chain syncs every `WOS_INBOX_SYNC_SECONDS` (default 300s, floor 30s) from mailbox connect until disconnect. Gmail push remains a possible upgrade.
 5. **Single-shot planning**: an agent plans all actions up front and can't read a tool's result before deciding the next step. Multi-step reasoning needs separate tasks.
 6. ~~Escalated tasks have no retry~~: done in Session 5 (managers can retry from the task page).
 7. **Model prices** for metering are configuration (`MODEL_PRICE_*`); set them from the provider's price list.
 8. **Data-processing review**: customer emails, CRM and invoice data are sent to the model provider (ip-flags #8). Gmail restricted-scope verification is required before public launch (ip-flags #5).
-9. **Product name** customer-facing is **Scout OS**; internal identifiers remain wos/* / WOS_*. Trademark clearance for "Scout OS" is still required (ip-flags #1).
+9. **Product name** customer-facing is **Ascend Software**; internal identifiers remain wos/* / WOS_*. Trademark clearance for "Ascend Software" is still required (ip-flags #1).
 
 ## Pre-deploy gate — owner approval required
 
 Nothing below has been done. Each item needs your decision; several have cost impact.
 
 1. **Hosting** (cost): a Node host for the web server *and* a separate always-on worker process. Options: Render, Fly.io, Railway, or a VPS. Vercel suits the web app but not the long-running worker on its own.
-2. **Database** (cost): managed PostgreSQL 16 with daily backups and point-in-time recovery (Supabase, Neon, RDS, Render). Create the `wos_owner` and `app_user` roles as in `scripts/setup-local-db.sql`, with strong passwords.
+2. **Database** (cost): managed PostgreSQL 16 with daily backups and point-in-time recovery (Supabase, Neon, RDS, Render). Create the `wos_owner`, `app_user`, and `wos_backup` roles as in `scripts/setup-local-db.sql`, with strong passwords. Portable self-verifying backups are ready: `pnpm db:backup` dumps with pg_dump, restores into a scratch database to verify, and rotates old dumps (`BACKUP_DATABASE_URL`, `BACKUP_DIR`, `BACKUP_KEEP`) — schedule it via cron even when the provider also takes snapshots.
 3. **Secrets**: generate fresh `BETTER_AUTH_SECRET` (32+ random chars) and `WOS_SECRETS_KEY` (`openssl rand -base64 32`). Store in the host's secret manager. Losing `WOS_SECRETS_KEY` makes stored integration credentials unreadable; back it up separately.
 4. **Environment**: `DATABASE_URL` (app_user), `DATABASE_URL_OWNER` (migrations only, not given to the running app), `BETTER_AUTH_URL`, `ANTHROPIC_API_KEY`, `MODEL_PRICE_*`, and the Google/Stripe variables when those integrations go live. `WOS_MOCK_MODE` must be unset.
 5. **Release steps**: run migrations (`pnpm db:migrate` with the owner URL) → deploy web → deploy worker. Roll back by redeploying the previous build; migrations so far only add tables and columns.

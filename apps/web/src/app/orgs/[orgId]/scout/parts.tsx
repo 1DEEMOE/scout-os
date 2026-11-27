@@ -44,7 +44,7 @@ export function DemoBadge() {
 }
 
 const BASIS: Record<string, { label: string; tone: "muted" | "accent" | "warn"; title: string }> = {
-  observed: { label: "Observed", tone: "accent", title: "Counted from records in Scout OS." },
+  observed: { label: "Observed", tone: "accent", title: "Counted from records in Ascend Software." },
   "customer-reported": { label: "Customer-reported", tone: "warn", title: "A number you typed in. Not checked." },
   estimated: { label: "Estimated", tone: "muted", title: "Calculated from numbers you typed in. Not a measurement." },
 };

@@ -15,6 +15,13 @@ import {
   uploadJobPhoto,
   verifyJobPhotoChain,
   exportClaimPacket,
+  attestSmsRegistration,
+  managedNumberStatus,
+  proposeManagedNumbers,
+  provisionManagedNumberForOrg,
+  releaseManagedNumberForOrg,
+  recordManagedNumberA2p,
+  repointManagedNumberAfterRotate,
 } from "@wos/core";
 import { protectedProcedure, router } from "../trpc";
 
@@ -61,7 +68,30 @@ export const gaps2Router = router({
     .mutation(({ ctx, input }) =>
       setFrontDeskStatus({ actorUserId: ctx.userId, orgId: input.orgId, channelId: input.channelId, status: input.paused ? "paused" : "active" }),
     ),
-  frontDeskRotateLink: protectedProcedure.input(z.object({ orgId, channelId: id })).mutation(({ ctx, input }) => rotateFrontDeskLink({ actorUserId: ctx.userId, ...input })),
+  frontDeskRotateLink: protectedProcedure.input(z.object({ orgId, channelId: id })).mutation(async ({ ctx, input }) => {
+    const r = await rotateFrontDeskLink({ actorUserId: ctx.userId, ...input });
+    // A managed number's webhooks carry the token; re-point them or calls/texts go dark.
+    const repoint = await repointManagedNumberAfterRotate({ orgId: input.orgId, publicToken: r.publicToken });
+    return { ...r, managedNumberWarning: repoint.warning };
+  }),
+
+  /** Owner records the carrier-registration outcome for a number they brought themselves. Texts stay blocked until "approved". */
+  smsRegistrationAttest: protectedProcedure
+    .input(z.object({ orgId, phone: z.string().min(7).max(20), status: z.enum(["not_started", "pending", "approved", "rejected"]) }))
+    .mutation(({ ctx, input }) => attestSmsRegistration({ actorUserId: ctx.userId, ...input })),
+  managedNumberStatus: protectedProcedure.input(z.object({ orgId })).query(({ ctx, input }) => managedNumberStatus({ actorUserId: ctx.userId, ...input })),
+  managedNumberPropose: protectedProcedure
+    .input(z.object({ orgId, areaCode: z.string().regex(/^[2-9]\d{2}$/, "Enter a 3-digit US area code") }))
+    .mutation(({ ctx, input }) => proposeManagedNumbers({ actorUserId: ctx.userId, ...input })),
+  managedNumberProvision: protectedProcedure
+    .input(z.object({ orgId, phone: z.string().max(20) }))
+    .mutation(({ ctx, input }) => provisionManagedNumberForOrg({ actorUserId: ctx.userId, ...input })),
+  managedNumberRelease: protectedProcedure
+    .input(z.object({ orgId }))
+    .mutation(({ ctx, input }) => releaseManagedNumberForOrg({ actorUserId: ctx.userId, ...input })),
+  managedNumberA2p: protectedProcedure
+    .input(z.object({ orgId, status: z.enum(["not_started", "pending", "approved", "rejected"]) }))
+    .mutation(({ ctx, input }) => recordManagedNumberA2p({ actorUserId: ctx.userId, ...input })),
 
   aiAnswersRun: protectedProcedure
     .input(z.object({ orgId, trade: z.string().max(80).optional(), zip: z.string().max(10), force: z.boolean().optional() }))

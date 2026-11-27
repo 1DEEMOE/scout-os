@@ -41,7 +41,8 @@ export function hashIp(ip: string): string {
   return sha256(`${ip}|${daySalt()}|front-desk`);
 }
 
-async function bumpRate(tx: Tx, tenantId: string, channelId: string, bucketKey: string, windowStart: Date): Promise<number> {
+/** Exported for the lead form, which rate-limits on the same shared channel. */
+export async function bumpRate(tx: Tx, tenantId: string, channelId: string, bucketKey: string, windowStart: Date): Promise<number> {
   // Atomic upsert: concurrent requests on the same window can never both pass
   // under the limit by reading the same stale count.
   const r = await tx.raw.query(

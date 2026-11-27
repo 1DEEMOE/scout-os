@@ -11,6 +11,13 @@ export default tseslint.config(
     },
   },
   {
+    // Standalone Node scripts (no DOM, no bundler).
+    files: ["scripts/**/*.mjs", "scripts/**/*.mts"],
+    languageOptions: {
+      globals: { process: "readonly", console: "readonly", URL: "readonly", Buffer: "readonly", fetch: "readonly" },
+    },
+  },
+  {
     // Raw database connections exist only inside packages/db. Everything else
     // goes through withTenant / withUser / withGlobal.
     files: ["apps/**/*.{ts,tsx}", "packages/core/**/*.ts"],
