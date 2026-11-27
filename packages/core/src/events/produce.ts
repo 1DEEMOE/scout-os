@@ -2,6 +2,19 @@ import { randomUUID } from "node:crypto";
 import { MemoryJournal, runEvent, type EffectContext, type EventJournal } from "./bus";
 import { rememberMockRetry } from "./retry";
 
+/**
+ * Another process is already making this exact provider call. Nothing was sent by
+ * this caller. Try again shortly: by then the call has finished (a retry reads its
+ * result back from the provider) or its lease has expired and the call can run.
+ */
+export class IntegrationBusyError extends Error {
+  readonly code = "INTEGRATION_BUSY";
+  constructor(readonly integration: string) {
+    super(`A ${integration} call with this key is already in progress elsewhere`);
+    this.name = "IntegrationBusyError";
+  }
+}
+
 export type IntegrationName = "nws" | "spc" | "mail" | "crm" | "payments" | "model" | "sms";
 
 const fallbackJournal = new MemoryJournal();
@@ -58,10 +71,12 @@ async function runProduce<T>(opts: {
   const inner = opts.journal ?? integrationJournal();
   // A later call with the same key must still be able to read the provider
   // (the provider dedupes). has() stays false so we don't drop the return value.
-  const journal = {
+  const journal: EventJournal = {
     has: async () => false,
-    put: (entry: Parameters<EventJournal["put"]>[0]) => inner.put(entry),
-    dead: (entry: Parameters<EventJournal["dead"]>[0]) => inner.dead(entry),
+    put: (entry) => inner.put(entry),
+    dead: (entry) => inner.dead(entry),
+    // The claim is what stops two processes running the same provider call at once.
+    ...(inner.claim && inner.finish ? { claim: (req) => inner.claim!(req), finish: (input) => inner.finish!(input) } : {}),
   };
   const result = await runEvent(
     {
@@ -85,8 +100,10 @@ async function runProduce<T>(opts: {
         }
       },
     },
-    { journal, maxAttempts: 1, timeoutMs: opts.timeoutMs, sleep: async () => undefined },
+    // rereadCompleted: a repeat call with an already-applied key still reads the provider (it dedupes by key).
+    { journal, maxAttempts: 1, timeoutMs: opts.timeoutMs, sleep: async () => undefined, rereadCompleted: true },
   );
+  if (result.status === "busy") throw new IntegrationBusyError(opts.integration);
   if ((result.status === "done" || result.status === "duplicate") && value !== undefined) return value;
   if (failure) throw failure;
   throw new Error(result.reason ?? "integration_failed");

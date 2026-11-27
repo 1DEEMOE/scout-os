@@ -149,7 +149,7 @@ export { backoffMs, MemoryJournal, runEvent } from "./events/bus";
 export { listDeadLetters, replayDeadLetter, registerBusHandler } from "./events/recovery";
 export { registerIntegrationHandlers, PRODUCER_EVENT_TYPES } from "./events/handlers";
 export { resetAppliedEffects } from "./events/bus";
-export { produceIntegration, setIntegrationJournal } from "./events/produce";
+export { IntegrationBusyError, produceIntegration, setIntegrationJournal } from "./events/produce";
 export { setIntegrationBreaker } from "./events/bus";
 export { activeJournal, auditJournal, durableJournal, durableEventsEnabled, deadLetterIdempotencyKey } from "./events/journal";
 export { modelForPurpose } from "./engine/model-route";

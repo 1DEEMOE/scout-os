@@ -1,9 +1,9 @@
 import { createHash } from "node:crypto";
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { auditEvents, deadLetters, integrationEvents, withTenant } from "@wos/db";
 import { recordAudit } from "../audit";
 import { scrubPii } from "../logger";
-import type { DeadLetter, EventJournal, JournalEntry } from "./bus";
+import type { ClaimRequest, ClaimResult, DeadLetter, EventJournal, JournalEntry } from "./bus";
 
 /** Short stable id. The full event key is stored in metadata, never truncated. */
 export function deadLetterIdempotencyKey(eventKey: string): string {
@@ -38,14 +38,62 @@ export function durableEventsEnabled(): boolean {
 
 export function durableJournal(): EventJournal {
   return {
+    // Only a FINISHED event counts. A row in 'in_progress' (a worker is running it, or died
+    // holding the lease) or 'failed' is decided by claim(), not by this early check.
     async has(tenantId, key) {
       return withTenant(tenantId, async (tx) => {
         const [row] = await tx
           .select({ id: integrationEvents.id })
           .from(integrationEvents)
-          .where(and(eq(integrationEvents.idempotencyKey, key)));
+          .where(and(eq(integrationEvents.idempotencyKey, key), inArray(integrationEvents.status, ["done", "skipped", "dead"])));
         return !!row;
       });
+    },
+    /**
+     * One statement, so exactly one caller wins: insert the claim, or take over a row that
+     * is 'failed' or whose lease has run out. Lease times come from the database clock
+     * (now()), not from each process's, so clock skew between workers cannot shorten a lease.
+     * No row back means the key is finished or another caller's lease is still live.
+     */
+    async claim(req: ClaimRequest): Promise<ClaimResult> {
+      return withTenant(req.tenantId, async (tx) => {
+        const won = await tx.execute(sql`
+          INSERT INTO integration_events (tenant_id, idempotency_key, type, source, status, lease_owner, lease_expires_at, attempts)
+          VALUES (${req.tenantId}, ${req.key}, ${req.type.slice(0, 80)}, ${req.source.slice(0, 80)}, 'in_progress',
+                  ${req.owner}, now() + (${Math.max(1, Math.floor(req.leaseMs))} * interval '1 millisecond'), 1)
+          ON CONFLICT (tenant_id, idempotency_key) DO UPDATE
+            SET status = 'in_progress',
+                lease_owner = EXCLUDED.lease_owner,
+                lease_expires_at = EXCLUDED.lease_expires_at,
+                attempts = integration_events.attempts + 1
+            WHERE integration_events.status = 'failed'
+               OR (integration_events.status = 'in_progress' AND integration_events.lease_expires_at < now())
+          RETURNING id`);
+        if (won.rows.length) return "claimed";
+        const [row] = await tx
+          .select({ status: integrationEvents.status })
+          .from(integrationEvents)
+          .where(eq(integrationEvents.idempotencyKey, req.key));
+        return row?.status === "in_progress" ? "busy" : "completed";
+      });
+    },
+    /** Ends the claim. Matches on the owner, so a worker whose lease expired cannot overwrite its successor. */
+    async finish(input) {
+      const rows = await withTenant(input.tenantId, (tx) =>
+        tx
+          .update(integrationEvents)
+          // `attempts` counts claims (claim() increments it); finishing must not overwrite it.
+          .set({ status: input.outcome === "done" ? "done" : "failed", leaseOwner: null, leaseExpiresAt: null })
+          .where(
+            and(
+              eq(integrationEvents.idempotencyKey, input.key),
+              eq(integrationEvents.leaseOwner, input.owner),
+              eq(integrationEvents.status, "in_progress"),
+            ),
+          )
+          .returning({ id: integrationEvents.id }),
+      );
+      return rows.length === 1;
     },
     async put(entry: JournalEntry) {
       try {

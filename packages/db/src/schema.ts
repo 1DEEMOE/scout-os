@@ -880,7 +880,11 @@ export const integrationEvents = pgTable("integration_events", {
   idempotencyKey: text("idempotency_key").notNull(),
   type: text("type").notNull(),
   source: text("source").notNull(),
-  status: text("status", { enum: ["done", "skipped", "dead"] }).notNull(),
+  // 'in_progress' / 'failed' and the lease columns come from migration 0028.
+  status: text("status", { enum: ["done", "skipped", "dead", "in_progress", "failed"] }).notNull(),
+  leaseOwner: text("lease_owner"),
+  leaseExpiresAt: ts("lease_expires_at"),
+  attempts: integer("attempts").notNull().default(0),
   createdAt: ts("created_at").notNull().defaultNow(),
 });
 
