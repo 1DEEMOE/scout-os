@@ -16,7 +16,8 @@
     "test:e2e": "pnpm --filter @wos/web test:e2e",
     "setup": "node scripts/bootstrap.mjs",
     "db:backup": "node scripts/backup.mjs",
-    "check:mail-dns": "pnpm --filter @wos/web exec tsx ../../scripts/check-mail-dns.mts"
+    "check:mail-dns": "pnpm --filter @wos/web exec tsx ../../scripts/check-mail-dns.mts",
+    "check:sql-review": "node scripts/check-sql-for-review.mjs"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",

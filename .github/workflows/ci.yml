@@ -26,6 +26,8 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm lint
+      # sql-for-review/ is what the owner reads before SQL runs; it must match the real files.
+      - run: pnpm check:sql-review
 
   typecheck:
     runs-on: ubuntu-latest
